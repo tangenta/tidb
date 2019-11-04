@@ -2098,3 +2098,111 @@ func (s *testIntegrationSuite3) TestParserIssue284(c *C) {
 	tk.MustExec("drop table test.t_parser_issue_284")
 	tk.MustExec("drop table test.t_parser_issue_284_2")
 }
+
+func (s *testIntegrationSuite3) TestAutoShard(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("create database if not exists auto_shard_db")
+	defer tk.MustExec("drop database if exists auto_shard_db")
+	tk.MustExec("use auto_shard_db")
+	tk.MustExec("drop table if exists t")
+
+	whenAllowAutoShardConfigIs := func(allow bool, fn func()) {
+		allowAutoShard := &config.GetGlobalConfig().Experimental.AllowAutoShard
+		origin := *allowAutoShard
+		*allowAutoShard = allow
+		fn()
+		*allowAutoShard = origin
+	}
+	assertCreateTableErr := func(sql, errCol string) {
+		_, err := tk.Exec(sql)
+		c.Assert(err, NotNil)
+		c.Assert(err.Error(), Equals, ddl.ErrUnsupportedCreateAutoShard.GenWithStackByArgs(errCol).Error())
+	}
+	assertExperimentAutoShardErr := func(sql string) {
+		_, err := tk.Exec(sql)
+		c.Assert(err, NotNil)
+		c.Assert(err.Error(), Equals, ddl.ErrUnsupportedExperimentAutoShard.Error())
+	}
+	assertAlterTableErr := func(sql, errCol string) {
+		_, err := tk.Exec(sql)
+		c.Assert(err, NotNil)
+		c.Assert(err.Error(), Equals, ddl.ErrUnsupportedModifyAutoShard.GenWithStackByArgs(errCol).Error())
+	}
+	assertAutoShardWithAutoInc := func(sql string) {
+		_, err := tk.Exec(sql)
+		c.Assert(err, NotNil)
+		c.Assert(err.Error(), Equals, ddl.ErrUnsupportedAutoShardWithAutoInc.GenWithStackByArgs().Error())
+	}
+	assertAutoShardOverflow := func(sql string, autoShardBits, maxFieldLength uint64) {
+		_, err := tk.Exec(sql)
+		c.Assert(err, NotNil)
+		c.Assert(err.Error(), Equals, ddl.ErrAutoShardOverflow.GenWithStackByArgs(autoShardBits, maxFieldLength).Error())
+	}
+	mustExecAndDrop := func(sql string, fns ...func()) {
+		tk.MustExec(sql)
+		for _, f := range fns {
+			f()
+		}
+		tk.MustExec("drop table t")
+	}
+
+	whenAllowAutoShardConfigIs(true, func() {
+		// PKIsHandle, but auto_shard is defined on non-primary key.
+		assertCreateTableErr("create table t (a bigint auto_shard_bits (3) primary key, b int auto_shard_bits (3))", "b")
+		assertCreateTableErr("create table t (a bigint auto_shard_bits (3), b int auto_shard_bits(3), primary key(a))", "b")
+		assertCreateTableErr("create table t (a bigint auto_shard_bits (3), b int auto_shard_bits(3) primary key)", "a")
+
+		// PKIsNotHandle: no primary key.
+		assertCreateTableErr("create table t (a int auto_shard_bits(3), b int)", "a")
+		assertCreateTableErr("create table t (a bigint auto_shard_bits(3), b int)", "a")
+		// PKIsNotHandle: primary key is not integer column.
+		assertCreateTableErr("create table t (a char primary key auto_shard_bits(3), b int)", "a")
+		assertCreateTableErr("create table t (a varchar(255) primary key auto_shard_bits(3), b int)", "a")
+		assertCreateTableErr("create table t (a timestamp primary key auto_shard_bits(3), b int)", "a")
+		// PKIsNotHandle: primary key is not a single column.
+		assertCreateTableErr("create table t (a bigint auto_shard_bits(3), b int, primary key (a, b))", "a")
+		assertCreateTableErr("create table t (a int auto_shard_bits(3), b int, c char, primary key (a, c))", "a")
+
+		// Can not set auto_shard_bits along with auto_increment.
+		assertAutoShardWithAutoInc("create table t (a bigint auto_shard_bits(3) primary key auto_increment)")
+		assertAutoShardWithAutoInc("create table t (a bigint primary key auto_increment auto_shard_bits(3))")
+		assertAutoShardWithAutoInc("create table t (a bigint auto_increment primary key auto_shard_bits(3))")
+		assertAutoShardWithAutoInc("create table t (a bigint auto_shard_bits(3) auto_increment, primary key (a))")
+
+		// Overflow data type max length.
+		assertAutoShardOverflow("create table t (a bigint auto_shard_bits(65) primary key)", 65, 64)
+		assertAutoShardOverflow("create table t (a int auto_shard_bits(33) primary key)", 33, 32)
+		assertAutoShardOverflow("create table t (a mediumint auto_shard_bits(25) primary key)", 25, 24)
+		assertAutoShardOverflow("create table t (a smallint auto_shard_bits(17) primary key)", 17, 16)
+		assertAutoShardOverflow("create table t (a tinyint auto_shard_bits(9) primary key)", 9, 8)
+
+		// Basic usage.
+		mustExecAndDrop("create table t (a bigint auto_shard_bits(4) primary key, b varchar(255))")
+		mustExecAndDrop("create table t (a bigint primary key auto_shard_bits(4), b varchar(255))")
+		mustExecAndDrop("create table t (a bigint auto_shard_bits(4), b varchar(255), primary key (a))")
+
+		// Auto_shard can occur multiple times like other column attributes.
+		mustExecAndDrop("create table t (a bigint auto_shard_bits(3) auto_shard_bits(2) primary key)")
+		mustExecAndDrop("create table t (a int, b bigint auto_shard_bits(3) primary key auto_shard_bits(2))")
+		mustExecAndDrop("create table t (a int auto_shard_bits(1) auto_shard_bits(2) auto_shard_bits(3), primary key (a))")
+
+		// Add/drop the auto_shard attribute is not allowed.
+		mustExecAndDrop("create table t (a bigint auto_shard_bits(3) primary key)", func() {
+			assertAlterTableErr("alter table t modify column a bigint", "a")
+			assertAlterTableErr("alter table t change column a b bigint", "a")
+		})
+		mustExecAndDrop("create table t (a int, b char, c int auto_shard_bits(3), primary key(c))", func() {
+			assertAlterTableErr("alter table t modify column c bigint", "c")
+			assertAlterTableErr("alter table t change column c d bigint", "c")
+		})
+		mustExecAndDrop("create table t (a bigint primary key)", func() {
+			assertAlterTableErr("alter table t modify column a bigint auto_shard_bits(3)", "a")
+			assertAlterTableErr("alter table t change column a b bigint auto_shard_bits(3)", "a")
+		})
+	})
+
+	// not allow to use when experimental.allow-auto-shard is false.
+	whenAllowAutoShardConfigIs(false, func() {
+		assertExperimentAutoShardErr("create table auto_shard_table (a int primary key auto_shard_bits(3))")
+	})
+}

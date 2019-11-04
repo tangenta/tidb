@@ -99,6 +99,8 @@ type Config struct {
 	DelayCleanTableLock uint64      `toml:"delay-clean-table-lock" json:"delay-clean-table-lock"`
 	SplitRegionMaxNum   uint64      `toml:"split-region-max-num" json:"split-region-max-num"`
 	StmtSummary         StmtSummary `toml:"stmt-summary" json:"stmt-summary"`
+
+	Experimental Experimental `toml:"experimental" json:"experimental"`
 }
 
 // nullableBool defaults unset bool options to unset instead of false, which enables us to know if the user has set 2
@@ -415,6 +417,11 @@ type StmtSummary struct {
 	MaxSQLLength uint `toml:"max-sql-length" json:"max-sql-length"`
 }
 
+type Experimental struct {
+	// Allow using the syntax `auto_shard_bits(3)` on the primary key column.
+	AllowAutoShard bool `toml:"allow-auto-shard" json:"allow_auto_shard"`
+}
+
 var defaultConf = Config{
 	Host:                         "0.0.0.0",
 	AdvertiseAddress:             "",
@@ -519,6 +526,9 @@ var defaultConf = Config{
 	StmtSummary: StmtSummary{
 		MaxStmtCount: 100,
 		MaxSQLLength: 4096,
+	},
+	Experimental: Experimental{
+		AllowAutoShard: false,
 	},
 }
 
@@ -712,6 +722,10 @@ func hasRootPrivilege() bool {
 // TableLockEnabled uses to check whether enabled the table lock feature.
 func TableLockEnabled() bool {
 	return GetGlobalConfig().EnableTableLock
+}
+
+func AllowExperimentalAutoShard() bool {
+	return GetGlobalConfig().Experimental.AllowAutoShard
 }
 
 // TableLockDelayClean uses to get the time of delay clean table lock.

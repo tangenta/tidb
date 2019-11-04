@@ -20,6 +20,7 @@ import (
 // Metrics
 var (
 	GlobalAutoID      = "global"
+	AutoShardID       = "shard"
 	TableAutoIDAlloc  = "alloc"
 	TableAutoIDRebase = "rebase"
 	AutoIDHistogram   = prometheus.NewHistogramVec(

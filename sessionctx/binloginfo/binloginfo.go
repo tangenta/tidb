@@ -44,6 +44,7 @@ var pumpsClient *pumpcli.PumpsClient
 var pumpsClientLock sync.RWMutex
 var shardPat = regexp.MustCompile(`SHARD_ROW_ID_BITS\s*=\s*\d+\s*`)
 var preSplitPat = regexp.MustCompile(`PRE_SPLIT_REGIONS\s*=\s*\d+\s*`)
+var autoShardPat = regexp.MustCompile(`AUTO_SHARD_BITS\s*\(\s*\d+\s*\)\s*`)
 
 // BinlogInfo contains binlog data and binlog client.
 type BinlogInfo struct {
@@ -158,7 +159,7 @@ func AddSpecialComment(ddlQuery string) string {
 	if strings.Contains(ddlQuery, specialPrefix) {
 		return ddlQuery
 	}
-	return addSpecialCommentByRegexps(ddlQuery, shardPat, preSplitPat)
+	return addSpecialCommentByRegexps(ddlQuery, shardPat, preSplitPat, autoShardPat)
 }
 
 // addSpecialCommentByRegexps uses to add special comment for the worlds in the ddlQuery with match the regexps.

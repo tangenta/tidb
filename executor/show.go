@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/meta/autoid"
 	"sort"
 	"strconv"
 	"strings"
@@ -805,7 +806,7 @@ func (e *ShowExec) fetchShowCreateTable() error {
 	}
 
 	if hasAutoIncID {
-		autoIncID, err := tb.Allocator(e.ctx).NextGlobalAutoID(tb.Meta().ID)
+		autoIncID, err := tb.Allocator(e.ctx, autoid.RowIDAllocType).NextGlobalAutoID(tb.Meta().ID)
 		if err != nil {
 			return errors.Trace(err)
 		}

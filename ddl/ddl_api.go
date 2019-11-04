@@ -1086,6 +1086,55 @@ func checkConstraintNames(constraints []*ast.Constraint) error {
 	return nil
 }
 
+func setTableAutoShardBits(tbInfo *model.TableInfo, colDefs []*ast.ColumnDef) error {
+	allowAutoShard := config.AllowExperimentalAutoShard()
+	pkColName := tbInfo.GetPkName()
+	return forEachColWithAutoShardOpt(colDefs, func(col *ast.ColumnDef, autoShardBits uint64) error {
+		if !allowAutoShard {
+			return ErrUnsupportedExperimentAutoShard.GenWithStackByArgs()
+		}
+
+		if tbInfo.PKIsHandle && col.Name.Name.L == pkColName.L {
+			if checkIsAutoIncrementColumn(col) {
+				return ErrUnsupportedAutoShardWithAutoInc.GenWithStackByArgs()
+			}
+			fieldTypeBitsLength := uint64(mysql.DefaultLengthOfMysqlTypes[col.Tp.Tp] * mysql.BitLengthPerByte)
+			if autoShardBits >= fieldTypeBitsLength {
+				return ErrAutoShardOverflow.GenWithStackByArgs(autoShardBits, fieldTypeBitsLength)
+			}
+			tbInfo.AutoShardBits = autoShardBits
+			return nil
+		}
+		return ErrUnsupportedCreateAutoShard.GenWithStackByArgs(col.Name.Name.O)
+	})
+}
+
+func forEachColWithAutoShardOpt(colDefs []*ast.ColumnDef, fn func(colDef *ast.ColumnDef, autoShardBits uint64) error) error {
+	for _, col := range colDefs {
+		autoShardBits := getAutoShardBits(col)
+		if autoShardBits != 0 {
+			err := fn(col, autoShardBits)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func getAutoShardBits(colDef *ast.ColumnDef) uint64 {
+	for _, op := range colDef.Options {
+		if op.Tp == ast.ColumnOptionAutoShard {
+			return op.AutoShardBitLength
+		}
+	}
+	return 0
+}
+
+func containsAutoShardOption(colDef *ast.ColumnDef) bool {
+	return getAutoShardBits(colDef) > 0
+}
+
 func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols []*table.Column, constraints []*ast.Constraint) (tbInfo *model.TableInfo, err error) {
 	tbInfo = &model.TableInfo{
 		Name:    tableName,
@@ -1152,7 +1201,7 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		//check if the index is primary or uniqiue.
+		// check if the index is primary or unique.
 		switch constr.Tp {
 		case ast.ConstraintPrimaryKey:
 			idxInfo.Primary = true
@@ -1324,6 +1373,10 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 	var tbInfo *model.TableInfo
 	tbInfo, err = buildTableInfo(ctx, d, ident.Name, cols, newConstraints)
 	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if err = setTableAutoShardBits(tbInfo, colDefs); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -1729,9 +1782,9 @@ func checkCharsetAndCollation(cs string, co string) error {
 // handleAutoIncID handles auto_increment option in DDL. It creates a ID counter for the table and initiates the counter to a proper value.
 // For example if the option sets auto_increment to 10. The counter will be set to 9. So the next allocated ID will be 10.
 func (d *ddl) handleAutoIncID(tbInfo *model.TableInfo, schemaID int64) error {
-	alloc := autoid.NewAllocator(d.store, tbInfo.GetDBID(schemaID), tbInfo.IsAutoIncColUnsigned())
+	allocs := autoid.NewAllocatorsFromTblInfo(d.store, schemaID, tbInfo)
 	tbInfo.State = model.StatePublic
-	tb, err := table.TableFromMeta(alloc, tbInfo)
+	tb, err := table.TableFromMeta(allocs, tbInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -2017,7 +2070,7 @@ func (d *ddl) RebaseAutoID(ctx sessionctx.Context, ident ast.Ident, newBase int6
 	if err != nil {
 		return errors.Trace(err)
 	}
-	autoIncID, err := t.Allocator(ctx).NextGlobalAutoID(t.Meta().ID)
+	autoIncID, err := t.Allocator(ctx, autoid.RowIDAllocType).NextGlobalAutoID(t.Meta().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -2605,6 +2658,7 @@ func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*
 			return errors.Trace(errUnsupportedModifyColumn.GenWithStackByArgs("with references"))
 		case ast.ColumnOptionFulltext:
 			return errors.Trace(errUnsupportedModifyColumn.GenWithStackByArgs("with full text"))
+		case ast.ColumnOptionAutoShard:
 		default:
 			return errors.Trace(errUnsupportedModifyColumn.GenWithStackByArgs(fmt.Sprintf("unknown column option type: %d", opt.Tp)))
 		}
@@ -2745,6 +2799,10 @@ func (d *ddl) getModifiableColumnJob(ctx sessionctx.Context, ident ast.Ident, or
 		return nil, errors.Trace(err)
 	}
 
+	if err = checkAutoSharding(t.Meta(), specNewColumn, originalColName); err != nil {
+		return nil, err
+	}
+
 	job := &model.Job{
 		SchemaID:   schema.ID,
 		TableID:    t.Meta().ID,
@@ -2789,6 +2847,17 @@ func checkColumnWithIndexConstraint(tbInfo *model.TableInfo, originalCol, newCol
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func checkAutoSharding(tableInfo *model.TableInfo, specNewColumn *ast.ColumnDef, originColName model.CIStr) error {
+	if !config.AllowExperimentalAutoShard() && containsAutoShardOption(specNewColumn) {
+		return errors.Trace(ErrUnsupportedExperimentAutoShard.GenWithStackByArgs())
+	}
+	// Disallow add/drop/modify auto_shard_bits.
+	if tableInfo.AutoShardBits != getAutoShardBits(specNewColumn) {
+		return errors.Trace(ErrUnsupportedModifyAutoShard.GenWithStackByArgs(originColName))
 	}
 	return nil
 }

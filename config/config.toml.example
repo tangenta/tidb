@@ -328,3 +328,7 @@ max-stmt-count = 100
 
 # max length of displayed normalized sql and sample sql.
 max-sql-length = 4096
+
+[experimental]
+# allow syntax `auto_shard_bits(x)` on the primary key column.
+allow-auto-shard = false

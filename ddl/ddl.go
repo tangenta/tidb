@@ -94,10 +94,11 @@ var (
 		"unsupported drop integer primary key")
 	errUnsupportedCharset = terror.ClassDDL.New(codeUnsupportedCharset, "unsupported charset %s collate %s")
 
-	errUnsupportedShardRowIDBits = terror.ClassDDL.New(codeUnsupportedShardRowIDBits, "unsupported shard_row_id_bits for table with primary key as row id.")
-	errBlobKeyWithoutLength      = terror.ClassDDL.New(codeBlobKeyWithoutLength, "index for BLOB/TEXT column must specify a key length")
-	errIncorrectPrefixKey        = terror.ClassDDL.New(codeIncorrectPrefixKey, "Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys")
-	errTooLongKey                = terror.ClassDDL.New(codeTooLongKey,
+	errUnsupportedShardRowIDBits  = terror.ClassDDL.New(codeUnsupportedShardRowIDBits, "unsupported shard_row_id_bits for table with primary key as row id.")
+	ErrUnsupportedModifyAutoShard = terror.ClassDDL.New(codeUnsupportedModifyAutoShard, "cannot change the auto_shard attribute of column %s.")
+	errBlobKeyWithoutLength       = terror.ClassDDL.New(codeBlobKeyWithoutLength, "index for BLOB/TEXT column must specify a key length")
+	errIncorrectPrefixKey         = terror.ClassDDL.New(codeIncorrectPrefixKey, "Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys")
+	errTooLongKey                 = terror.ClassDDL.New(codeTooLongKey,
 		fmt.Sprintf("Specified key was too long; max key length is %d bytes", maxPrefixLength))
 	errKeyColumnDoesNotExits    = terror.ClassDDL.New(codeKeyColumnDoesNotExits, mysql.MySQLErrName[mysql.ErrKeyColumnDoesNotExits])
 	errUnknownTypeLength        = terror.ClassDDL.New(codeUnknownTypeLength, "Unknown length for type tp %d")
@@ -234,6 +235,14 @@ var (
 	ErrFieldNotFoundPart = terror.ClassDDL.New(codeFieldNotFoundPart, mysql.MySQLErrName[mysql.ErrFieldNotFoundPart])
 	// ErrWrongTypeColumnValue returns 'Partition column values of incorrect type'
 	ErrWrongTypeColumnValue = terror.ClassDDL.New(codeWrongTypeColumnValue, mysql.MySQLErrName[mysql.ErrWrongTypeColumnValue])
+	// ErrUnsupportedCreateAutoShard indicates the auto_shard column attribute is defined on a non-primary key column, or the table's primary key is not a single integer column.
+	ErrUnsupportedCreateAutoShard = terror.ClassDDL.New(codeUnsupportedCreateAutoShard, "column %s is not the integer primary key, auto_shard can only be set for tables with single integer column as primary key.")
+	// ErrUnsupportedModifyAutoShard returns when user trying to change the auto_shard column attribute of a column.
+	ErrUnsupportedExperimentAutoShard = terror.ClassDDL.New(codeUnsupportedExperimentAutoShard, "auto_shard_bits can only be used when experimental.allow-auto-shard is true. It can be change in the configuration.")
+	// ErrUnsupportedAutoShardWithAutoInc returns when auto_shard_bits and auto_increment are specified on the same column.
+	ErrUnsupportedAutoShardWithAutoInc = terror.ClassDDL.New(codeUnsupportedAutoShardWithAutoInc, "auto_shard_bits is incompatible with auto_increment")
+	// ErrAutoShardOverflow returns when auto_shard_bits is greater than max length of a MySQL data type.
+	ErrAutoShardOverflow = terror.ClassDDL.New(codeAutoShardOverflow, "auto_shard_bits = %d will overflow, max length: %d")
 )
 
 // DDL is responsible for updating schema in data store and maintaining in-memory InfoSchema cache.
@@ -689,6 +698,11 @@ const (
 	codeUnsupportedPartitionByRangeColumns = 211
 	codeUnsupportedCreatePartition         = 212
 	codeUnsupportedIndexType               = 213
+	codeUnsupportedCreateAutoShard         = 214
+	codeUnsupportedModifyAutoShard         = 215
+	codeUnsupportedExperimentAutoShard     = 216
+	codeUnsupportedAutoShardWithAutoInc    = 217
+	codeAutoShardOverflow                  = 218
 
 	codeFileNotFound                           = 1017
 	codeErrorOnRename                          = 1025

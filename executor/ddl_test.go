@@ -16,6 +16,7 @@ package executor_test
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/config"
 	"math"
 	"strconv"
 	"strings"
@@ -669,6 +670,69 @@ func (s *testSuite8) TestShardRowIDBits(c *C) {
 	c.Assert(autoid.ErrAutoincReadFailed.Equal(err), IsTrue, Commentf("err:%v", err))
 	_, err = tk.Exec("insert into t1 values(3)")
 	c.Assert(autoid.ErrAutoincReadFailed.Equal(err), IsTrue, Commentf("err:%v", err))
+}
+
+func (s *testSuite8) TestAutoShardBitsData(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+
+	tk.MustExec("create database if not exists test_auto_shard_bits")
+	defer tk.MustExec("drop database if exists test_auto_shard_bits")
+	tk.MustExec("use test_auto_shard_bits")
+	tk.MustExec("drop table if exists t")
+	originAllowStatus := config.AllowExperimentalAutoShard()
+	config.GetGlobalConfig().Experimental.AllowAutoShard = true
+	defer func() {
+		config.GetGlobalConfig().Experimental.AllowAutoShard = originAllowStatus
+	}()
+
+	tk.MustExec("create table t (a bigint primary key auto_shard_bits(15), b int)")
+	for i := 0; i < 100; i++ {
+		tk.MustExec(fmt.Sprintf("insert t (b) values (%d)", i))
+	}
+	dom := domain.GetDomain(tk.Se)
+	tbl, err := dom.InfoSchema().TableByName(model.NewCIStr("test_auto_shard_bits"), model.NewCIStr("t"))
+	c.Assert(err, IsNil)
+	c.Assert(tk.Se.NewTxn(context.Background()), IsNil)
+	var allHandles []int64
+	err = tbl.IterRecords(tk.Se, tbl.FirstKey(), nil, func(h int64, _ []types.Datum, _ []*table.Column) (more bool, err error) {
+		allHandles = append(allHandles, h)
+		return true, nil
+	})
+	c.Assert(err, IsNil)
+	tk.MustExec("drop table t")
+
+	// Test auto shard id number.
+	c.Assert(len(allHandles), Equals, 100)
+	// Test the first 15 bits of each handle is greater than 0.
+	for _, h := range allHandles {
+		c.Assert(h>>(64-15), Greater, int64(0))
+	}
+	// Test auto shard id is monotonic increasing and continuous.
+	lastHandle := allHandles[0]
+	for _, h := range allHandles[1:] {
+		c.Assert((lastHandle<<15>>15)+1, Equals, h<<15>>15)
+		lastHandle = h
+	}
+
+	// Test explicit insert.
+	tk.MustExec("create table t (a tinyint primary key auto_shard_bits(2), b int)")
+	for i := 0; i < 100; i++ {
+		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
+	}
+	_, err = tk.Exec("insert into t (b) values (0)")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, autoid.ErrAutoincReadFailed.GenWithStackByArgs().Error())
+	tk.MustExec("drop table t")
+
+	// Test overflow.
+	tk.MustExec("create table t (a tinyint primary key auto_shard_bits(2), b int)")
+	for i := 0; i < (1<<6)-1; i++ {
+		tk.MustExec(fmt.Sprintf("insert into t (b) values (%d)", i))
+	}
+	_, err = tk.Exec("insert into t (b) values (0)")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, autoid.ErrAutoincReadFailed.GenWithStackByArgs().Error())
+	tk.MustExec("drop table t")
 }
 
 func (s *testSuite6) TestMaxHandleAddIndex(c *C) {

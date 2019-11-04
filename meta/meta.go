@@ -62,6 +62,7 @@ var (
 	mDBPrefix         = "DB"
 	mTablePrefix      = "Table"
 	mTableIDPrefix    = "TID"
+	mShardIDPrefix    = "SHID"
 	mBootstrapKey     = []byte("BootstrapKey")
 	mSchemaDiffPrefix = "Diff"
 )
@@ -147,6 +148,10 @@ func (m *Meta) autoTableIDKey(tableID int64) []byte {
 	return []byte(fmt.Sprintf("%s:%d", mTableIDPrefix, tableID))
 }
 
+func (m *Meta) autoShardTableIDKey(tableID int64) []byte {
+	return []byte(fmt.Sprintf("%s:%d", mShardIDPrefix, tableID))
+}
+
 func (m *Meta) tableKey(tableID int64) []byte {
 	return []byte(fmt.Sprintf("%s:%d", mTablePrefix, tableID))
 }
@@ -179,9 +184,30 @@ func (m *Meta) GenAutoTableID(dbID, tableID, step int64) (int64, error) {
 	return m.txn.HInc(dbKey, m.autoTableIDKey(tableID), step)
 }
 
+// GenAutoShardID adds step to the auto shard ID of the table and returns the sum.
+func (m *Meta) GenAutoShardID(dbID, tableID, step int64) (int64, error) {
+	// Check if DB exists.
+	dbKey := m.dbKey(dbID)
+	if err := m.checkDBExists(dbKey); err != nil {
+		return 0, errors.Trace(err)
+	}
+	// Check if table exists.
+	tableKey := m.tableKey(tableID)
+	if err := m.checkTableExists(dbKey, tableKey); err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return m.txn.HInc(dbKey, m.autoShardTableIDKey(tableID), step)
+}
+
 // GetAutoTableID gets current auto id with table id.
 func (m *Meta) GetAutoTableID(dbID int64, tableID int64) (int64, error) {
 	return m.txn.HGetInt64(m.dbKey(dbID), m.autoTableIDKey(tableID))
+}
+
+// GetAutoShardID gets current auto shard id with table id.
+func (m *Meta) GetAutoShardID(dbID int64, tableID int64) (int64, error) {
+	return m.txn.HGetInt64(m.dbKey(dbID), m.autoShardTableIDKey(tableID))
 }
 
 // GetSchemaVersion gets current global schema version.
@@ -288,6 +314,7 @@ func (m *Meta) CreateTableAndSetAutoID(dbID int64, tableInfo *model.TableInfo, a
 		return errors.Trace(err)
 	}
 	_, err = m.txn.HInc(m.dbKey(dbID), m.autoTableIDKey(tableInfo.ID), autoID)
+	_, err = m.txn.HInc(m.dbKey(dbID), m.autoShardTableIDKey(tableInfo.ID), 0)
 	return errors.Trace(err)
 }
 
@@ -327,6 +354,9 @@ func (m *Meta) DropTableOrView(dbID int64, tblID int64, delAutoID bool) error {
 	}
 	if delAutoID {
 		if err := m.txn.HDel(dbKey, m.autoTableIDKey(tblID)); err != nil {
+			return errors.Trace(err)
+		}
+		if err := m.txn.HDel(dbKey, m.autoShardTableIDKey(tblID)); err != nil {
 			return errors.Trace(err)
 		}
 	}

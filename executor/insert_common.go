@@ -15,6 +15,8 @@ package executor
 
 import (
 	"context"
+	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/table/tables"
 	"math"
 
 	"github.com/pingcap/errors"
@@ -503,6 +505,14 @@ func (e *InsertValues) fillColValue(ctx context.Context, datum types.Datum, idx 
 		}
 		return d, nil
 	}
+	tblInfo := e.Table.Meta()
+	if tblInfo.ContainsAutoShardBits() && column.ID == tblInfo.GetPkColInfo().ID {
+		d, err := e.adjustAutoShardDatum(ctx, datum, hasValue, column)
+		if err != nil {
+			return types.Datum{}, err
+		}
+		return d, nil
+	}
 	if !hasValue {
 		d, err := e.getColDefaultValue(idx, column)
 		if e.filterErr(err) != nil {
@@ -789,6 +799,61 @@ func getAutoRecordID(d types.Datum, target *types.FieldType, isInsert bool) (int
 	}
 
 	return recordID, nil
+}
+
+func (e *InsertValues) adjustAutoShardDatum(ctx context.Context, d types.Datum, hasValue bool, c *table.Column) (types.Datum, error) {
+	if !hasValue || d.IsNull() {
+		autoShardID, err := e.allocAutoShardID(&c.FieldType)
+		if err != nil {
+			return types.Datum{}, err
+		}
+		d.SetAutoID(autoShardID, c.Flag)
+	} else {
+		recordID, err := getAutoRecordID(d, &c.FieldType, true)
+		if err != nil {
+			return types.Datum{}, err
+		}
+		err = e.rebaseAutoShardID(recordID, &c.FieldType)
+		if err != nil {
+			return types.Datum{}, err
+		}
+		d.SetAutoID(recordID, c.Flag)
+	}
+
+	casted, err := table.CastValue(e.ctx, d, c.ToInfo())
+	if err != nil {
+		return types.Datum{}, err
+	}
+	return casted, nil
+}
+
+// AllocAutoShardID allocates a shard id for primary key column. It assumes the tableInfo.AutoShardBits is greater than zero.
+func (e *InsertValues) allocAutoShardID(fieldType *types.FieldType) (int64, error) {
+	alloc := e.Table.Allocator(e.ctx, autoid.AutoShardType)
+	tableInfo := e.Table.Meta()
+	_, autoShardID, err := alloc.Alloc(tableInfo.ID, 1)
+	if err != nil {
+		return 0, err
+	}
+
+	typeBitsLength := uint64(mysql.DefaultLengthOfMysqlTypes[fieldType.Tp] * mysql.BitLengthPerByte)
+	if tables.OverflowShardBits(autoShardID, tableInfo.AutoShardBits, typeBitsLength) {
+		return 0, autoid.ErrAutoincReadFailed
+	}
+	shard := tables.CalcShard(tableInfo.AutoShardBits, e.ctx.GetSessionVars().TxnCtx.StartTS, typeBitsLength)
+	autoShardID |= shard
+	return autoShardID, nil
+}
+
+func (e *InsertValues) rebaseAutoShardID(recordID int64, fieldType *types.FieldType) error {
+	alloc := e.Table.Allocator(e.ctx, autoid.AutoShardType)
+	tableInfo := e.Table.Meta()
+
+	typeBitsLength := uint64(mysql.DefaultLengthOfMysqlTypes[fieldType.Tp] * mysql.BitLengthPerByte)
+	mask := (1 << (typeBitsLength - tableInfo.AutoShardBits)) - 1
+	autoShardID := int64(mask) & recordID
+
+	return alloc.Rebase(tableInfo.ID, autoShardID, true)
 }
 
 func (e *InsertValues) handleWarning(err error) {

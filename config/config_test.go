@@ -186,6 +186,8 @@ region-cache-ttl=6000
 [stmt-summary]
 max-stmt-count=1000
 max-sql-length=1024
+[experimental]
+allow-auto-shard = true
 `)
 
 	c.Assert(err, IsNil)
@@ -209,6 +211,7 @@ max-sql-length=1024
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.StmtSummary.MaxStmtCount, Equals, uint(1000))
 	c.Assert(conf.StmtSummary.MaxSQLLength, Equals, uint(1024))
+	c.Assert(conf.Experimental.AllowAutoShard, IsTrue)
 	c.Assert(f.Close(), IsNil)
 	c.Assert(os.Remove(configFile), IsNil)
 
