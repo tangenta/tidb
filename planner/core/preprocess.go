@@ -139,6 +139,9 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		// The RepairTable should consist of the logic for creating tables and renaming tables.
 		p.flag |= inRepairTable
 		p.checkRepairTableGrammar(node)
+	case *ast.CreateSequenceStmt:
+		p.flag |= inCreateOrDropTable
+		p.resolveCreateSequenceStmt(node)
 	default:
 		p.flag &= ^parentIsJoin
 	}
@@ -226,6 +229,8 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		}
 	case *ast.RepairTableStmt:
 		p.flag &= ^inRepairTable
+	case *ast.CreateSequenceStmt:
+		p.flag &= ^inCreateOrDropTable
 	}
 
 	return in, p.err == nil
@@ -852,5 +857,13 @@ func (p *preprocessor) resolveAlterTableStmt(node *ast.AlterTableStmt) {
 			p.flag |= inCreateOrDropTable
 			break
 		}
+	}
+}
+
+func (p *preprocessor) resolveCreateSequenceStmt(stmt *ast.CreateSequenceStmt) {
+	sName := stmt.Name.Name.String()
+	if isIncorrectName(sName) {
+		p.err = ddl.ErrWrongSequenceName.GenWithStackByArgs(sName)
+		return
 	}
 }
