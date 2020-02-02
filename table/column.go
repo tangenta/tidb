@@ -24,6 +24,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
@@ -371,7 +373,27 @@ func GetColOriginDefaultValue(ctx sessionctx.Context, col *model.ColumnInfo) (ty
 
 // GetColDefaultValue gets default value of the column.
 func GetColDefaultValue(ctx sessionctx.Context, col *model.ColumnInfo) (types.Datum, error) {
-	return getColDefaultValue(ctx, col, col.GetDefaultValue())
+	defaultValue := col.GetDefaultValue()
+	if !col.DefaultIsExpr {
+		return getColDefaultValue(ctx, col, col.GetDefaultValue())
+	}
+	return getColDefaultExprValue(ctx, defaultValue)
+}
+
+func getColDefaultExprValue(ctx sessionctx.Context, defaultValue interface{}) (types.Datum, error) {
+	x, ok := defaultValue.(string)
+	if !ok {
+		// Todo: refine the error.
+		return types.Datum{}, errors.New("can't cast default value as  expression string")
+	}
+	var defaultExpr ast.ExprNode
+	expr := fmt.Sprintf("select %s", x)
+	charset, collation := charset.GetDefaultCharsetAndCollate()
+	stmts, _, err := parser.New().Parse(expr, charset, collation)
+	if err == nil {
+		defaultExpr = stmts[0].(*ast.SelectStmt).Fields.Fields[0].Expr
+	}
+	return expression.EvalAstExpr(ctx, defaultExpr)
 }
 
 func getColDefaultValue(ctx sessionctx.Context, col *model.ColumnInfo, defaultVal interface{}) (types.Datum, error) {
