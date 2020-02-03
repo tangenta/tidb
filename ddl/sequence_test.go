@@ -153,3 +153,30 @@ func (s *testSequenceSuite) TestDropSequence(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[planner:1142]DROP command denied to user 'localhost'@'myuser' for table 'my_seq'")
 }
+
+func (s *testSequenceSuite) TestSequenceAsDefaultValue(c *C) {
+	s.tk = testkit.NewTestKit(c, s.store)
+	s.tk.MustExec("use test")
+	s.tk.MustExec("create sequence seq")
+
+	// test the use sequence's nextval as default
+	_, err := s.tk.Exec("create table t (a int default next value for seq)")
+	c.Assert(err, IsNil)
+
+	_, err = s.tk.Exec("create table t1 (a int default nextval(seq))")
+	c.Assert(err, IsNil)
+
+	s.tk.MustExec("create table t2 (a int)")
+	_, err = s.tk.Exec("alter table t2 alter column a set default (next value for seq)")
+	c.Assert(err, IsNil)
+
+	_, err = s.tk.Exec("alter table t2 alter column a set default (nextval(seq))")
+	c.Assert(err, IsNil)
+
+	_, err = s.tk.Exec("alter table t2 add column b int default next value for seq")
+	c.Assert(err, IsNil)
+
+	_, err = s.tk.Exec("alter table t2 add column c int default nextval(seq)")
+	c.Assert(err, IsNil)
+
+}
