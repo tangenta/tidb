@@ -674,7 +674,7 @@ func getDefaultValue(ctx sessionctx.Context, col *table.Column, c *ast.ColumnOpt
 		return value, nil
 	}
 	// handle default next value of sequence. (keep the expr string)
-	str, err, isExpr := handleSequenceDefaultValue(c)
+	str, isExpr, err := handleSequenceDefaultValue(c)
 	if isExpr {
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -727,7 +727,7 @@ func getDefaultValue(ctx sessionctx.Context, col *table.Column, c *ast.ColumnOpt
 	return v.ToString()
 }
 
-func handleSequenceDefaultValue(c *ast.ColumnOption) (expr string, err error, isExpr bool) {
+func handleSequenceDefaultValue(c *ast.ColumnOption) (expr string, isExpr bool, err error) {
 	var sb strings.Builder
 	restoreFlags := format.RestoreStringSingleQuotes | format.RestoreKeyWordLowercase | format.RestoreNameBackQuotes |
 		format.RestoreSpacesAroundBinaryOperation
