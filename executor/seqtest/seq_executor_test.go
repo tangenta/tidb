@@ -1292,7 +1292,7 @@ func (s *seqTestSuite) TestAutoRandIDRetry(c *C) {
 	tk.MustExec("create table t (id bigint auto_random(3) primary key)")
 
 	extractMaskedOrderedHandles := func() []int64 {
-		handles, err := ddltestutil.ExtractAllTableHandles(tk.Se, "auto_random_retry", "t")
+		handles, err := ddltestutil.ExtractAllTableIntHandles(tk.Se, "auto_random_retry", "t")
 		c.Assert(err, IsNil)
 		return testutil.ConfigTestUtils.MaskSortHandles(handles, 3, mysql.TypeLong)
 	}
@@ -1370,7 +1370,7 @@ func (s *seqTestSuite) TestAutoRandRecoverTable(c *C) {
 	tk.MustExec("drop table t_recover_auto_rand")
 	tk.MustExec("recover table t_recover_auto_rand")
 	tk.MustExec("insert into t_recover_auto_rand values (),(),()")
-	hs, err := ddltestutil.ExtractAllTableHandles(tk.Se, "test_recover", "t_recover_auto_rand")
+	hs, err := ddltestutil.ExtractAllTableIntHandles(tk.Se, "test_recover", "t_recover_auto_rand")
 	c.Assert(err, IsNil)
 	ordered := testutil.ConfigTestUtils.MaskSortHandles(hs, 5, mysql.TypeLong)
 

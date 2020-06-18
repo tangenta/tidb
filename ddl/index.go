@@ -889,6 +889,13 @@ func (w *addIndexWorker) getIndexRecord(handle kv.Handle, recordKey []byte, rawR
 				idxVal[j].SetInt64(handle.IntValue())
 			}
 			continue
+		} else if col.IsCommonHandleColumn(t.Meta()) {
+			datum, err := decoder.DecodeColDatumFromCommonHandle(handle, col, t.Meta())
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			idxVal[j] = datum
+			continue
 		}
 		idxColumnVal, ok := w.rowMap[col.ID]
 		if ok {

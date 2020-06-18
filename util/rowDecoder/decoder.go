@@ -14,6 +14,8 @@
 package decoder
 
 import (
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/util/codec"
 	"sort"
 	"time"
 
@@ -135,6 +137,23 @@ func (rd *RowDecoder) DecodeAndEvalRowWithMap(ctx sessionctx.Context, handle kv.
 	return row, nil
 }
 
+// DecodeColDatumFromCommonHandle find the col
+func DecodeColDatumFromCommonHandle(handle kv.Handle, col *table.Column, tblInfo *model.TableInfo) (types.Datum, error) {
+	pkIdx := tables.FindPrimaryIndex(tblInfo)
+	if pkIdx == nil {
+		return types.Datum{}, errors.Errorf("column %s is not a part of primary key", col.Name.O)
+	}
+	var colPosInHandle int
+	for i, idxCol := range pkIdx.Columns {
+		if col.ID == tblInfo.Columns[idxCol.Offset].ID {
+			colPosInHandle = i
+			break
+		}
+	}
+	_, datum, err := codec.DecodeOne(handle.EncodedCol(colPosInHandle))
+	return datum, err
+}
+
 // BuildFullDecodeColMap build a map that contains [columnID -> struct{*table.Column, expression.Expression}] from
 // indexed columns and all of its depending columns. `genExprProducer` is used to produce a generated expression based on a table.Column.
 func BuildFullDecodeColMap(indexedCols []*table.Column, t table.Table, genExprProducer func(*table.Column) (expression.Expression, error)) (map[int64]Column, error) {
@@ -150,7 +169,7 @@ func BuildFullDecodeColMap(indexedCols []*table.Column, t table.Table, genExprPr
 
 		if col.IsGenerated() && !col.GeneratedStored {
 			// Find depended columns and put them into pendingCols. For example, idx(c) with column definition `c int as (a + b)`,
-			// depended columns of `c` is `a` and `b`, and both of them will be put into the pendingCols, waiting for next traversal.
+			// depended columns of `c` are `a` and `b`, and both of them will be put into the pendingCols, waiting for next traversal.
 			for _, c := range t.Cols() {
 				if _, ok := col.Dependences[c.Name.L]; ok {
 					pendingCols = append(pendingCols, c)

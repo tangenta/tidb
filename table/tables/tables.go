@@ -1039,7 +1039,7 @@ func (t *TableCommon) IterRecords(ctx sessionctx.Context, startKey kv.Key, cols 
 				return err
 			}
 		}
-		more, err := fn(handle.IntValue(), data, cols)
+		more, err := fn(handle, data, cols)
 		if !more || err != nil {
 			return err
 		}
