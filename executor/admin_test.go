@@ -678,7 +678,12 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists admin_test")
-	tk.MustExec("create table admin_test (c1 int, c2 int, c3 varchar(255) default '1', primary key(c1), key(c3), unique key(c2), key(c2, c3))")
+	pkCols := "c1"
+	if s.IsCommonHandle {
+		pkCols = "c1, c2"
+		tk.MustExec("set @@tidb_enable_clustered_index = 1")
+	}
+	tk.MustExec(fmt.Sprintf("create table admin_test (c1 int, c2 int, c3 varchar(255) default '1', primary key(%s), key(c3), unique key(c2), key(c2, c3))", pkCols))
 	tk.MustExec("insert admin_test (c1, c2, c3) values (-10, -20, 'y'), (-1, -10, 'z'), (1, 11, 'a'), (2, 12, 'b'), (5, 15, 'c'), (10, 20, 'd'), (20, 30, 'e')")
 
 	// Make some corrupted index. Build the index information.
@@ -706,6 +711,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	err = tk.ExecToErr("admin check table admin_test")
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals,
 		"[executor:8003]admin_test err:[admin:8223]index:<nil> != record:&admin.RecordData{Handle:-1, Values:[]types.Datum{types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:-10, b:[]uint8(nil), x:interface {}(nil)}}}")
 	c.Assert(executor.ErrAdminCheckTable.Equal(err), IsTrue)
@@ -715,7 +721,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 
 	// Add one row of index.
 	// Table count < index count.
-	// Index c2 has one more values ​​than table data: 0, and the handle 0 hasn't correlative record.
+	// Index c2 has one more values than table data: 0, and the handle 0 hasn't correlative record.
 	txn, err = s.store.Begin()
 	c.Assert(err, IsNil)
 	_, err = indexOpr.Create(s.ctx, txn, types.MakeDatums(0), kv.IntHandle(0))
@@ -723,6 +729,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	err = tk.ExecToErr("admin check table admin_test")
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "handle 0, index:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:0, b:[]uint8(nil), x:interface {}(nil)} != record:<nil>")
 
 	// Add one row of index.
@@ -740,6 +747,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	err = tk.ExecToErr("admin check table admin_test")
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "col c2, handle 2, index:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:13, b:[]uint8(nil), x:interface {}(nil)} != record:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:12, b:[]uint8(nil), x:interface {}(nil)}")
 
 	// Table count = index count.
@@ -753,6 +761,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	err = tk.ExecToErr("admin check table admin_test")
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "col c2, handle 10, index:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:19, b:[]uint8(nil), x:interface {}(nil)} != record:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:20, b:[]uint8(nil), x:interface {}(nil)}")
 
 	// Table count = index count.
@@ -766,6 +775,7 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	err = tk.ExecToErr("admin check table admin_test")
+	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "col c2, handle 10, index:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:19, b:[]uint8(nil), x:interface {}(nil)} != record:types.Datum{k:0x1, collation:\"\", decimal:0x0, length:0x0, i:20, b:[]uint8(nil), x:interface {}(nil)}")
 
 	// Recover records.
@@ -778,6 +788,8 @@ func (s *testSuite5) TestAdminCheckTableFailed(c *C) {
 	err = txn.Commit(context.Background())
 	c.Assert(err, IsNil)
 	tk.MustExec("admin check table admin_test")
+
+	s.RerunWithCommonHandleEnabled(c, s.TestAdminCheckTableFailed)
 }
 
 func (s *testSuite8) TestAdminCheckTable(c *C) {

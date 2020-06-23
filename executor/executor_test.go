@@ -137,6 +137,8 @@ type baseTestSuite struct {
 	domain  *domain.Domain
 	*parser.Parser
 	ctx *mock.Context
+
+	testutil.CommonHandleSuite
 }
 
 var mockTikv = flag.Bool("mockTikv", true, "use mock tikv store in executor test")

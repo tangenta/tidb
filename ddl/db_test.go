@@ -983,6 +983,27 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 	tk.MustExec("alter table tidb.test add index idx1 (a, b);")
 	tk.MustExec("admin check table test")
 }
+
+func (s *testDBSuite6) TestAddMultiColumnsIndexClusteredIndex(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("drop database if exists test_add_multi_col_index_clustered;")
+	tk.MustExec("create database test_add_multi_col_index_clustered;")
+	tk.MustExec("use test_add_multi_col_index_clustered;")
+
+	tk.MustExec("set @@tidb_enable_clustered_index = 1")
+	tk.MustExec("create table t (a int, b varchar(10), c int, primary key (a, b));")
+	tk.MustExec("insert into t values (1, '1', 1), (2, '2', NULL), (3, '3', 3);")
+	tk.MustExec("create index idx on t (a, c);")
+
+	tk.MustExec("admin check index t idx;")
+	tk.MustExec("admin check table t;")
+
+	tk.MustExec("insert into t values (5, '5', 5), (6, '6', NULL);")
+
+	tk.MustExec("admin check index t idx;")
+	tk.MustExec("admin check table t;")
+}
+
 func (s *testDBSuite1) TestAddPrimaryKey1(c *C) {
 	testAddIndex(c, s.store, s.lease, false,
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, unique key(c1))", "primary")
