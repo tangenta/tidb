@@ -340,7 +340,8 @@ func buildIndexLookUpChecker(b *executorBuilder, readerPlan *plannercore.Physica
 	}
 	readerExec.ranges = ranger.FullRange()
 	ts := readerPlan.TablePlans[0].(*plannercore.PhysicalTableScan)
-	readerExec.handleIdx = []int{ts.HandleIdx}
+	readerExec.handleIdx = ts.HandleIdx
+	readerExec.handleCols = ts.PkCols
 
 	tps := make([]*types.FieldType, 0, len(is.Columns)+1)
 	for _, col := range is.Columns {

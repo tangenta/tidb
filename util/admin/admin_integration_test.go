@@ -14,6 +14,8 @@
 package admin_test
 
 import (
+	"strconv"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
@@ -21,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/util/testkit"
-	"strconv"
 )
 
 var _ = Suite(&testAdminSuite{})

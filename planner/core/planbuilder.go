@@ -1118,7 +1118,7 @@ func FindColumnInfoByID(colInfos []*model.ColumnInfo, id int64) *model.ColumnInf
 func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName model.CIStr, tbl table.Table, idx *model.IndexInfo) (Plan, error) {
 	// Get generated columns.
 	var genCols []*expression.Column
-	pkOffset := -1
+	var pkOffsets []int
 	tblInfo := tbl.Meta()
 	colsMap := set.NewInt64Set()
 	schema := expression.NewSchema(make([]*expression.Column, 0, len(idx.Columns))...)
@@ -1137,7 +1137,7 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 				schema.Append(fullExprCols.Columns[i])
 				colsMap.Insert(col.ID)
 				if mysql.HasPriKeyFlag(col.Flag) {
-					pkOffset = len(tblReaderCols) - 1
+					pkOffsets = append(pkOffsets, len(tblReaderCols)-1)
 				}
 				genColumnID := model.TableColumnID{TableID: tblInfo.ID, ColumnID: col.ID}
 				if expr, ok := genExprsMap[genColumnID]; ok {
@@ -1159,7 +1159,7 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 				tblSchema.Append(col)
 				colsMap.Insert(col.ID)
 				if mysql.HasPriKeyFlag(col.RetType.Flag) {
-					pkOffset = len(tblReaderCols) - 1
+					pkOffsets = append(pkOffsets, len(tblReaderCols)-1)
 				}
 			}
 		}
@@ -1170,7 +1170,7 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 			return nil, err
 		}
 	}
-	if !tbl.Meta().PKIsHandle || pkOffset == -1 {
+	if !tbl.Meta().PKIsHandle || len(pkOffsets) == 0 {
 		tblReaderCols = append(tblReaderCols, model.NewExtraHandleColInfo())
 		handleCol := &expression.Column{
 			RetType:  types.NewFieldType(mysql.TypeLonglong),
@@ -1178,7 +1178,7 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 			ID:       model.ExtraHandleID,
 		}
 		tblSchema.Append(handleCol)
-		pkOffset = len(tblReaderCols) - 1
+		pkOffsets = append(pkOffsets, len(tblReaderCols)-1)
 	}
 
 	is := PhysicalIndexScan{
@@ -1210,7 +1210,17 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 		tablePlan:   ts,
 		tblColHists: is.stats.HistColl,
 	}
-	ts.HandleIdx = pkOffset
+
+	if tblInfo.IsCommonHandle {
+		pkIdx := tables.FindPrimaryIndex(tblInfo)
+		ts.PkCols, _ = expression.IndexInfo2Cols(tblReaderCols, schema.Columns, pkIdx)
+		pkOffsets = make([]int, len(ts.PkCols))
+		for i := range pkIdx.Columns {
+			pkOffsets[i] = len(tblReaderCols) + i
+		}
+	}
+	ts.HandleIdx = pkOffsets
+
 	is.initSchema(idx, fullIdxCols, true)
 	rootT := finishCopTask(b.ctx, cop).(*rootTask)
 	return rootT.p, nil
