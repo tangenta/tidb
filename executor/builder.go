@@ -334,20 +334,22 @@ func (b *executorBuilder) buildShowSlow(v *plannercore.ShowSlow) Executor {
 func buildIndexLookUpChecker(b *executorBuilder, readerPlan *plannercore.PhysicalIndexLookUpReader,
 	readerExec *IndexLookUpExecutor) {
 	is := readerPlan.IndexPlans[0].(*plannercore.PhysicalIndexScan)
-	readerExec.dagPB.OutputOffsets = make([]uint32, 0, len(is.Index.Columns))
-	for i := 0; i <= len(is.Index.Columns); i++ {
-		readerExec.dagPB.OutputOffsets = append(readerExec.dagPB.OutputOffsets, uint32(i))
-	}
 	readerExec.ranges = ranger.FullRange()
 	ts := readerPlan.TablePlans[0].(*plannercore.PhysicalTableScan)
 	readerExec.handleIdx = ts.HandleIdx
 	readerExec.handleCols = ts.PkCols
+	readerExec.dagPB.OutputOffsets = make([]uint32, 0, len(is.Index.Columns) + len(ts.PkCols))
+	for i := 0; i < len(is.Index.Columns) + len(ts.PkCols); i++ {
+		readerExec.dagPB.OutputOffsets = append(readerExec.dagPB.OutputOffsets, uint32(i))
+	}
 
-	tps := make([]*types.FieldType, 0, len(is.Columns)+1)
+	handleTps := readerExec.getRetTpsByHandle()
+	tps := make([]*types.FieldType, 0, len(is.Columns)+len(handleTps))
 	for _, col := range is.Columns {
 		tps = append(tps, &col.FieldType)
 	}
-	tps = append(tps, types.NewFieldType(mysql.TypeLonglong))
+	tps = append(tps, handleTps...)
+
 	readerExec.checkIndexValue = &checkIndexValue{genExprs: is.GenExprs, idxColTps: tps}
 
 	colNames := make([]string, 0, len(is.Columns))

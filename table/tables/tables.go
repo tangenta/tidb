@@ -524,6 +524,20 @@ func TryGetCommonPkColumns(tbl table.Table) []*table.Column {
 	return pkCols
 }
 
+// TryGetCommonPkColumnInfos get the primary key column infos if the table has common handle.
+func TryGetCommonPkColumnInfos(tbl table.Table) []*model.ColumnInfo {
+	var pkCols []*model.ColumnInfo
+	if !tbl.Meta().IsCommonHandle {
+		return nil
+	}
+	pkIdx := FindPrimaryIndex(tbl.Meta())
+	cols := tbl.Cols()
+	for _, idxCol := range pkIdx.Columns {
+		pkCols = append(pkCols, cols[idxCol.Offset].ColumnInfo)
+	}
+	return pkCols
+}
+
 // AddRecord implements table.Table AddRecord interface.
 func (t *TableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ...table.AddRecordOption) (recordID kv.Handle, err error) {
 	var opt table.AddRecordOpt
@@ -1079,7 +1093,7 @@ func (t *TableCommon) IterRecords(ctx sessionctx.Context, startKey kv.Key, cols 
 				return err
 			}
 		}
-		more, err := fn(handle.IntValue(), data, cols)
+		more, err := fn(handle, data, cols)
 		if !more || err != nil {
 			return err
 		}

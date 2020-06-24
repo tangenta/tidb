@@ -1005,12 +1005,12 @@ func (s *testDBSuite6) TestAddMultiColumnsIndexClusteredIndex(c *C) {
 }
 
 func (s *testDBSuite1) TestAddPrimaryKey1(c *C) {
-	testAddIndex(c, s.store, s.lease, false,
+	testAddIndex(c, s.store, s.lease, testPlain,
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, unique key(c1))", "primary")
 }
 
 func (s *testDBSuite2) TestAddPrimaryKey2(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
 			      partition by range (c3) (
 			      partition p0 values less than (3440),
@@ -1021,13 +1021,13 @@ func (s *testDBSuite2) TestAddPrimaryKey2(c *C) {
 }
 
 func (s *testDBSuite3) TestAddPrimaryKey3(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
 			      partition by hash (c3) partitions 4;`, "primary")
 }
 
 func (s *testDBSuite4) TestAddPrimaryKey4(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
 			      partition by range columns (c3) (
 			      partition p0 values less than (3440),
@@ -1038,12 +1038,12 @@ func (s *testDBSuite4) TestAddPrimaryKey4(c *C) {
 }
 
 func (s *testDBSuite1) TestAddIndex1(c *C) {
-	testAddIndex(c, s.store, s.lease, false,
+	testAddIndex(c, s.store, s.lease, testPlain,
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))", "")
 }
 
 func (s *testDBSuite2) TestAddIndex2(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
 			      partition by range (c1) (
 			      partition p0 values less than (3440),
@@ -1054,13 +1054,13 @@ func (s *testDBSuite2) TestAddIndex2(c *C) {
 }
 
 func (s *testDBSuite3) TestAddIndex3(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
 			      partition by hash (c1) partitions 4;`, "")
 }
 
 func (s *testDBSuite4) TestAddIndex4(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
+	testAddIndex(c, s.store, s.lease, testPartition,
 		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
 			      partition by range columns (c1) (
 			      partition p0 values less than (3440),
@@ -1070,11 +1070,27 @@ func (s *testDBSuite4) TestAddIndex4(c *C) {
 			      partition p4 values less than maxvalue)`, "")
 }
 
-func testAddIndex(c *C, store kv.Storage, lease time.Duration, testPartition bool, createTableSQL, idxTp string) {
+func (s *testDBSuite5) TestAddIndex5(c *C) {
+	testAddIndex(c, s.store, s.lease, testClusteredIndex,
+		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c2, c3))`, "")
+}
+
+type testAddIndexType int8
+
+const (
+	testPlain testAddIndexType = iota
+	testPartition
+	testClusteredIndex
+)
+
+func testAddIndex(c *C, store kv.Storage, lease time.Duration, tp testAddIndexType, createTableSQL, idxTp string) {
 	tk := testkit.NewTestKit(c, store)
 	tk.MustExec("use test_db")
-	if testPartition {
+	switch tp {
+	case testPartition:
 		tk.MustExec("set @@session.tidb_enable_table_partition = '1';")
+	case testClusteredIndex:
+		tk.MustExec("set @@tidb_enable_clustered_index = 1")
 	}
 	tk.MustExec("drop table if exists test_add_index")
 	tk.MustExec(createTableSQL)
@@ -1160,7 +1176,7 @@ LOOP:
 	matchRows(c, rows, expectedRows)
 
 	tk.MustExec("admin check table test_add_index")
-	if testPartition {
+	if tp == testPartition {
 		return
 	}
 
@@ -1174,11 +1190,11 @@ LOOP:
 	ctx := tk.Se.(sessionctx.Context)
 	c.Assert(ctx.NewTxn(context.Background()), IsNil)
 	t := testGetTableByName(c, ctx, "test_db", "test_add_index")
-	handles := make(map[int64]struct{})
-	startKey := t.RecordKey(kv.IntHandle(math.MinInt64))
+	handles := kv.NewHandleMap()
+	startKey := t.RecordPrefix()
 	err := t.IterRecords(ctx, startKey, t.Cols(),
-		func(h int64, data []types.Datum, cols []*table.Column) (bool, error) {
-			handles[h] = struct{}{}
+		func(h kv.Handle, data []types.Datum, cols []*table.Column) (bool, error) {
+			handles.Set(h, struct{}{})
 			return true, nil
 		})
 	c.Assert(err, IsNil)
@@ -1215,11 +1231,11 @@ LOOP:
 		}
 
 		c.Assert(err, IsNil)
-		_, ok := handles[h.IntValue()]
+		_, ok := handles.Get(h)
 		c.Assert(ok, IsTrue)
-		delete(handles, h.IntValue())
+		handles.Delete(h)
 	}
-	c.Assert(handles, HasLen, 0)
+	c.Assert(handles.Len(), Equals, 0)
 	tk.MustExec("drop table test_add_index")
 }
 
@@ -1829,7 +1845,7 @@ LOOP:
 		}
 	}()
 	err = t.IterRecords(ctx, t.FirstKey(), t.Cols(),
-		func(h int64, data []types.Datum, cols []*table.Column) (bool, error) {
+		func(_ kv.Handle, data []types.Datum, cols []*table.Column) (bool, error) {
 			i++
 			// c4 must be -1 or > 0
 			v, err1 := data[3].ToInt64(ctx.GetSessionVars().StmtCtx)

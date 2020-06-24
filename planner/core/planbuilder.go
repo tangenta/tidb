@@ -768,7 +768,7 @@ func getPathByIndexName(paths []*util.AccessPath, idxName model.CIStr, tblInfo *
 			return path
 		}
 	}
-	if isPrimaryIndex(idxName) && tblInfo.PKIsHandle {
+	if isPrimaryIndex(idxName) && (tblInfo.PKIsHandle || tblInfo.IsCommonHandle) {
 		return tablePath
 	}
 	return nil
@@ -1213,8 +1213,10 @@ func (b *PlanBuilder) buildPhysicalIndexLookUpReader(ctx context.Context, dbName
 
 	if tblInfo.IsCommonHandle {
 		pkIdx := tables.FindPrimaryIndex(tblInfo)
-		ts.PkCols, _ = expression.IndexInfo2Cols(tblReaderCols, schema.Columns, pkIdx)
-		pkOffsets = make([]int, len(ts.PkCols))
+		pkCols, _ := expression.IndexInfo2Cols(tblReaderCols, schema.Columns, pkIdx)
+		ts.PkCols = pkCols
+		cop.commonHandleCols = pkCols
+		pkOffsets = make([]int, len(pkCols))
 		for i := range pkIdx.Columns {
 			pkOffsets[i] = len(tblReaderCols) + i
 		}

@@ -733,9 +733,9 @@ func (s *testSuite8) TestShardRowIDBits(c *C) {
 		var hasShardedID bool
 		var count int
 		c.Assert(tk.Se.NewTxn(context.Background()), IsNil)
-		err = t.IterRecords(tk.Se, t.FirstKey(), nil, func(h int64, rec []types.Datum, cols []*table.Column) (more bool, err error) {
-			c.Assert(h, GreaterEqual, int64(0))
-			first8bits := h >> 56
+		err = t.IterRecords(tk.Se, t.FirstKey(), nil, func(h kv.Handle, rec []types.Datum, cols []*table.Column) (more bool, err error) {
+			c.Assert(h.IntValue(), GreaterEqual, int64(0))
+			first8bits := h.IntValue() >> 56
 			if first8bits > 0 {
 				hasShardedID = true
 			}
@@ -850,7 +850,7 @@ func (s *testAutoRandomSuite) TestAutoRandomBitsData(c *C) {
 	for i := 0; i < 100; i++ {
 		tk.MustExec("insert into t(b) values (?)", i)
 	}
-	allHandles, err := ddltestutil.ExtractAllTableHandles(tk.Se, "test_auto_random_bits", "t")
+	allHandles, err := ddltestutil.ExtractAllTableIntHandles(tk.Se, "test_auto_random_bits", "t")
 	c.Assert(err, IsNil)
 	tk.MustExec("drop table t")
 
@@ -904,7 +904,7 @@ func (s *testAutoRandomSuite) TestAutoRandomBitsData(c *C) {
 		tk.MustExec("insert into t(b) values (?)", i)
 		tk.MustExec("insert into t(a, b) values (?, ?)", -i, i)
 	}
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test_auto_random_bits", "t")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test_auto_random_bits", "t")
 	c.Assert(err, IsNil)
 	// orderedHandles should be [-100, -99, ..., -2, -1, 1, 2, ..., 99, 100]
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 15, mysql.TypeLonglong)
@@ -922,7 +922,7 @@ func (s *testAutoRandomSuite) TestAutoRandomBitsData(c *C) {
 	for i := 0; i < 100; i++ {
 		tk.MustExec("insert into t (b) values(?)", i)
 	}
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test_auto_random_bits", "t")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test_auto_random_bits", "t")
 	for _, h := range allHandles {
 		// Sign bit should be reserved.
 		c.Assert(h > 0, IsTrue)
@@ -933,7 +933,7 @@ func (s *testAutoRandomSuite) TestAutoRandomBitsData(c *C) {
 	for i := 0; i < 100; i++ {
 		tk.MustExec("insert into t (b) values(?)", i)
 	}
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test_auto_random_bits", "t")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test_auto_random_bits", "t")
 	signBitUnused := true
 	for _, h := range allHandles {
 		signBitUnused = signBitUnused && (h > 0)
@@ -957,7 +957,7 @@ func (s *testAutoRandomSuite) TestAutoRandomTableOption(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(t.Meta().AutoRandID, Equals, int64(1000))
 	tk.MustExec("insert into auto_random_table_option values (),(),(),(),()")
-	allHandles, err := ddltestutil.ExtractAllTableHandles(tk.Se, "test", "auto_random_table_option")
+	allHandles, err := ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "auto_random_table_option")
 	c.Assert(err, IsNil)
 	c.Assert(len(allHandles), Equals, 5)
 	// Test non-shard-bits part of auto random id is monotonic increasing and continuous.
@@ -973,7 +973,7 @@ func (s *testAutoRandomSuite) TestAutoRandomTableOption(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(t.Meta().AutoRandID, Equals, int64(0))
 	tk.MustExec("insert into alter_table_auto_random_option values(),(),(),(),()")
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test", "alter_table_auto_random_option")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "alter_table_auto_random_option")
 	c.Assert(err, IsNil)
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)
 	size = int64(len(allHandles))
@@ -991,7 +991,7 @@ func (s *testAutoRandomSuite) TestAutoRandomTableOption(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(t.Meta().AutoRandID, Equals, int64(3000000))
 	tk.MustExec("insert into alter_table_auto_random_option values(),(),(),(),()")
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test", "alter_table_auto_random_option")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "alter_table_auto_random_option")
 	c.Assert(err, IsNil)
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)
 	size = int64(len(allHandles))
@@ -1025,7 +1025,7 @@ func (s *testAutoRandomSuite) TestFilterDifferentAllocators(c *C) {
 	tk.MustExec("create table t(a bigint auto_random(5) key, b int auto_increment unique)")
 	tk.MustExec("insert into t values()")
 	tk.MustQuery("select b from t").Check(testkit.Rows("1"))
-	allHandles, err := ddltestutil.ExtractAllTableHandles(tk.Se, "test", "t")
+	allHandles, err := ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "t")
 	c.Assert(err, IsNil)
 	c.Assert(len(allHandles), Equals, 1)
 	orderedHandles := testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)
@@ -1036,7 +1036,7 @@ func (s *testAutoRandomSuite) TestFilterDifferentAllocators(c *C) {
 	tk.MustExec("alter table t auto_increment 3000000")
 	tk.MustExec("insert into t values()")
 	tk.MustQuery("select b from t").Check(testkit.Rows("3000000"))
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test", "t")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "t")
 	c.Assert(err, IsNil)
 	c.Assert(len(allHandles), Equals, 1)
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)
@@ -1047,7 +1047,7 @@ func (s *testAutoRandomSuite) TestFilterDifferentAllocators(c *C) {
 	tk.MustExec("alter table t auto_random_base 3000000")
 	tk.MustExec("insert into t values()")
 	tk.MustQuery("select b from t").Check(testkit.Rows("3000001"))
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test", "t")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "t")
 	c.Assert(err, IsNil)
 	c.Assert(len(allHandles), Equals, 1)
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)
@@ -1061,7 +1061,7 @@ func (s *testAutoRandomSuite) TestFilterDifferentAllocators(c *C) {
 	strInt64, err := strconv.ParseInt(res.Rows()[0][0].(string), 10, 64)
 	c.Assert(err, IsNil)
 	c.Assert(strInt64, Greater, int64(3000002))
-	allHandles, err = ddltestutil.ExtractAllTableHandles(tk.Se, "test", "t1")
+	allHandles, err = ddltestutil.ExtractAllTableIntHandles(tk.Se, "test", "t1")
 	c.Assert(err, IsNil)
 	c.Assert(len(allHandles), Equals, 1)
 	orderedHandles = testutil.ConfigTestUtils.MaskSortHandles(allHandles, 5, mysql.TypeLonglong)

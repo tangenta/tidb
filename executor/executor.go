@@ -691,7 +691,7 @@ func (e *CheckTableExec) checkIndexHandle(ctx context.Context, src *IndexLookUpE
 		if err != nil {
 			break
 		}
-		if chk.NumRows() == 0 {
+		if chk.NumRows() == 0 {{}
 			break
 		}
 
@@ -717,12 +717,6 @@ func (e *CheckTableExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		return nil
 	}
 	defer func() { e.done = true }()
-
-	if e.table.Meta().IsCommonHandle {
-		// TODO: fix me to support cluster index table admin check table.
-		// https://github.com/pingcap/tidb/projects/45#card-39562229
-		return nil
-	}
 
 	idxNames := make([]string, 0, len(e.indexInfos))
 	for _, idx := range e.indexInfos {
@@ -1285,7 +1279,7 @@ func (e *TableScanExec) nextChunk4InfoSchema(ctx context.Context, chk *chunk.Chu
 			columns[i] = table.ToColumn(colInfo)
 		}
 		mutableRow := chunk.MutRowFromTypes(retTypes(e))
-		err := e.t.IterRecords(e.ctx, nil, columns, func(h int64, rec []types.Datum, cols []*table.Column) (bool, error) {
+		err := e.t.IterRecords(e.ctx, nil, columns, func(h kv.Handle, rec []types.Datum, cols []*table.Column) (bool, error) {
 			mutableRow.SetDatums(rec...)
 			e.virtualTableChunkList.AppendRow(mutableRow.ToRow())
 			return true, nil
