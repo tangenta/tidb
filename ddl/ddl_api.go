@@ -5204,7 +5204,7 @@ func (d *ddl) AlterTablePartition(ctx sessionctx.Context, ident ast.Ident, spec 
 		return errors.Errorf("Alter partition '%s' on an unpartioned table", spec.PartitionNames[0].L)
 	}
 
-	partitionId, err := tables.FindPartitionByName(meta, spec.PartitionNames[0].L)
+	partitionID, err := tables.FindPartitionByName(meta, spec.PartitionNames[0].L)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -5214,10 +5214,10 @@ func (d *ddl) AlterTablePartition(ctx sessionctx.Context, ident ast.Ident, spec 
 		return errors.Trace(err)
 	}
 
-	groupId := strconv.FormatInt(partitionId, 10)
-	startKey, endKey := tablecodec.GetTableHandleKeyRange(partitionId)
+	groupID := strconv.FormatInt(partitionID, 10)
+	startKey, endKey := tablecodec.GetTableHandleKeyRange(partitionID)
 	for _, rule := range rules {
-		rule.GroupID = groupId
+		rule.GroupID = groupID
 		rule.Index = 3
 		rule.StartKey = startKey
 		rule.EndKey = endKey
