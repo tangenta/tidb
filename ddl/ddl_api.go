@@ -5127,7 +5127,7 @@ func (d *ddl) AlterIndexVisibility(ctx sessionctx.Context, ident ast.Ident, inde
 	return errors.Trace(err)
 }
 
-func validPlacementSpecs(specs []*ast.PlacementSpec) ([]*placement.Rule, error) {
+func validatePlacementSpecs(specs []*ast.PlacementSpec) ([]*placement.Rule, error) {
 	rules := make([]*placement.Rule, 0, len(specs))
 	for k, spec := range specs {
 		rule := &placement.Rule{
