@@ -5148,7 +5148,7 @@ add placement policy
 	constraints='+zone=sh'
 	role=leader
 	replicas=3`)
-	c.Assert(err, ErrorMatches, ".*Alter partition 'p' on an unpartioned table")
+	c.Assert(err, ErrorMatches, ddl.ErrPartitionMgmtOnNonpartitioned)
 }
 
 func init() {
