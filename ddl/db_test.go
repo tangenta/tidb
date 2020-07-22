@@ -5100,6 +5100,13 @@ add placement policy
 
 	_, err = tk.Exec(`alter table t1 alter partition p0
 add placement policy
+	constraints='+   zone   =   sh  ,     - zone = bj    '
+	role=leader
+	replicas=3`)
+	c.Assert(err, ErrorMatches, ".*pd unavailable.*")
+
+	_, err = tk.Exec(`alter table t1 alter partition p0
+add placement policy
 	constraints=',,,'
 	role=leader
 	replicas=3`)
@@ -5121,17 +5128,38 @@ add placement policy
 
 	_, err = tk.Exec(`alter table t1 alter partition p0
 add placement policy
+	constraints='+    '
+	role=leader
+	replicas=3`)
+	c.Assert(err, ErrorMatches, ".*invalid constraint format.*")
+
+	_, err = tk.Exec(`alter table t1 alter partition p0
+add placement policy
 	constraints='+=zone1'
 	role=leader
 	replicas=3`)
-	c.Assert(err, ErrorMatches, ".*empty constraint key.*")
+	c.Assert(err, ErrorMatches, ".*invalid constraint format.*")
+
+	_, err = tk.Exec(`alter table t1 alter partition p0
+add placement policy
+	constraints='+=    z'
+	role=leader
+	replicas=3`)
+	c.Assert(err, ErrorMatches, ".*invalid constraint format.*")
 
 	_, err = tk.Exec(`alter table t1 alter partition p0
 add placement policy
 	constraints='+zone='
 	role=leader
 	replicas=3`)
-	c.Assert(err, ErrorMatches, ".*empty constraint value.*")
+	c.Assert(err, ErrorMatches, ".*invalid constraint format.*")
+
+	_, err = tk.Exec(`alter table t1 alter partition p0
+add placement policy
+	constraints='+z  ='
+	role=leader
+	replicas=3`)
+	c.Assert(err, ErrorMatches, ".*invalid constraint format.*")
 
 	_, err = tk.Exec(`alter table t1 alter partition p
 add placement policy
