@@ -5131,7 +5131,7 @@ func (d *ddl) AlterIndexVisibility(ctx sessionctx.Context, ident ast.Ident, inde
 	return errors.Trace(err)
 }
 
-func validatePlacementSpecs(specs []*ast.PlacementSpec) ([]*placement.Rule, error) {
+func checkPlacementSpecs(specs []*ast.PlacementSpec) ([]*placement.Rule, error) {
 	rules := make([]*placement.Rule, 0, len(specs))
 	for k, spec := range specs {
 		rule := &placement.Rule{
@@ -5211,7 +5211,7 @@ func (d *ddl) AlterTablePartition(ctx sessionctx.Context, ident ast.Ident, spec 
 		return errors.Trace(err)
 	}
 
-	rules, err := validatePlacementSpecs(spec.PlacementSpecs)
+	rules, err := checkPlacementSpecs(spec.PlacementSpecs)
 	if err != nil {
 		return errors.Trace(err)
 	}
