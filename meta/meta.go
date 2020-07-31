@@ -938,8 +938,8 @@ func (m *Meta) GetDDLReorgHandle(job *model.Job, isCommonHandle bool) (startHand
 		physicalTableID = job.TableID
 		logutil.BgLogger().Warn("new TiDB binary running on old TiDB DDL reorg data",
 			zap.Int64("partition ID", physicalTableID),
-			zap.Stringer("startHandle", startHandle),
-			zap.Stringer("endHandle", endHandle))
+			zap.String("startHandle", fmt.Sprintf("%v", startHandle)),
+			zap.String("endHandle", fmt.Sprintf("%v", endHandle)))
 	}
 	return
 }
