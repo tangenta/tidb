@@ -39,12 +39,12 @@ require (
 	github.com/pingcap/badger v1.5.1-0.20200908111422-2e78ee155d19
 	github.com/pingcap/br v5.1.0-alpha.0.20210604015827-db22c6d284a0+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
+	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989
 	github.com/pingcap/kvproto v0.0.0-20210602120243-804ac0a6ce21
-	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
+	github.com/pingcap/log v0.0.0-20210625125904-98ed8e2eb1c7
 	github.com/pingcap/parser v0.0.0-20210610025415-8d8b6346d3f0
 	github.com/pingcap/sysutil v0.0.0-20210315073920-cc0985d983a3
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
@@ -66,7 +66,7 @@ require (
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
 	go.uber.org/atomic v1.8.0
 	go.uber.org/automaxprocs v1.2.0
-	go.uber.org/zap v1.17.0
+	go.uber.org/zap v1.18.1
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
@@ -83,3 +83,5 @@ go 1.16
 
 // Fix panic in unit test with go >= 1.14, ref: etcd-io/bbolt#201 https://github.com/etcd-io/bbolt/pull/201
 replace go.etcd.io/bbolt => go.etcd.io/bbolt v1.3.5
+
+replace github.com/pingcap/parser => github.com/tangenta/parser v0.0.0-20210803040954-b086c97e58d8

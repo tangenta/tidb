@@ -84,6 +84,7 @@ import (
 	"github.com/pingcap/tidb/util/sli"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/timeutil"
+	"golang.org/x/text/transform"
 )
 
 var (
@@ -1345,6 +1346,22 @@ func (s *session) ParseWithParams(ctx context.Context, sql string, args ...inter
 		sql, err = sqlexec.EscapeSQL(sql, args...)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	clientCharset, ok := s.sessionVars.GetSystemVar("character_set_client")
+	if ok && (clientCharset == charset.CharsetGBK || clientCharset == charset.CharsetGB18030) {
+		encoding, _ := charset.Lookup(clientCharset)
+		// However, if `b.tp.Charset` is abnormally set to a wrong charset, we still
+		// return with error.
+		if encoding == nil {
+			logutil.BgLogger().Error("get encoding fails", zap.String("client charset", clientCharset))
+			return nil, errors.New("shouldn't not happened")
+		}
+		var err error
+		sql, _, err = transform.String(encoding.NewDecoder(), sql)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 
