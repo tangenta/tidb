@@ -16,6 +16,8 @@ package executor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
+	"github.com/pingcap/tidb/util/codec"
 	"math"
 	"math/rand"
 	"sort"
@@ -43,6 +45,33 @@ func (s *testSplitIndex) SetUpSuite(c *C) {
 }
 
 func (s *testSplitIndex) TearDownSuite(c *C) {
+}
+
+func (s *testSplitIndex) TestCodecKeyInvalid(c *C) {
+	regionKey := "t_130772_5f69800000000000000101617070732e626173ff69632e6c69622e74ff72616e7361637469ff6f6e5f7574696c73ff2e63656c6572795fff7461736b5f696e76ff6f6b657200000000fb038000000008d1b2c9"
+	tableID, keyPart := int64(130772), "5f69800000000000000101617070732e626173ff69632e6c69622e74ff72616e7361637469ff6f6e5f7574696c73ff2e63656c6572795fff7461736b5f696e76ff6f6b657200000000fb038000000008d1b2c9"
+	buf := make([]byte, 0, 11)
+	buf = append(buf, 't')
+	buf = codec.EncodeInt(buf, tableID)
+	b, err := hex.DecodeString(keyPart)
+	c.Assert(err, IsNil)
+	buf = append(buf, b...)
+	// Use different TableID to run into executor/split.go:770.
+	unknownTableID := tableID+1
+	decoder := regionKeyDecoder{
+		physicalTableID:      unknownTableID,
+		tablePrefix:          tablecodec.GenTablePrefix(unknownTableID),
+		recordPrefix:         tablecodec.GenTableRecordPrefix(unknownTableID),
+		indexPrefix:          []byte("random"),
+		indexID:              0,
+		hasUnsignedIntHandle: false,
+	}
+	// Make sure the key is constructed correctly.
+	str := decoder.decodeRegionKey(buf)
+	c.Assert(regionKey, Equals, str)
+	// Try to reproduce dead loop.
+	_, err = tablecodec.DecodeRowKey(buf)
+	c.Assert(err, IsNil)
 }
 
 func (s *testSplitIndex) TestLongestCommonPrefixLen(c *C) {

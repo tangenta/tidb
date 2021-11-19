@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"encoding/hex"
 	"hash"
 	"hash/crc32"
 	"hash/fnv"
