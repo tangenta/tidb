@@ -500,8 +500,8 @@ func getJobCheckInterval(job *model.Job, i int) (time.Duration, bool) {
 	}
 }
 
-// mayNeedReorg indicates that this job may need to reorganize the data.
-func mayNeedReorg(job *model.Job) bool {
+// MayNeedReorg indicates that this job may need to reorganize the data.
+func MayNeedReorg(job *model.Job) bool {
 	switch job.Type {
 	case model.ActionAddIndex, model.ActionAddPrimaryKey:
 		return true
@@ -522,7 +522,7 @@ func (d *ddl) asyncNotifyWorker(job *model.Job) {
 		return
 	}
 	var worker *worker
-	if mayNeedReorg(job) {
+	if MayNeedReorg(job) {
 		worker = d.workers[addIdxWorker]
 	} else {
 		worker = d.workers[generalWorker]
@@ -544,6 +544,18 @@ func updateTickerInterval(ticker *time.Ticker, lease time.Duration, job *model.J
 	return time.NewTicker(chooseLeaseTime(lease, interval))
 }
 
+// SendJobToEnqueue send a DDL job task and enqueue.
+func SendJobToEnqueue(d DDL, job *model.Job) error {
+	task := &limitJobTask{job, make(chan error)}
+	d.(*ddl).limitJobCh <- task
+	err := <-task.err
+	if err != nil {
+		// The transaction of enqueuing job is failed.
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // doDDLJob will return
 // - nil: found in history DDL job and no job error
 // - context.Cancel: job has been sent to worker, but not found in history DDL job before cancel
@@ -551,10 +563,7 @@ func updateTickerInterval(ticker *time.Ticker, lease time.Duration, job *model.J
 func (d *ddl) doDDLJob(ctx sessionctx.Context, job *model.Job) error {
 	// Get a global job ID and put the DDL job in the queue.
 	job.Query, _ = ctx.Value(sessionctx.QueryString).(string)
-	task := &limitJobTask{job, make(chan error)}
-	d.limitJobCh <- task
-	// worker should restart to continue handling tasks in limitJobCh, and send back through task.err
-	err := <-task.err
+	err := SendJobToEnqueue(d, job)
 	if err != nil {
 		// The transaction of enqueuing job is failed.
 		return errors.Trace(err)
