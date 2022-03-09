@@ -5679,6 +5679,14 @@ func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast.Inde
 		Priority: ctx.GetSessionVars().DDLReorgPriority,
 	}
 
+	if info := ctx.GetSessionVars().StmtCtx.MultiSchemaInfo; info != nil {
+		info.AddIndexes = append(info.AddIndexes, &model.IndexInfo{
+			Name:    indexName,
+			Columns: indexColumns,
+			State:   model.StateNone,
+		})
+	}
+
 	err = d.doDDLJob(ctx, job)
 	// key exists, but if_not_exists flags is true, so we ignore this error.
 	if ErrDupKeyName.Equal(err) && ifNotExists {
