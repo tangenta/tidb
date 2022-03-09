@@ -2830,9 +2830,13 @@ func (d *ddl) AlterTable(ctx context.Context, sctx sessionctx.Context, ident ast
 	if err != nil {
 		return err
 	}
-
-	if len(validSpecs) > 1 {
-		sctx.GetSessionVars().StmtCtx.MultiSchemaInfo = model.NewMultiSchemaInfo()
+	done, err := handleMultiAlterTableSpec(d, sctx, ident, specs)
+	if err != nil || done {
+		return errors.Trace(err)
+	}
+	validSpecs, err = preCheckAlterTableSpecs(sctx, specs)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	for _, spec := range validSpecs {
 		var handledCharsetOrCollate bool
@@ -3021,13 +3025,32 @@ func (d *ddl) AlterTable(ctx context.Context, sctx sessionctx.Context, ident ast
 		}
 	}
 	if sctx.GetSessionVars().StmtCtx.MultiSchemaInfo != nil {
-		err = d.MultiSchemaChange(sctx, ident)
+		err = d.MultiSchemaChange(sctx, ident, specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	return nil
+}
+
+// handleMultiAlterTableSpec will be removed after the fully support for multi-schema change.
+func handleMultiAlterTableSpec(d *ddl, sctx sessionctx.Context, ident ast.Ident, specs []*ast.AlterTableSpec) (done bool, err error) {
+	if len(specs) > 1 {
+		switch specs[0].Tp {
+		case ast.AlterTableAddColumns:
+			sctx.GetSessionVars().StmtCtx.MultiSchemaInfo = model.NewMultiSchemaInfo()
+			return false, nil
+		case ast.AlterTableDropColumn:
+			err = d.DropColumns(sctx, ident, specs)
+		case ast.AlterTableDropPrimaryKey, ast.AlterTableDropIndex:
+			err = d.DropIndexes(sctx, ident, specs)
+		default:
+			return false, errRunMultiSchemaChanges
+		}
+		return true, errors.Trace(err)
+	}
+	return false, nil
 }
 
 func (d *ddl) RebaseAutoID(ctx sessionctx.Context, ident ast.Ident, newBase int64, tp autoid.AllocatorType, force bool) error {
@@ -6981,23 +7004,4 @@ func checkTooBigFieldLengthAndTryAutoConvert(tp *types.FieldType, colName string
 		}
 	}
 	return nil
-}
-
-func (d *ddl) MultiSchemaChange(ctx sessionctx.Context, ti ast.Ident) error {
-	schema, t, err := d.getSchemaAndTableByIdent(ctx, ti)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	job := &model.Job{
-		SchemaID:        schema.ID,
-		TableID:         t.Meta().ID,
-		SchemaName:      schema.Name.L,
-		Type:            model.ActionMultiSchemaChange,
-		BinlogInfo:      &model.HistoryInfo{},
-		Args:            nil,
-		MultiSchemaInfo: ctx.GetSessionVars().StmtCtx.MultiSchemaInfo,
-	}
-	ctx.GetSessionVars().StmtCtx.MultiSchemaInfo = nil
-	err = d.doDDLJob(ctx, job)
-	return d.callHookOnChanged(err)
 }

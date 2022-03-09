@@ -17,9 +17,59 @@ package ddl
 import (
 	"sync"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/sessionctx"
 )
+
+func (d *ddl) MultiSchemaChange(ctx sessionctx.Context, ti ast.Ident, specs []*ast.AlterTableSpec) error {
+	schema, t, err := d.getSchemaAndTableByIdent(ctx, ti)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	job := &model.Job{
+		SchemaID:        schema.ID,
+		TableID:         t.Meta().ID,
+		SchemaName:      schema.Name.L,
+		Type:            model.ActionMultiSchemaChange,
+		BinlogInfo:      &model.HistoryInfo{},
+		Args:            nil,
+		MultiSchemaInfo: ctx.GetSessionVars().StmtCtx.MultiSchemaInfo,
+	}
+	ctx.GetSessionVars().StmtCtx.MultiSchemaInfo = nil
+	err = d.doDDLJob(ctx, job)
+	return d.callHookOnChanged(err)
+}
+
+// preCheckAlterTableSpecs filter the invalid ast.AlterTableSpecs.
+func preCheckAlterTableSpecs(ctx sessionctx.Context, specs []*ast.AlterTableSpec) ([]*ast.AlterTableSpec, error) {
+	newSpecs := make([]*ast.AlterTableSpec, 0, len(specs))
+	addColNames := make(map[string]struct{})
+	var skip bool
+	for _, s := range specs {
+		if s.Tp == ast.AlterTableAddColumns {
+			for _, n := range s.NewColumns {
+				if _, duplicated := addColNames[n.Name.Name.L]; duplicated {
+					err := errors.Trace(infoschema.ErrColumnExists.GenWithStackByArgs(n.Name.Name.O))
+					if s.IfNotExists {
+						ctx.GetSessionVars().StmtCtx.AppendNote(err)
+						skip = true
+					} else {
+						return nil, errors.Trace(err)
+					}
+				}
+				addColNames[n.Name.Name.L] = struct{}{}
+			}
+		}
+		if !skip {
+			newSpecs = append(newSpecs, s)
+		}
+	}
+	return newSpecs, nil
+}
 
 func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	if job.MultiSchemaInfo.Revertible {
