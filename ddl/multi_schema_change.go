@@ -175,6 +175,13 @@ func checkOperateSameColumn(info *model.MultiSchemaInfo) error {
 			}
 		}
 	}
+	for _, index := range info.DropIndexes {
+		idxName := index.Name.L
+		if _, ok := modifyIdx[idxName]; ok {
+			return errOperateSameIndex.GenWithStackByArgs(idxName)
+		}
+		modifyIdx[idxName] = struct{}{}
+	}
 	return nil
 }
 
