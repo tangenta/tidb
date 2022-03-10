@@ -538,7 +538,7 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
-	if job.MultiSchemaInfo.Revertible {
+	if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
 		job.MarkNonRevertible()
 		ver, err = updateVersionAndTableInfoWithCheck(t, job, tblInfo, false)
 		if err != nil {
