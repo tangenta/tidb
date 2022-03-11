@@ -540,10 +540,7 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	}
 	if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
 		job.MarkNonRevertible()
-		ver, err = updateVersionAndTableInfoWithCheck(t, job, tblInfo, false)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
+		return updateVersionAndTableInfoWithCheck(t, job, tblInfo, false)
 	}
 
 	originalState := colInfo.State
@@ -590,6 +587,7 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	case model.StateDeleteReorganization:
 		// reorganization -> absent
 		// All reorganization jobs are done, drop this column.
+		tblInfo.MoveColumnInfo(colInfo.Offset, len(tblInfo.Columns)-1)
 		tblInfo.Columns = tblInfo.Columns[:len(tblInfo.Columns)-1]
 		colInfo.State = model.StateNone
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != colInfo.State)
