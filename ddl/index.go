@@ -655,10 +655,10 @@ func onDropIndex(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 		job.SchemaState = model.StateDeleteReorganization
 	case model.StateDeleteReorganization:
 		// reorganization -> absent
-		removeDependentHiddenColumns(tblInfo, indexInfo)
-		removeIndexInfo(tblInfo, indexInfo)
 		// Set column index flag.
 		dropIndexColumnFlag(tblInfo, indexInfo)
+		removeDependentHiddenColumns(tblInfo, indexInfo)
+		removeIndexInfo(tblInfo, indexInfo)
 
 		failpoint.Inject("mockExceedErrorLimit", func(val failpoint.Value) {
 			if val.(bool) {
