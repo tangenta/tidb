@@ -283,6 +283,7 @@ func TestMultiSchemaChangeDropIndexes(t *testing.T) {
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
 	tk.MustGetErrCode("alter table t drop index t, drop index t", errno.ErrUnsupportedDDLOperation)
 
+	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (id int, c1 int, c2 int, primary key(id), key i1(c1), key i2(c2));")
 	tk.MustExec("insert into t values (1, 2, 3);")
 	tk.MustExec("alter table t drop index i1, drop index i2;")
@@ -290,13 +291,11 @@ func TestMultiSchemaChangeDropIndexes(t *testing.T) {
 	tk.MustGetErrCode("select * from t use index(i2);", errno.ErrKeyDoesNotExist)
 
 	// Test drop index with drop column.
-	/*
-		tk.MustExec("drop table if exists t")
-		tk.MustExec("create table t (a int default 1, b int default 2, c int default 3, index t(a))")
-		tk.MustExec("insert into t values ();")
-		tk.MustExec("alter table t drop index t, drop column a")
-		tk.MustGetErrCode("select * from t force index(t)", errno.ErrKeyDoesNotExist)
-	*/
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int default 1, b int default 2, c int default 3, index t(a))")
+	tk.MustExec("insert into t values ();")
+	tk.MustExec("alter table t drop index t, drop column a")
+	tk.MustGetErrCode("select * from t force index(t)", errno.ErrKeyDoesNotExist)
 }
 
 func TestMultiSchemaChangeAddDropIndexes(t *testing.T) {
