@@ -4469,6 +4469,12 @@ func (d *ddl) getModifiableColumnJob(ctx context.Context, sctx sessionctx.Contex
 		CtxVars: []interface{}{needChangeColData},
 		Args:    []interface{}{&newCol, originalColName, spec.Position, modifyColumnTp, newAutoRandBits},
 	}
+	if info := sctx.GetSessionVars().StmtCtx.MultiSchemaInfo; info != nil {
+		info.AddColumns = append(info.AddColumns, newCol.ColumnInfo)
+		if newCol.Name.L != originalColName.L {
+			info.DropColumns = append(info.DropColumns, col.ColumnInfo)
+		}
+	}
 	return job, nil
 }
 
@@ -4800,7 +4806,9 @@ func (d *ddl) AlterColumn(ctx sessionctx.Context, ident ast.Ident, spec *ast.Alt
 		BinlogInfo: &model.HistoryInfo{},
 		Args:       []interface{}{col},
 	}
-
+	if info := ctx.GetSessionVars().StmtCtx.MultiSchemaInfo; info != nil {
+		info.AddColumns = append(info.AddColumns, col.ColumnInfo)
+	}
 	err = d.doDDLJob(ctx, job)
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
