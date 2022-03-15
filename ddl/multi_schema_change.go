@@ -174,7 +174,6 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 	case model.ActionAddIndex, model.ActionAddPrimaryKey:
 		indexName := job.Args[1].(model.CIStr)
 		indexPartSpecifications := job.Args[2].([]*ast.IndexPartSpecification)
-
 		info.AddIndexes = append(info.AddIndexes, indexName)
 		for _, indexPartSpecification := range indexPartSpecifications {
 			info.RelativeColumns = append(info.RelativeColumns, indexPartSpecification.Column.Name)
@@ -182,14 +181,12 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 	case model.ActionRenameIndex:
 		from := job.Args[0].(model.CIStr)
 		to := job.Args[1].(model.CIStr)
-
 		info.AddIndexes = append(info.AddIndexes, to)
 		info.DropIndexes = append(info.DropIndexes, from)
 	case model.ActionModifyColumn:
 		newCol := *job.Args[0].(**model.ColumnInfo)
 		oldColName := job.Args[1].(model.CIStr)
 		pos := job.Args[2].(*ast.ColumnPosition)
-
 		if newCol.Name.L != oldColName.L {
 			info.AddColumns = append(info.AddColumns, newCol.Name)
 			info.DropColumns = append(info.DropColumns, oldColName)
