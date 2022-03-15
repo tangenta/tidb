@@ -159,14 +159,10 @@ func TestMultiSchemaChangeAddDropColumns(t *testing.T) {
 	tk.MustExec("alter table t drop column a, drop column b, add column c int default 3, add column d int default 4;")
 	tk.MustQuery("select * from t;").Check(testkit.Rows("3 4"))
 
-	// [a, b] -> [+c after a, +d first, -a, -b] -> [d, c]
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int default 1, b int default 2);")
 	tk.MustExec("insert into t values ();")
-	// Note that MariaDB does not support this: Unknown column 'a' in 't'.
-	// Since TiDB's implementation is snapshot + reasonable cascading, this is supported.
-	tk.MustExec("alter table t add column c int default 3 after a, add column d int default 4 first, drop column a, drop column b;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("4 3"))
+	tk.MustGetErrCode("alter table t add column c int default 3 after a, add column d int default 4 first, drop column a, drop column b;", errno.ErrUnsupportedDDLOperation)
 }
 
 func TestMultiSchemaRenameColumns(t *testing.T) {
@@ -193,6 +189,60 @@ func TestMultiSchemaRenameColumns(t *testing.T) {
 	tk.MustExec("create table t (a int default 1, b int default 2, index t(a, b));")
 	tk.MustExec("insert into t values ();")
 	tk.MustGetErrCode("alter table t rename column b to c, add index t1(a, b)", errno.ErrUnsupportedDDLOperation)
+}
+
+func TestMultiSchemaModifyColumns(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+
+	// Test modify and drop with same column
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int default 1, b int default 2);")
+	tk.MustExec("insert into t values ();")
+	tk.MustGetErrCode("alter table t modify column b double, drop column b", errno.ErrUnsupportedDDLOperation)
+}
+
+func TestMultiSchemaAlterColumns(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+
+	// Test alter and drop with same column
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int default 1, b int default 2);")
+	tk.MustExec("insert into t values ();")
+	tk.MustGetErrCode("alter table t alter column b set default 3, drop column b", errno.ErrUnsupportedDDLOperation)
+}
+
+func TestMultiSchemaChangeColumns(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+
+	// Test change and drop with same column
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int default 1, b int default 2);")
+	tk.MustExec("insert into t values ();")
+	tk.MustGetErrCode("alter table t change column b c double, drop column b", errno.ErrUnsupportedDDLOperation)
+
+	// Test change and add with same column
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int default 1, b int default 2);")
+	tk.MustExec("insert into t values ();")
+	tk.MustGetErrCode("alter table t change column b c double, add column c int", errno.ErrUnsupportedDDLOperation)
+
+	// Test add index and rename with same column
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int default 1, b int default 2, index t(a, b));")
+	tk.MustExec("insert into t values ();")
+	tk.MustGetErrCode("alter table t change column b c double, add index t1(a, b)", errno.ErrUnsupportedDDLOperation)
 }
 
 func TestMultiSchemaChangeAddIndexes(t *testing.T) {
@@ -242,13 +292,11 @@ func TestMultiSchemaChangeDropIndexes(t *testing.T) {
 	tk.MustGetErrCode("select * from t use index(i2);", errno.ErrKeyDoesNotExist)
 
 	// Test drop index with drop column.
-	/*
-		tk.MustExec("drop table if exists t")
-		tk.MustExec("create table t (a int default 1, b int default 2, c int default 3, index t(a))")
-		tk.MustExec("insert into t values ();")
-		tk.MustExec("alter table t drop index t, drop column a")
-		tk.MustGetErrCode("select * from t force index(t)", errno.ErrKeyDoesNotExist)
-	*/
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int default 1, b int default 2, c int default 3, index t(a))")
+	tk.MustExec("insert into t values ();")
+	tk.MustExec("alter table t drop index t, drop column a")
+	tk.MustGetErrCode("select * from t force index(t)", errno.ErrKeyDoesNotExist)
 }
 
 func TestMultiSchemaChangeAddDropIndexes(t *testing.T) {
