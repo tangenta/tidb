@@ -154,14 +154,10 @@ func TestMultiSchemaChangeAddDropColumns(t *testing.T) {
 	tk.MustExec("alter table t drop column a, drop column b, add column c int default 3, add column d int default 4;")
 	tk.MustQuery("select * from t;").Check(testkit.Rows("3 4"))
 
-	// [a, b] -> [+c after a, +d first, -a, -b] -> [d, c]
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int default 1, b int default 2);")
 	tk.MustExec("insert into t values ();")
-	// Note that MariaDB does not support this: Unknown column 'a' in 't'.
-	// Since TiDB's implementation is snapshot + reasonable cascading, this is supported.
-	tk.MustExec("alter table t add column c int default 3 after a, add column d int default 4 first, drop column a, drop column b;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("4 3"))
+	tk.MustGetErrCode("alter table t add column c int default 3 after a, add column d int default 4 first, drop column a, drop column b;", errno.ErrUnsupportedDDLOperation)
 }
 
 func TestMultiSchemaRenameColumns(t *testing.T) {
@@ -308,12 +304,12 @@ func TestMultiSchemaChangeAddDropIndexes(t *testing.T) {
 	// Test add and drop same index.
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
-	tk.MustGetErrCode("alter table t drop index t, add index t(b)", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t drop index t, add index t(b)", errno.ErrDupKeyName)
 
 	// Test add and drop same index.
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
-	tk.MustGetErrCode("alter table t add index t1(b), drop index t1", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t add index t1(b), drop index t1", errno.ErrCantDropFieldOrKey)
 }
 
 func TestMultiSchemaRenameIndexes(t *testing.T) {
