@@ -26,7 +26,7 @@ import (
 func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	if job.MultiSchemaInfo.Revertible {
 		// Handle the rolling back job.
-		if job.IsRollingback() || job.IsCancelling() {
+		if job.IsRollingback() {
 			// Rollback/cancel the sub-jobs in reverse order.
 			for i := len(job.MultiSchemaInfo.SubJobs) - 1; i >= 0; i-- {
 				sub := job.MultiSchemaInfo.SubJobs[i]
@@ -36,13 +36,10 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 				proxyJob := cloneFromSubJob(job, sub)
 				ver, err = w.runDDLJob(d, t, proxyJob)
 				mergeBackToSubJob(proxyJob, sub)
-				if i == 0 {
+				if i == 0 && isFinished(sub) {
 					// The last rollback/cancelling sub-job is done.
 					if job.IsRollingback() {
 						job.State = model.JobStateRollbackDone
-					}
-					if job.IsCancelling() {
-						job.State = model.JobStateCancelled
 					}
 				}
 				return ver, err
@@ -59,7 +56,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 			}
 			proxyJob := cloneFromSubJob(job, sub)
 			ver, err = w.runDDLJob(d, t, proxyJob)
-			handleRevertibleException(job, sub.State, i)
+			handleRevertibleException(job, proxyJob.State, i)
 			mergeBackToSubJob(proxyJob, sub)
 			return ver, err
 		}
@@ -100,7 +97,7 @@ func cloneFromSubJob(job *model.Job, sub *model.SubJob) *model.Job {
 		SchemaID:        job.SchemaID,
 		TableID:         job.TableID,
 		SchemaName:      job.SchemaName,
-		State:           job.State,
+		State:           sub.State,
 		Error:           nil,
 		ErrorCount:      0,
 		RowCount:        0,
@@ -132,9 +129,10 @@ func mergeBackToSubJob(job *model.Job, sub *model.SubJob) {
 }
 
 func handleRevertibleException(job *model.Job, res model.JobState, idx int) {
-	if res == model.JobStateRollingback || res == model.JobStateCancelling {
-		job.State = res
+	if res != model.JobStateRollingback && res != model.JobStateCancelling {
+		return
 	}
+	job.State = res
 	// Flush the cancelling state and cancelled state to sub-jobs.
 	for i, sub := range job.MultiSchemaInfo.SubJobs {
 		if i < idx {

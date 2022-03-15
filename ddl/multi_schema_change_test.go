@@ -46,6 +46,11 @@ func TestMultiSchemaChangeAddColumns(t *testing.T) {
 	tk.MustExec("insert into t values (1);")
 	tk.MustExec("alter table t add column (b int default 2, c int default 3);")
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3"))
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int, b int, c int);")
+	tk.MustExec("insert into t values (1, 2, 3);")
+	tk.MustExec("alter table t add column (d int default 4, e int default 5);")
+	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3 4 5"))
 
 	// Test referencing previous column in multi-schema change is not supported.
 	tk.MustExec("drop table if exists t;")
@@ -229,6 +234,7 @@ func TestMultiSchemaChangeDropIndexes(t *testing.T) {
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
 	tk.MustGetErrCode("alter table t drop index t, drop index t", errno.ErrUnsupportedDDLOperation)
 
+	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (id int, c1 int, c2 int, primary key(id), key i1(c1), key i2(c2));")
 	tk.MustExec("insert into t values (1, 2, 3);")
 	tk.MustExec("alter table t drop index i1, drop index i2;")
@@ -255,12 +261,12 @@ func TestMultiSchemaChangeAddDropIndexes(t *testing.T) {
 	// Test add and drop same index.
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
-	tk.MustGetErrCode("alter table t drop index t, add index t(b)", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t drop index t, add index t(b)", errno.ErrDupKeyName)
 
 	// Test add and drop same index.
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
-	tk.MustGetErrCode("alter table t add index t1(b), drop index t1", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t add index t1(b), drop index t1", errno.ErrCantDropFieldOrKey)
 }
 
 func TestMultiSchemaRenameIndexes(t *testing.T) {
