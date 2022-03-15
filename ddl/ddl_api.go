@@ -5919,7 +5919,7 @@ func (d *ddl) DropIndex(ctx sessionctx.Context, ti ast.Ident, indexName model.CI
 	if indexInfo == nil {
 		err = dbterror.ErrCantDropFieldOrKey.GenWithStack("index %s doesn't exist", indexName)
 		if ifExists {
-			ctx.GetSessionVars().StmtCtx.AppendNote(err)
+			ctx.GetSessionVars().StmtCtx.AppendWarning(err)
 			return nil
 		}
 		return err
