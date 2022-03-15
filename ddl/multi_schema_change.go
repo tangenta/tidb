@@ -147,7 +147,7 @@ func handleRevertibleException(job *model.Job, res model.JobState, idx int) {
 	}
 }
 
-func buildDependencies(info *model.MultiSchemaInfo, job *model.Job) (err error) {
+func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error) {
 	switch job.Type {
 	case model.ActionAddColumn:
 		col := job.Args[0].(*model.ColumnInfo)

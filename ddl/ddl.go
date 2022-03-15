@@ -619,7 +619,7 @@ func (d *ddl) doDDLJob(ctx sessionctx.Context, job *model.Job) error {
 	if mci := ctx.GetSessionVars().StmtCtx.MultiSchemaInfo; mci != nil {
 		// In multiple schema change, we don't run the job.
 		// Instead, merge all the jobs into one pending job.
-		if err := buildDependencies(mci, job); err != nil {
+		if err := fillMultiSchemaInfo(mci, job); err != nil {
 			return err
 		}
 		mci.MergeSubJob(job)
