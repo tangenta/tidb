@@ -1099,7 +1099,7 @@ func testDropIndexesIfExists(t *testing.T, store kv.Storage) {
 		"[ddl:1091]index i3 doesn't exist",
 	)
 	tk.MustExec("alter table test_drop_indexes_if_exists drop index i1, drop index if exists i3;")
-	tk.MustQuery("show warnings;").Check(testkit.RowsWithSep("|", "Warning|1091|index i3 doesn't exist"))
+	tk.MustQuery("show warnings;").Check(testkit.RowsWithSep("|", "Note|1091|index i3 doesn't exist"))
 
 	// Verify the impact of deletion order when dropping duplicate indexes.
 	tk.MustGetErrCode(
