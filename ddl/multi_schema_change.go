@@ -150,14 +150,14 @@ func handleRevertibleException(job *model.Job, res model.JobState, idx int) {
 func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error) {
 	switch job.Type {
 	case model.ActionAddColumn:
-		col := job.Args[0].(*model.ColumnInfo)
+		col := job.Args[0].(*table.Column)
 		pos := job.Args[1].(*ast.ColumnPosition)
 		info.AddColumns = append(info.AddColumns, col.Name)
 		if pos.Tp == ast.ColumnPositionAfter {
 			info.RelativeColumns = append(info.RelativeColumns, pos.RelativeColumn.Name)
 		}
 	case model.ActionAddColumns:
-		cols := job.Args[0].([]*model.ColumnInfo)
+		cols := job.Args[0].([]*table.Column)
 		pos := job.Args[0].([]*ast.ColumnPosition)
 		for i := range cols {
 			info.AddColumns = append(info.AddColumns, cols[i].Name)
@@ -168,15 +168,9 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 	case model.ActionDropColumn:
 		colName := job.Args[0].(model.CIStr)
 		info.DropColumns = append(info.DropColumns, colName)
-	case model.ActionDropColumns:
-		colNames := job.Args[0].([]model.CIStr)
-		info.DropColumns = append(info.DropColumns, colNames...)
 	case model.ActionDropIndex:
 		indexName := job.Args[0].(model.CIStr)
 		info.DropIndexes = append(info.DropIndexes, indexName)
-	case model.ActionDropIndexes:
-		indexNames := job.Args[0].([]model.CIStr)
-		info.DropIndexes = append(info.DropIndexes, indexNames...)
 	case model.ActionAddIndex, model.ActionAddPrimaryKey:
 		indexName := job.Args[1].(model.CIStr)
 		indexPartSpecifications := job.Args[2].([]*ast.IndexPartSpecification)

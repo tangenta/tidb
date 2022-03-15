@@ -3442,7 +3442,7 @@ func (d *ddl) AddColumn(ctx sessionctx.Context, ti ast.Ident, spec *ast.AlterTab
 		SchemaName: schema.Name.L,
 		Type:       model.ActionAddColumn,
 		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{col.ColumnInfo, spec.Position, 0},
+		Args:       []interface{}{col, spec.Position, 0},
 	}
 
 	err = d.doDDLJob(ctx, job)
