@@ -284,7 +284,7 @@ func TestMultiSchemaChangeDropIndexes(t *testing.T) {
 	tk.MustExec("create table t (a int, b int, c int, index t(a))")
 	tk.MustGetErrCode("alter table t drop index t, drop index t", errno.ErrUnsupportedDDLOperation)
 
-	tk.MustExec("drop table if exists t;")
+	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (id int, c1 int, c2 int, primary key(id), key i1(c1), key i2(c2));")
 	tk.MustExec("insert into t values (1, 2, 3);")
 	tk.MustExec("alter table t drop index i1, drop index i2;")
