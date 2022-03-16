@@ -3001,11 +3001,7 @@ func (d *ddl) AlterTable(ctx context.Context, sctx sessionctx.Context, ident ast
 		var handledCharsetOrCollate bool
 		switch spec.Tp {
 		case ast.AlterTableAddColumns:
-			if len(spec.NewColumns) == 1 {
-				err = d.AddColumn(sctx, ident, spec)
-			} else {
-				err = errors.Trace(dbterror.ErrUnsupportedAddColumn)
-			}
+			err = d.AddColumn(sctx, ident, spec)
 		case ast.AlterTableAddPartitions:
 			err = d.AddTablePartitions(sctx, ident, spec)
 		case ast.AlterTableCoalescePartitions:
