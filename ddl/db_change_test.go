@@ -827,7 +827,7 @@ func (s *stateChangeSuite) runTestInSchemaState(
 	_, err = se.Execute(context.Background(), "use test_db_state")
 	s.Require().NoError(err)
 	cbFunc := func(job *model.Job) {
-		if currentSchemaState(job) == prevState || checkErr != nil || times >= 3 {
+		if currentSchemaState(job) == prevState || checkErr != nil || times >= 10 {
 			return
 		}
 		times++
