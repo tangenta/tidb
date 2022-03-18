@@ -77,18 +77,40 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 		}
 		return ver, err
 	}
-	// Run the rest non-revertible sub-jobs one by one.
+	nextStage := true
+	// Run the rest non-revertible sub-jobs, do dropIndex first
 	for _, sub := range job.MultiSchemaInfo.SubJobs {
-		if isFinished(sub) {
+		if isFinished(sub) || sub.Type != model.ActionDropIndex {
 			continue
 		}
+		nextStage = false
 		proxyJob := cloneFromSubJob(job, sub)
 		ver, err = w.runDDLJob(d, t, proxyJob)
 		mergeBackToSubJob(proxyJob, sub)
-		return ver, err
 	}
-	job.State = model.JobStateDone
+	if nextStage {
+		for _, sub := range job.MultiSchemaInfo.SubJobs {
+			if isFinished(sub) {
+				continue
+			}
+			proxyJob := cloneFromSubJob(job, sub)
+			ver, err = w.runDDLJob(d, t, proxyJob)
+			mergeBackToSubJob(proxyJob, sub)
+		}
+		if isMultiJobFinished(job.MultiSchemaInfo) {
+			job.State = model.JobStateDone
+		}
+	}
 	return ver, err
+}
+
+func isMultiJobFinished(multiSchemaInfo *model.MultiSchemaInfo) bool {
+	for _, sub := range multiSchemaInfo.SubJobs {
+		if !isFinished(sub) {
+			return false
+		}
+	}
+	return true
 }
 
 func isFinished(job *model.SubJob) bool {

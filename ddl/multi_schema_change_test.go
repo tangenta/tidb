@@ -353,12 +353,10 @@ func TestMultiSchemaChangeAddIndexes(t *testing.T) {
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
 
 	// Test add multiple indexes with same column.
-	/*
-		tk.MustExec("drop table if exists t")
-		tk.MustExec("create table t (a int, b int, c int)")
-		tk.MustExec("alter table t add index t(a, b), add index t1(a)")
-		tk.MustExec("alter table t add index t2(a), add index t3(a, b)")
-	*/
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int, b int, c int)")
+	tk.MustExec("alter table t add index t(a, b), add index t1(a)")
+	tk.MustExec("alter table t add index t2(a), add index t3(a, b)")
 
 	// Test add multiple indexes with same name.
 	tk.MustExec("drop table if exists t")
