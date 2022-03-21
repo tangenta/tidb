@@ -595,7 +595,7 @@ func TestMultiSchemaRenameIndexes(t *testing.T) {
 	tk.MustExec("create table t (a int default 1, b int default 2, index t(a))")
 	tk.MustExec("insert into t values ()")
 	hook := newCancelJobHook(store, dom, func(job *model.Job) bool {
-		// Cancel job when the column 'b' is in write-reorg.
+		// Cancel job when the column 'c' is in write-reorg.
 		return job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateWriteReorganization
 	})
 	dom.DDL().SetHook(hook)
