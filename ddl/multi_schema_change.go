@@ -377,6 +377,7 @@ func multiSchemaChangeOnCreateIndexCancelling(err error, t *meta.Meta, job *mode
 		// For multi-schema change, the absence of the reorg element means the sub-job has finished the reorg.
 		logutil.BgLogger().Warn("[ddl] run add index job failed, convert job to rollback",
 			zap.String("job", job.String()), zap.Error(err))
+
 		ver, err1 = convertAddIdxJob2RollbackJob(t, job, tblInfo, indexInfo, dbterror.ErrCancelledDDLJob)
 		return true, ver, err1
 	}

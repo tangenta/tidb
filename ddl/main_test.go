@@ -98,12 +98,6 @@ type testDDLJobIDCallback struct {
 	jobID int64
 }
 
-func newJobIDExtHook() *testDDLJobIDCallback {
-	return &testDDLJobIDCallback{
-		jobID: 0,
-	}
-}
-
 func (t *testDDLJobIDCallback) OnJobUpdated(job *model.Job) {
 	if t.jobID == 0 {
 		t.jobID = job.ID

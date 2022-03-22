@@ -574,6 +574,8 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 		if err != nil || reorgInfo.first {
 			done, ver, err1 := multiSchemaChangeOnCreateIndexCancelling(err, t, job, tblInfo, indexInfo)
 			if done {
+				// Remove the cancelling signal before converting to rollback job.
+				w.reorgCtx.cleanNotifyReorgCancel()
 				return ver, err1
 			}
 			// If we run reorg firstly, we should update the job snapshot version
