@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/util/admin"
@@ -389,15 +390,16 @@ func TestMultiSchemaChangeAddIndexes(t *testing.T) {
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
-	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
 
 	// Test add multiple indexes with same column.
-	/*
-		tk.MustExec("drop table if exists t")
-		tk.MustExec("create table t (a int, b int, c int)")
-		tk.MustExec("alter table t add index t(a, b), add index t1(a)")
-		tk.MustExec("alter table t add index t2(a), add index t3(a, b)")
-	*/
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int, b int, c int);")
+	tk.MustExec("insert into t values (1, 2, 3);")
+	tk.MustExec("alter table t add index t(a, b), add index t1(a);")
+	tk.MustExec("alter table t add index t2(a), add index t3(a, b);")
+	tk.MustQuery("select * from t use index (t, t1, t2, t3);").Check(testkit.Rows("1 2 3"))
+	tk.MustExec("admin check table t;")
 
 	// Test add multiple indexes with same name.
 	tk.MustExec("drop table if exists t")
@@ -409,6 +411,46 @@ func TestMultiSchemaChangeAddIndexes(t *testing.T) {
 	tk.MustExec("create table t (a int, b int, c int)")
 	tk.MustGetErrCode("alter table t add index t(a), drop column a", errno.ErrUnsupportedDDLOperation)
 	tk.MustGetErrCode("alter table t add index t(a, b), drop column a", errno.ErrUnsupportedDDLOperation)
+}
+
+func TestMultiSchemaChangeAddIndexesCancelled(t *testing.T) {
+	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
+	originHook := dom.DDL().GetHook()
+
+	// Test add multiple indexes with same column.
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int, b int, c int);")
+	tk.MustExec("insert into t values (1, 2, 3);")
+	jobIDExt := newJobIDExtHook()
+	idxIDExt := newIdxIDExtHook(store, dom)
+	cancelHook := newCancelJobHook(store, dom, func(job *model.Job) bool {
+		// Cancel the job when index 't2' is in write-reorg.
+		return job.MultiSchemaInfo.SubJobs[2].SchemaState == model.StateWriteReorganization
+	})
+	dom.DDL().SetHook(composeHooks(jobIDExt, idxIDExt, cancelHook))
+	tk.MustGetErrCode("alter table t "+
+		"add index t(a, b), add index t1(a), "+
+		"add index t2(a), add index t3(a, b);", errno.ErrCancelledDDLJob)
+	dom.DDL().SetHook(originHook)
+	require.True(t, cancelHook.triggered)
+	require.NoError(t, cancelHook.cancelErr)
+	tk.MustGetErrCode("select * from t use index(t);", errno.ErrKeyDoesNotExist)
+	tk.MustGetErrCode("select * from t use index(t1);", errno.ErrKeyDoesNotExist)
+	tk.MustGetErrCode("select * from t use index(t2);", errno.ErrKeyDoesNotExist)
+	tk.MustGetErrCode("select * from t use index(t3);", errno.ErrKeyDoesNotExist)
+	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3"))
+	tk.MustExec("admin check table t;")
+	// Check the adding indexes are added to del-ranges.
+	require.NotEqual(t, -1, idxIDExt.IndexID("t"))
+	require.NotEqual(t, -1, idxIDExt.IndexID("t1"))
+	require.NotEqual(t, -1, idxIDExt.IndexID("t2"))
+	checkDelRangeAdded(tk, jobIDExt.jobID, idxIDExt.IndexID("t"))
+	checkDelRangeAdded(tk, jobIDExt.jobID, idxIDExt.IndexID("t1"))
+	checkDelRangeAdded(tk, jobIDExt.jobID, idxIDExt.IndexID("t2"))
 }
 
 func TestMultiSchemaChangeDropIndexes(t *testing.T) {
@@ -605,6 +647,20 @@ func TestMultiSchemaRenameIndexes(t *testing.T) {
 	tk.MustGetErrCode("select * from t use index (t1);", errno.ErrKeyDoesNotExist)
 }
 
+func TestMultiSchemaChangeModifyColumns(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test;")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
+
+	tk.MustExec("create table t (a int, b int, c int);")
+	tk.MustExec("alter table t modify column a bigint, modify column b bigint;")
+	tk.MustExec("insert into t values (9223372036854775807, 9223372036854775807, 1);")
+	tk.MustQuery("select * from t;").Check(
+		testkit.Rows("9223372036854775807 9223372036854775807 1"))
+}
+
 func TestMultiSchemaChangeMix(t *testing.T) {
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
@@ -622,8 +678,54 @@ func TestMultiSchemaChangeMix(t *testing.T) {
 	tk.MustGetErrCode("select * from t use index (i2);", errno.ErrKeyDoesNotExist)
 }
 
+func composeHooks(cbs ...ddl.Callback) ddl.Callback {
+	return &ddl.TestDDLCallback{
+		OnJobUpdatedExported: func(job *model.Job) {
+			for _, c := range cbs {
+				c.OnJobUpdated(job)
+			}
+		},
+	}
+}
+
+type idxIDExt struct {
+	store       kv.Storage
+	idxNameToID map[string]int64
+	getIdxErr   error
+
+	ddl.TestDDLCallback
+}
+
+func newIdxIDExtHook(store kv.Storage, dom *domain.Domain) *idxIDExt {
+	return &idxIDExt{store: store, idxNameToID: map[string]int64{}, TestDDLCallback: ddl.TestDDLCallback{Do: dom}}
+}
+
+func (i *idxIDExt) OnJobUpdated(job *model.Job) {
+	i.getIdxErr = kv.RunInNewTxn(context.Background(), i.store, false,
+		func(ctx context.Context, txn kv.Transaction) error {
+			t := meta.NewMeta(txn)
+			tbl, err := t.GetTable(job.SchemaID, job.TableID)
+			if err != nil {
+				return err
+			}
+			for _, idx := range tbl.Indices {
+				i.idxNameToID[idx.Name.L] = idx.ID
+			}
+			return nil
+		})
+}
+
+func (i *idxIDExt) IndexID(name string) int64 {
+	id, ok := i.idxNameToID[name]
+	if !ok {
+		return -1
+	}
+	return id
+}
+
 type cancelOnceHook struct {
 	store     kv.Storage
+	dom       *domain.Domain
 	triggered bool
 	cancelErr error
 	pred      func(job *model.Job) bool
