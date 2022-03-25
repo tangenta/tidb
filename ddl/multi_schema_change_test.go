@@ -16,6 +16,7 @@ package ddl_test
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -696,6 +697,29 @@ func TestMultiSchemaChangeMix(t *testing.T) {
 	tk.MustGetErrCode("select * from t use index (i1);", errno.ErrKeyDoesNotExist)
 	tk.MustGetErrCode("select * from t use index (i2);", errno.ErrKeyDoesNotExist)
 	tk.MustQuery("select * from t use index (i3);").Check(testkit.Rows("3 4 5 6"))
+}
+
+func TestMultiSchemaChangeAdminShowDDLJobs(t *testing.T) {
+	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
+	defer clean()
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+	originHook := dom.DDL().GetHook()
+	hook := &ddl.TestDDLCallback{Do: dom}
+	hook.OnJobUpdatedExported = func(job *model.Job) {
+		require.Equal(t, job.Type, model.ActionMultiSchemaChange)
+		res := tk.MustQuery("admin show ddl jobs")
+		fmt.Println(res.Rows())
+	}
+
+	tk.MustExec("create table t (a int, b int, c int)")
+	tk.MustExec("insert into t values (1, 2, 3)")
+
+	dom.DDL().SetHook(hook)
+	tk.MustExec("alter table t add index t(a), add index t1(b)")
+	dom.DDL().SetHook(originHook)
 }
 
 func composeHooks(dom *domain.Domain, cbs ...ddl.Callback) ddl.Callback {
