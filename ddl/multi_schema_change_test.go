@@ -16,7 +16,6 @@ package ddl_test
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"testing"
 
@@ -708,10 +707,15 @@ func TestMultiSchemaChangeAdminShowDDLJobs(t *testing.T) {
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
 	originHook := dom.DDL().GetHook()
 	hook := &ddl.TestDDLCallback{Do: dom}
-	hook.OnJobUpdatedExported = func(job *model.Job) {
+	hook.OnJobRunBeforeExported = func(job *model.Job) {
 		require.Equal(t, job.Type, model.ActionMultiSchemaChange)
-		res := tk.MustQuery("admin show ddl jobs")
-		fmt.Println(res.Rows())
+		if job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateDeleteOnly {
+			newTk := testkit.NewTestKit(t, store)
+			rows := newTk.MustQuery("admin show ddl jobs 0").Rows()
+			require.Equal(t, len(rows), 3)
+			require.Equal(t, rows[1], []interface{}{"67", "test", "t", "add index (subjob)", "delete only", "1", "65", "0", "<nil>", "<nil>", "<nil>", "running"})
+			require.Equal(t, rows[2], []interface{}{"67", "test", "t", "add index (subjob)", "queueing", "1", "65", "0", "<nil>", "<nil>", "<nil>", "none"})
+		}
 	}
 
 	tk.MustExec("create table t (a int, b int, c int)")
