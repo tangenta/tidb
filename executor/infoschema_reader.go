@@ -1205,7 +1205,7 @@ func (e *DDLJobsReaderExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		for i := e.cursor; i < e.cursor+num; i++ {
 			e.appendJobToChunk(req, e.runningJobs[i], checker)
 			req.AppendString(12, e.runningJobs[i].Query)
-			for _, _ = range e.runningJobs[i].MultiSchemaInfo.SubJobs {
+			for range e.runningJobs[i].MultiSchemaInfo.SubJobs {
 				req.AppendString(12, e.runningJobs[i].Query)
 			}
 		}
@@ -1224,7 +1224,7 @@ func (e *DDLJobsReaderExec) Next(ctx context.Context, req *chunk.Chunk) error {
 			e.appendJobToChunk(req, job, checker)
 			req.AppendString(12, job.Query)
 			if job.Type == model.ActionMultiSchemaChange {
-				for _, _ = range job.MultiSchemaInfo.SubJobs {
+				for range job.MultiSchemaInfo.SubJobs {
 					req.AppendString(12, job.Query)
 				}
 			}
