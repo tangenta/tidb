@@ -711,10 +711,11 @@ func TestMultiSchemaChangeAdminShowDDLJobs(t *testing.T) {
 		require.Equal(t, job.Type, model.ActionMultiSchemaChange)
 		if job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateDeleteOnly {
 			newTk := testkit.NewTestKit(t, store)
-			rows := newTk.MustQuery("admin show ddl jobs 0").Rows()
-			require.Equal(t, len(rows), 3)
-			require.Equal(t, rows[1], []interface{}{"67", "test", "t", "add index (subjob)", "delete only", "1", "65", "0", "<nil>", "<nil>", "<nil>", "running"})
-			require.Equal(t, rows[2], []interface{}{"67", "test", "t", "add index (subjob)", "queueing", "1", "65", "0", "<nil>", "<nil>", "<nil>", "none"})
+			rows := newTk.MustQuery("admin show ddl jobs 1").Rows()
+			// 1 history job and 1 running job with 2 subjobs
+			require.Equal(t, len(rows), 4)
+			require.Equal(t, rows[1], []interface{}{"67", "test", "t", "add index /* subjob */", "delete only", "1", "65", "0", "<nil>", "<nil>", "<nil>", "running"})
+			require.Equal(t, rows[2], []interface{}{"67", "test", "t", "add index /* subjob */", "queueing", "1", "65", "0", "<nil>", "<nil>", "<nil>", "none"})
 		}
 	}
 
