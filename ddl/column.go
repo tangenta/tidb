@@ -446,7 +446,7 @@ type modifyingColInfo struct {
 func getModifyColumnInfo(t *meta.Meta, job *model.Job) (*model.DBInfo, *model.TableInfo, *model.ColumnInfo, *modifyingColInfo, error) {
 	modifyInfo := &modifyingColInfo{pos: &ast.ColumnPosition{}}
 	err := job.DecodeArgs(&modifyInfo.newCol, &modifyInfo.oldColName, modifyInfo.pos, &modifyInfo.modifyColumnTp,
-		&modifyInfo.updatedAutoRandomBits, &modifyInfo.removedIdxs, &modifyInfo.changingCol, &modifyInfo.changingIdxs)
+		&modifyInfo.updatedAutoRandomBits, &modifyInfo.changingCol, &modifyInfo.changingIdxs, &modifyInfo.removedIdxs)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return nil, nil, nil, modifyInfo, errors.Trace(err)
@@ -577,7 +577,7 @@ func (w *worker) onModifyColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 		var indexesToRemove []int64
 		for _, info := range indexesToChange {
 			newIdxID := allocateIndexID(tblInfo)
-			if info.isChanging {
+			if info.isModifying {
 				newIdxName := info.indexInfo.Name
 				newIdxInfo := copyIndexInfoForModifyColumn(info.indexInfo, newIdxID, newIdxName, info.colOffset, changingCol)
 				indexesToRemove = append(indexesToRemove, info.indexInfo.ID)
@@ -588,7 +588,7 @@ func (w *worker) onModifyColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 				tblInfo.Indices = append(tblInfo.Indices, newIdxInfo)
 			}
 		}
-		job.Args = append(job.Args, indexesToRemove)
+		modifyInfo.removedIdxs = indexesToRemove
 	} else {
 		changingCol = model.FindColumnInfoByID(tblInfo.Columns, modifyInfo.changingCol.ID)
 		if changingCol == nil {
@@ -720,7 +720,7 @@ func (w *worker) doModifyColumnTypeWithData(
 		// be updated in `updateDDLJob` even if it meets an error in `updateVersionAndTableInfoWithCheck`.
 		job.SchemaState = model.StateDeleteOnly
 		metrics.GetBackfillProgressByLabel(metrics.LblModifyColumn).Set(0)
-		job.Args = append(job.Args, changingCol, changingIdxs)
+		job.Args = append(job.Args, changingCol, changingIdxs, rmIdxIDs)
 	case model.StateDeleteOnly:
 		// Column from null to not null.
 		if !mysql.HasNotNullFlag(oldCol.Flag) && mysql.HasNotNullFlag(changingCol.Flag) {

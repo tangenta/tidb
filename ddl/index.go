@@ -1517,10 +1517,10 @@ func (w *worker) updateReorgInfoForPartitions(t table.PartitionedTable, reorg *r
 }
 
 type indexesToChange struct {
-	indexInfo  *model.IndexInfo
-	isChanging bool // whether the index is created by modify column
-	idxOffset  int  // index offset in tblInfo.Indices
-	colOffset  int  // column offset in idxInfo.Columns
+	indexInfo   *model.IndexInfo
+	isModifying bool // whether the index is being modifying by another 'modify column' job
+	idxOffset   int  // index offset in tblInfo.Indices
+	colOffset   int  // column offset in idxInfo.Columns
 }
 
 // findIndexesByColName finds the indexes that covering the given column, and deduplicate
@@ -1529,20 +1529,20 @@ func findIndexesByColName(tblInfo *model.TableInfo, colName model.CIStr) []index
 	var result []indexesToChange
 	for i, idxInfo := range tblInfo.Indices {
 		name, origName := idxInfo.Name.O, getChangingIndexOriginName(idxInfo)
-		isChangingIdx := len(name) != len(origName)
+		isModifying := len(name) != len(origName)
 		for j, idxCol := range idxInfo.Columns {
 			if idxCol.Name.L != colName.L {
 				continue
 			}
-			r := indexesToChange{indexInfo: idxInfo, isChanging: isChangingIdx, idxOffset: i, colOffset: j}
-			if !isChangingIdx {
+			r := indexesToChange{indexInfo: idxInfo, isModifying: isModifying, idxOffset: i, colOffset: j}
+			if !isModifying {
 				result = append(result, r)
 				break
 			}
 			// Deduplicate the index info by original name.
 			var dedup bool
 			for k, rs := range result {
-				if !rs.isChanging && origName == rs.indexInfo.Name.O {
+				if !rs.isModifying && origName == rs.indexInfo.Name.O {
 					result[k] = r
 					dedup = true
 					break

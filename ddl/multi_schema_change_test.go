@@ -668,11 +668,12 @@ func TestMultiSchemaRenameIndexes(t *testing.T) {
 }
 
 func TestMultiSchemaChangeModifyColumns(t *testing.T) {
-	store, clean := testkit.CreateMockStore(t)
+	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test;")
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
+	originHook := dom.DDL().GetHook()
 
 	tk.MustExec("create table t (a int, b int, c int);")
 	tk.MustExec("insert into t values (1, 2, 3);")
@@ -685,28 +686,39 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int, b int, c int, index i1(a), index i2(b), index i3(c), index i4(a, b), index i5(a, b, c));")
 	tk.MustExec("insert into t values (1, 2, 3);")
+	jobIDExt := wrapJobIDExtCallback(originHook)
+	dom.DDL().SetHook(jobIDExt)
 	tk.MustExec("alter table t modify column a tinyint, modify column b tinyint, modify column c tinyint;")
+	dom.DDL().SetHook(originHook)
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3"))
 	tk.MustQuery("select * from t use index(i1, i2, i3, i4, i5);").Check(testkit.Rows("1 2 3"))
 	tk.MustExec("admin check table t;")
+	checkDelRangeCnt(tk, jobIDExt.jobID, 5+2+1) // 5 old indexes, 2 tmp for col 'a', 1 tmp for col 'b'.
 
 	// Modify index-covered columns with position change.
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int, b int, c int, index i1(a), index i2(b), index i3(c), index i4(a, b), index i5(a, b, c));")
 	tk.MustExec("insert into t values (1, 2, 3);")
+	jobIDExt = wrapJobIDExtCallback(originHook)
+	dom.DDL().SetHook(jobIDExt)
 	tk.MustExec("alter table t modify column a tinyint after c, modify column b tinyint, modify column c tinyint first;")
+	dom.DDL().SetHook(originHook)
 	tk.MustQuery("select * from t;").Check(testkit.Rows("3 2 1"))
 	tk.MustQuery("select * from t use index(i1, i2, i3, i4, i5);").Check(testkit.Rows("3 2 1"))
 	tk.MustExec("admin check table t;")
+	checkDelRangeCnt(tk, jobIDExt.jobID, 5+2+1) // 5 old indexes, 2 tmp for col 'a', 1 tmp for col 'b'.
 
 	// Modify columns that require and don't require reorganization of data.
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int, b int, c int, index i1(a), index i2(c, b));")
 	tk.MustExec("insert into t values (1, 2, 3), (11, 22, 33);")
+	jobIDExt = wrapJobIDExtCallback(originHook)
+	dom.DDL().SetHook(jobIDExt)
 	tk.MustExec("alter table t modify column b char(255) after c, modify column a bigint;")
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 3 2", "11 33 22"))
 	tk.MustQuery("select * from t use index(i1, i2);").Check(testkit.Rows("1 3 2", "11 33 22"))
 	tk.MustExec("admin check table t;")
+	checkDelRangeCnt(tk, jobIDExt.jobID, 1) // only i2 has tmp index.
 }
 
 func TestMultiSchemaChangeModifyColumnsCancelled(t *testing.T) {
@@ -826,7 +838,9 @@ func (i *idxIDExt) OnJobUpdated(job *model.Job) {
 				return err
 			}
 			for _, idx := range tbl.Indices {
-				i.idxNameToID[idx.Name.L] = idx.ID
+				if _, found := i.idxNameToID[idx.Name.L]; !found {
+					i.idxNameToID[idx.Name.L] = idx.ID
+				}
 			}
 			return nil
 		})
