@@ -936,7 +936,7 @@ func updateNewIndexesCols(changingIdxs []*model.IndexInfo,
 				idx.Columns[i].Offset = newOffset
 			} else {
 				if !hasOtherChangingCol {
-					hasOtherChangingCol = len(getChangingColumnOriginName(col)) != len(col.Name.L)
+					hasOtherChangingCol = getChangingColumnOriginName(col) != col.Name.O
 				}
 			}
 		}
