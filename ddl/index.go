@@ -1516,10 +1516,6 @@ func (w *worker) updateReorgInfoForPartitions(t table.PartitionedTable, reorg *r
 	return false, errors.Trace(err)
 }
 
-func iterIndexesCoveringCol(indexes []*model.IndexInfo, colName string, apply func()) {
-
-}
-
 type indexesToChange struct {
 	indexInfo  *model.IndexInfo
 	isChanging bool // whether the index is created by modify column
