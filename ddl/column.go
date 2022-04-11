@@ -591,11 +591,11 @@ func (w *worker) onModifyColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 		job.Args = append(job.Args, indexesToRemove)
 	} else {
 		changingCol = model.FindColumnInfoByID(tblInfo.Columns, modifyInfo.changingCol.ID)
-	}
-	if changingCol == nil {
-		logutil.BgLogger().Error("[ddl] the changing column has been removed", zap.Error(err))
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(infoschema.ErrColumnNotExists.GenWithStackByArgs(oldCol.Name, tblInfo.Name))
+		if changingCol == nil {
+			logutil.BgLogger().Error("[ddl] the changing column has been removed", zap.Error(err))
+			job.State = model.JobStateCancelled
+			return ver, errors.Trace(infoschema.ErrColumnNotExists.GenWithStackByArgs(oldCol.Name, tblInfo.Name))
+		}
 	}
 
 	return w.doModifyColumnTypeWithData(d, t, job, dbInfo, tblInfo, changingCol, oldCol, modifyInfo.newCol.Name, modifyInfo.pos, modifyInfo.removedIdxs)
@@ -680,7 +680,7 @@ func (w *worker) doModifyColumnTypeWithData(
 	originalState := changingCol.State
 	targetCol := changingCol.Clone()
 	targetCol.Name = colName
-	changingIdxs := getChangingIndexInfos(tblInfo, changingCol.ID)
+	changingIdxs := getRelatedIndexInfos(tblInfo, changingCol.ID)
 	switch changingCol.State {
 	case model.StateNone:
 		// Column from null to not null.
@@ -879,31 +879,7 @@ func adjustTableInfoAfterModifyColumnWithData(tblInfo *model.TableInfo, pos *ast
 		return errors.Trace(err)
 	}
 	tblInfo.MoveColumnInfo(changingCol.Offset, destOffset)
-
-	checkOffsets(tblInfo)
 	return nil
-}
-
-func checkOffsets(tbl *model.TableInfo) {
-	for i, col := range tbl.Columns {
-		if i != col.Offset {
-			panic("!")
-		}
-		for _, idx := range tbl.Indices {
-			for _, idxCol := range idx.Columns {
-				if col.Name.L != idxCol.Name.L {
-					continue
-				}
-				if col.Offset != idxCol.Offset {
-					logutil.BgLogger().Error("table meta data is corrupted",
-						zap.String("column name", col.Name.O),
-						zap.Int("table column offset", col.Offset),
-						zap.Int("index column offset", idxCol.Offset))
-					panic("!")
-				}
-			}
-		}
-	}
 }
 
 func replaceOldColumn(tblInfo *model.TableInfo, oldCol, changingCol *model.ColumnInfo,
@@ -953,19 +929,19 @@ func updateNewIndexesCols(changingIdxs []*model.IndexInfo,
 	oldName, newName model.CIStr, newOffset int) []*model.IndexInfo {
 	indexesToRemove := make([]*model.IndexInfo, 0, len(changingIdxs))
 	for _, idx := range changingIdxs {
-		var hasChangingCol bool
+		var hasOtherChangingCol bool
 		for i, col := range idx.Columns {
 			if col.Name.L == oldName.L {
 				idx.Columns[i].Name = newName
 				idx.Columns[i].Offset = newOffset
 			} else {
-				if !hasChangingCol {
-					hasChangingCol = len(getChangingColumnOriginName(col)) != len(col.Name.L)
+				if !hasOtherChangingCol {
+					hasOtherChangingCol = len(getChangingColumnOriginName(col)) != len(col.Name.L)
 				}
 			}
 		}
 		// For the indexes that still contains other changing column, skip removing it now.
-		if !hasChangingCol {
+		if !hasOtherChangingCol {
 			indexesToRemove = append(indexesToRemove, idx)
 		}
 	}
@@ -984,11 +960,11 @@ func updateChangingCol(col *model.ColumnInfo, newName model.CIStr, newOffset int
 	return col
 }
 
-func getChangingIndexInfos(tblInfo *model.TableInfo, oldColID int64) []*model.IndexInfo {
+func getRelatedIndexInfos(tblInfo *model.TableInfo, colID int64) []*model.IndexInfo {
 	var indexInfos []*model.IndexInfo
 	for _, idx := range tblInfo.Indices {
 		for _, idxCol := range idx.Columns {
-			if tblInfo.Columns[idxCol.Offset].ID == oldColID {
+			if tblInfo.Columns[idxCol.Offset].ID == colID {
 				indexInfos = append(indexInfos, idx)
 				break
 			}
