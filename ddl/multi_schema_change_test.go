@@ -331,7 +331,7 @@ func TestMultiSchemaChangeRenameColumns(t *testing.T) {
 	tk.MustQuery("select c from t").Check(testkit.Rows("2"))
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 2 3"))
 
-	// Test cancel job with renameIndex
+	// Test cancel job with rename columns
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int default 1, b int default 2)")
 	tk.MustExec("insert into t values ()")
@@ -399,7 +399,7 @@ func TestMultiSchemaChangeChangeColumns(t *testing.T) {
 	tk.MustExec("insert into t values ();")
 	tk.MustQuery("select e,c from t").Check(testkit.Rows("3 2"))
 
-	// Test cancel job with renameIndex
+	// Test cancel job with change columns
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int default 1, b int default 2)")
 	tk.MustExec("insert into t values ()")
