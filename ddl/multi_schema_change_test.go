@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/util/admin"
@@ -838,43 +837,6 @@ func composeHooks(dom *domain.Domain, cbs ...ddl.Callback) ddl.Callback {
 			}
 		},
 	}
-}
-
-type idxIDExt struct {
-	store       kv.Storage
-	idxNameToID map[string]int64
-	getIdxErr   error
-
-	ddl.TestDDLCallback
-}
-
-func newIdxIDExtHook(store kv.Storage, dom *domain.Domain) *idxIDExt {
-	return &idxIDExt{store: store, idxNameToID: map[string]int64{}, TestDDLCallback: ddl.TestDDLCallback{Do: dom}}
-}
-
-func (i *idxIDExt) OnJobUpdated(job *model.Job) {
-	i.getIdxErr = kv.RunInNewTxn(context.Background(), i.store, false,
-		func(ctx context.Context, txn kv.Transaction) error {
-			t := meta.NewMeta(txn)
-			tbl, err := t.GetTable(job.SchemaID, job.TableID)
-			if err != nil {
-				return err
-			}
-			for _, idx := range tbl.Indices {
-				if _, found := i.idxNameToID[idx.Name.L]; !found {
-					i.idxNameToID[idx.Name.L] = idx.ID
-				}
-			}
-			return nil
-		})
-}
-
-func (i *idxIDExt) IndexID(name string) int64 {
-	id, ok := i.idxNameToID[name]
-	if !ok {
-		return -1
-	}
-	return id
 }
 
 type cancelOnceHook struct {
