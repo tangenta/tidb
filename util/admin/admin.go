@@ -188,7 +188,6 @@ func CancelJobs(txn kv.Transaction, ids []int64) ([]error, error) {
 		if err != nil {
 			errs[i] = errors.Trace(err)
 		}
-		logutil.BgLogger().Info("set DDL job to cancelling", zap.Int64("job ID", job.ID))
 	}
 	for id, i := range jobsMap {
 		errs[i] = ErrDDLJobNotFound.GenWithStackByArgs(id)
