@@ -362,29 +362,57 @@ func TestMultiSchemaChangeAlterColumns(t *testing.T) {
 }
 
 func TestMultiSchemaChangeChangeColumns(t *testing.T) {
-	store, clean := testkit.CreateMockStore(t)
+	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
+	originHook := dom.DDL().GetHook()
 	defer clean()
+
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
 
-	// Test change and drop with same column
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (a int default 1, b int default 2);")
-	tk.MustExec("insert into t values ();")
-	tk.MustGetErrCode("alter table t change column b c double, drop column b", errno.ErrUnsupportedDDLOperation)
+	// unsupported ddl operations
+	{
+		// Test change and drop with same column
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int default 1, b int default 2);")
+		tk.MustExec("insert into t values ();")
+		tk.MustGetErrCode("alter table t change column b c double, drop column b", errno.ErrUnsupportedDDLOperation)
 
-	// Test change and add with same column
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (a int default 1, b int default 2);")
-	tk.MustExec("insert into t values ();")
-	tk.MustGetErrCode("alter table t change column b c double, add column c int", errno.ErrUnsupportedDDLOperation)
+		// Test change and add with same column
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int default 1, b int default 2);")
+		tk.MustExec("insert into t values ();")
+		tk.MustGetErrCode("alter table t change column b c double, add column c int", errno.ErrUnsupportedDDLOperation)
 
-	// Test add index and rename with same column
+		// Test add index and rename with same column
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int default 1, b int default 2, index t(a, b));")
+		tk.MustExec("insert into t values ();")
+		tk.MustGetErrCode("alter table t change column b c double, add index t1(a, b)", errno.ErrUnsupportedDDLOperation)
+	}
+
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int default 1, b int default 2, index t(a, b));")
 	tk.MustExec("insert into t values ();")
-	tk.MustGetErrCode("alter table t change column b c double, add index t1(a, b)", errno.ErrUnsupportedDDLOperation)
+	tk.MustExec("alter table t rename column b to c, change column a e bigint default 3;")
+	tk.MustQuery("select e,c from t").Check(testkit.Rows("1 2"))
+	tk.MustExec("truncate table t;")
+	tk.MustExec("insert into t values ();")
+	tk.MustQuery("select e,c from t").Check(testkit.Rows("3 2"))
+
+	// Test cancel job with renameIndex
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int default 1, b int default 2)")
+	tk.MustExec("insert into t values ()")
+	hook := newCancelJobHook(store, dom, func(job *model.Job) bool {
+		// Cancel job when the column 'c' is in write-reorg.
+		return job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateWriteReorganization
+	})
+	dom.DDL().SetHook(hook)
+	tk.MustGetErrCode("alter table t add column c int default 3, change column b d bigint default 4;", errno.ErrCancelledDDLJob)
+	dom.DDL().SetHook(originHook)
+	tk.MustQuery("select b from t").Check(testkit.Rows("2"))
+	tk.MustGetErrCode("select d from t", errno.ErrBadField)
 }
 
 func TestMultiSchemaChangeAddIndexes(t *testing.T) {
