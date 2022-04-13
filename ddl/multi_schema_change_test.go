@@ -648,7 +648,7 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3"))
 	tk.MustQuery("select * from t use index(i1, i2, i3, i4, i5);").Check(testkit.Rows("1 2 3"))
 	tk.MustExec("admin check table t;")
-	checkDelRangeCnt(tk, jobIDExt.jobID, 11)
+	checkDelRangeCnt(tk, jobIDExt.jobID, 8)
 
 	// Modify index-covered columns with position change.
 	tk.MustExec("drop table if exists t;")
@@ -661,7 +661,7 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustQuery("select * from t;").Check(testkit.Rows("3 2 1"))
 	tk.MustQuery("select * from t use index(i1, i2, i3, i4, i5);").Check(testkit.Rows("3 2 1"))
 	tk.MustExec("admin check table t;")
-	checkDelRangeCnt(tk, jobIDExt.jobID, 11)
+	checkDelRangeCnt(tk, jobIDExt.jobID, 8)
 
 	// Modify columns that require and don't require reorganization of data.
 	tk.MustExec("drop table if exists t;")
