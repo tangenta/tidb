@@ -94,7 +94,11 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 	}
 	defer dr.sessPool.put(sctx)
 
-	err = insertJobIntoDeleteRangeTable(ctx, sctx, job)
+	if job.MultiSchemaInfo != nil {
+		err = insertJobIntoDeleteRangeTableMultiSchema(ctx, sctx, job)
+	} else {
+		err = insertJobIntoDeleteRangeTable(ctx, sctx, job, &elementIDAlloc{})
+	}
 	if err != nil {
 		logutil.BgLogger().Error("[ddl] add job into delete-range table failed", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()), zap.Error(err))
 		return errors.Trace(err)
@@ -103,6 +107,20 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 		dr.emulatorCh <- struct{}{}
 	}
 	logutil.BgLogger().Info("[ddl] add job into delete-range table", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()))
+	return nil
+}
+
+func insertJobIntoDeleteRangeTableMultiSchema(ctx context.Context, sctx sessionctx.Context, job *model.Job) error {
+	var ea elementIDAlloc
+	for _, sub := range job.MultiSchemaInfo.SubJobs {
+		proxyJob := cloneFromSubJob(job, sub)
+		if jobNeedGC(proxyJob) {
+			err := insertJobIntoDeleteRangeTable(ctx, sctx, proxyJob, &ea)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -249,12 +267,11 @@ func (ea *elementIDAlloc) alloc() int64 {
 // insertJobIntoDeleteRangeTable parses the job into delete-range arguments,
 // and inserts a new record into gc_delete_range table. The primary key is
 // (job ID, element ID), so we ignore key conflict error.
-func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context, job *model.Job) error {
+func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context, job *model.Job, ea *elementIDAlloc) error {
 	now, err := getNowTSO(sctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	var ea elementIDAlloc
 
 	s := sctx.(sqlexec.SQLExecutor)
 	switch job.Type {
@@ -268,7 +285,7 @@ func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context,
 			if batchEnd > i+batchInsertDeleteRangeSize {
 				batchEnd = i + batchInsertDeleteRangeSize
 			}
-			if err := doBatchInsert(ctx, s, job.ID, tableIDs[i:batchEnd], now, &ea); err != nil {
+			if err := doBatchInsert(ctx, s, job.ID, tableIDs[i:batchEnd], now, ea); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -361,12 +378,12 @@ func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context,
 		if len(indexIDs) > 0 {
 			if len(partitionIDs) > 0 {
 				for _, pid := range partitionIDs {
-					if err := doBatchDeleteIndiceRange(ctx, s, job.ID, pid, indexIDs, now, &ea); err != nil {
+					if err := doBatchDeleteIndiceRange(ctx, s, job.ID, pid, indexIDs, now, ea); err != nil {
 						return errors.Trace(err)
 					}
 				}
 			} else {
-				return doBatchDeleteIndiceRange(ctx, s, job.ID, job.TableID, indexIDs, now, &ea)
+				return doBatchDeleteIndiceRange(ctx, s, job.ID, job.TableID, indexIDs, now, ea)
 			}
 		}
 	case model.ActionModifyColumn:
@@ -379,10 +396,10 @@ func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context,
 			return nil
 		}
 		if len(partitionIDs) == 0 {
-			return doBatchDeleteIndiceRange(ctx, s, job.ID, job.TableID, indexIDs, now, &ea)
+			return doBatchDeleteIndiceRange(ctx, s, job.ID, job.TableID, indexIDs, now, ea)
 		}
 		for _, pid := range partitionIDs {
-			if err := doBatchDeleteIndiceRange(ctx, s, job.ID, pid, indexIDs, now, &ea); err != nil {
+			if err := doBatchDeleteIndiceRange(ctx, s, job.ID, pid, indexIDs, now, ea); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -420,6 +437,7 @@ func doInsert(ctx context.Context, s sqlexec.SQLExecutor, jobID, elementID int64
 	_, err := s.ExecuteInternal(ctx, insertDeleteRangeSQL, jobID, elementID, startKeyEncoded, endKeyEncoded, ts)
 	// clear session disk full opt
 	s.ClearDiskFullOpt()
+	logutil.BgLogger().Info("[ddl] finish insert into delete-range table", zap.Int64("jobID", jobID), zap.Int64("elementID", elementID), zap.String("comment", comment))
 	return errors.Trace(err)
 }
 

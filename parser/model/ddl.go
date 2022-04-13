@@ -265,7 +265,8 @@ type MultiSchemaInfo struct {
 	AddIndexes  []CIStr `json:"-"`
 	DropIndexes []CIStr `json:"-"`
 
-	RelativeColumns []CIStr `json:"-"`
+	RelativeColumns      []CIStr `json:"-"`
+	DeleteRangeElementID int     `json:"-"`
 }
 
 func NewMultiSchemaInfo() *MultiSchemaInfo {
