@@ -437,7 +437,6 @@ func doInsert(ctx context.Context, s sqlexec.SQLExecutor, jobID, elementID int64
 	_, err := s.ExecuteInternal(ctx, insertDeleteRangeSQL, jobID, elementID, startKeyEncoded, endKeyEncoded, ts)
 	// clear session disk full opt
 	s.ClearDiskFullOpt()
-	logutil.BgLogger().Info("[ddl] finish insert into delete-range table", zap.Int64("jobID", jobID), zap.Int64("elementID", elementID), zap.String("comment", comment))
 	return errors.Trace(err)
 }
 
