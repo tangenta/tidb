@@ -344,6 +344,25 @@ func TestMultiSchemaChangeRenameColumns(t *testing.T) {
 	dom.DDL().SetHook(originHook)
 	tk.MustQuery("select b from t").Check(testkit.Rows("2"))
 	tk.MustGetErrCode("select d from t", errno.ErrBadField)
+
+	// Test dml stmts when do rename
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int default 1, b int default 2)")
+	tk.MustExec("insert into t values ()")
+	hook1 := &ddl.TestDDLCallback{Do: dom}
+	hook1.OnJobRunBeforeExported = func(job *model.Job) {
+		assert.Equal(t, model.ActionMultiSchemaChange, job.Type)
+		if job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateWriteReorganization {
+			newTk := testkit.NewTestKit(t, store)
+			rs, _ := newTk.Exec("select b from t")
+			assert.Equal(t, newTk.ResultSetToResult(rs, "").Rows()[0][0], "2")
+		}
+	}
+	dom.DDL().SetHook(hook)
+	tk.MustExec("alter table t add column c int default 3, rename column b to d;")
+	dom.DDL().SetHook(originHook)
+	tk.MustQuery("select d from t").Check(testkit.Rows("2"))
+	tk.MustGetErrCode("select b from t", errno.ErrBadField)
 }
 
 func TestMultiSchemaChangeAlterColumns(t *testing.T) {
