@@ -243,6 +243,9 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 		if pos != nil && pos.Tp == ast.ColumnPositionAfter {
 			info.RelativeColumns = append(info.RelativeColumns, pos.RelativeColumn.Name)
 		}
+	case model.ActionSetDefaultValue:
+		col := job.Args[0].(*table.Column)
+		info.RelativeColumns = append(info.RelativeColumns, col.Name)
 	default:
 		return dbterror.ErrRunMultiSchemaChanges
 	}
