@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/domain"
@@ -28,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/util/stringutil"
@@ -243,6 +243,13 @@ func TestDDLJobs(t *testing.T) {
 	DDLJobsTester.MustExec("set role r_priv")
 	DDLJobsTester.MustQuery("select DB_NAME, TABLE_NAME from information_schema.DDL_JOBS where DB_NAME = 'test_ddl_jobs' and TABLE_NAME = 't';").Check(
 		testkit.Rows("test_ddl_jobs t"))
+
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1")
+	tk.MustExec("create table tt (a int);")
+	tk.MustExec("alter table tt add index t(a), add column b int")
+	tk.MustQuery("select db_name, table_name, job_type from information_schema.DDL_JOBS limit 3").Check(
+		testkit.Rows("test_ddl_jobs tt alter table multi-schema change", "test_ddl_jobs tt add index /* subjob */", "test_ddl_jobs tt add column /* subjob */"))
+
 }
 
 func TestKeyColumnUsage(t *testing.T) {
@@ -488,7 +495,6 @@ func TestMetricTables(t *testing.T) {
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
-	statistics.ClearHistoryJobs()
 	tk.MustExec("use information_schema")
 	tk.MustQuery("select count(*) > 0 from `METRICS_TABLES`").Check(testkit.Rows("1"))
 	tk.MustQuery("select * from `METRICS_TABLES` where table_name='tidb_qps'").
@@ -513,7 +519,7 @@ func TestForAnalyzeStatus(t *testing.T) {
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
-	statistics.ClearHistoryJobs()
+	tk.MustExec("delete from mysql.analyze_jobs")
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists analyze_test")
 	tk.MustExec("create table analyze_test (a int, b int, index idx(a))")
@@ -547,8 +553,17 @@ func TestForAnalyzeStatus(t *testing.T) {
 	rows := tk.MustQuery("select * from information_schema.analyze_status where TABLE_NAME='t1'").Sort().Rows()
 	require.Greater(t, len(rows), 0)
 	for _, row := range rows {
-		require.Len(t, row, 8)    // test length of row
-		require.NotNil(t, row[6]) // test `End_time` field
+		require.Len(t, row, 11) // test length of row
+		// test `End_time` field
+		str, ok := row[6].(string)
+		require.True(t, ok)
+		_, err := time.Parse("2006-01-02 15:04:05", str)
+		require.NoError(t, err)
+	}
+	rows2 := tk.MustQuery("show analyze status where TABLE_NAME='t1'").Sort().Rows()
+	require.Equal(t, len(rows), len(rows2))
+	for i, row2 := range rows2 {
+		require.Equal(t, rows[i], row2)
 	}
 }
 
@@ -582,7 +597,6 @@ func TestForTableTiFlashReplica(t *testing.T) {
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
-	statistics.ClearHistoryJobs()
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, index idx(a))")

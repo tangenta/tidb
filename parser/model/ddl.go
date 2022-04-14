@@ -283,7 +283,9 @@ type SubJob struct {
 	SnapshotVer uint64          `json:"snapshot_ver"`
 	Revertible  bool            `json:"revertible"`
 	State       JobState        `json:"state"`
+	RowCount    int64           `json:"row_count"`
 	Warning     *terror.Error   `json:"warning"`
+	CtxVars     []interface{}   `json:"-"`
 }
 
 // Job is for a DDL operation.
@@ -293,6 +295,7 @@ type Job struct {
 	SchemaID   int64         `json:"schema_id"`
 	TableID    int64         `json:"table_id"`
 	SchemaName string        `json:"schema_name"`
+	TableName  string        `json:"table_name"`
 	State      JobState      `json:"state"`
 	Warning    *terror.Error `json:"warning"`
 	Error      *terror.Error `json:"err"`
@@ -326,7 +329,6 @@ type Job struct {
 	Version int64 `json:"version"`
 
 	// ReorgMeta is meta info of ddl reorganization.
-	// This field is depreciated.
 	ReorgMeta *DDLReorgMeta `json:"reorg_meta"`
 
 	// MultiSchemaInfo keeps some warning now for multi schema change.
@@ -468,8 +470,12 @@ func (job *Job) DecodeArgs(args ...interface{}) error {
 // String implements fmt.Stringer interface.
 func (job *Job) String() string {
 	rowCount := job.GetRowCount()
-	return fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, ArgLen:%d, start time: %v, Err:%v, ErrCount:%d, SnapshotVersion:%v",
+	ret := fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, ArgLen:%d, start time: %v, Err:%v, ErrCount:%d, SnapshotVersion:%v",
 		job.ID, job.Type, job.State, job.SchemaState, job.SchemaID, job.TableID, rowCount, len(job.Args), TSConvert2Time(job.StartTS), job.Error, job.ErrorCount, job.SnapshotVer)
+	if job.Type != ActionMultiSchemaChange && job.MultiSchemaInfo != nil {
+		ret += fmt.Sprintf(", RawArgs:%s", job.RawArgs)
+	}
+	return ret
 }
 
 func (job *Job) hasDependentSchema(other *Job) (bool, error) {
@@ -552,15 +558,12 @@ func (job *Job) IsRunning() bool {
 	return job.State == JobStateRunning
 }
 
-func (m *MultiSchemaInfo) MergeSubJob(job *Job) {
-	m.SubJobs = append(m.SubJobs, &SubJob{
-		Type:        job.Type,
-		Args:        job.Args,
-		RawArgs:     job.RawArgs,
-		SchemaState: job.SchemaState,
-		SnapshotVer: job.SnapshotVer,
-		Revertible:  true,
-	})
+func (job *Job) IsQueueing() bool {
+	return job.State == JobStateQueueing
+}
+
+func (job *Job) NotStarted() bool {
+	return job.State == JobStateNone || job.State == JobStateQueueing
 }
 
 // JobState is for job state.
@@ -582,6 +585,8 @@ const (
 	JobStateSynced JobState = 6
 	// JobStateCancelling is used to mark the DDL job is cancelled by the client, but the DDL work hasn't handle it.
 	JobStateCancelling JobState = 7
+	// JobStateQueueing means the job has not yet been started.
+	JobStateQueueing JobState = 8
 )
 
 // String implements fmt.Stringer interface.
@@ -601,6 +606,8 @@ func (s JobState) String() string {
 		return "cancelling"
 	case JobStateSynced:
 		return "synced"
+	case JobStateQueueing:
+		return "queueing"
 	default:
 		return "none"
 	}

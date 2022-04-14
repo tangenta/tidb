@@ -17,6 +17,7 @@ package ddl
 import (
 	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -25,6 +26,29 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/util/dbterror"
 )
+
+func (d *ddl) MultiSchemaChange(ctx sessionctx.Context, ti ast.Ident) error {
+	schema, t, err := d.getSchemaAndTableByIdent(ctx, ti)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	job := &model.Job{
+		SchemaID:        schema.ID,
+		TableID:         t.Meta().ID,
+		SchemaName:      schema.Name.L,
+		Type:            model.ActionMultiSchemaChange,
+		BinlogInfo:      &model.HistoryInfo{},
+		Args:            nil,
+		MultiSchemaInfo: ctx.GetSessionVars().StmtCtx.MultiSchemaInfo,
+	}
+	err = checkMultiSchemaInfo(ctx.GetSessionVars().StmtCtx.MultiSchemaInfo, t)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	ctx.GetSessionVars().StmtCtx.MultiSchemaInfo = nil
+	err = d.DoDDLJob(ctx, job)
+	return d.callHookOnChanged(err)
+}
 
 func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	if job.MultiSchemaInfo.Revertible {
@@ -108,9 +132,9 @@ func cloneFromSubJob(job *model.Job, sub *model.SubJob) *model.Job {
 		Warning:         sub.Warning,
 		Error:           nil,
 		ErrorCount:      0,
-		RowCount:        0,
+		RowCount:        sub.RowCount,
 		Mu:              sync.Mutex{},
-		CtxVars:         nil,
+		CtxVars:         sub.CtxVars,
 		Args:            sub.Args,
 		RawArgs:         sub.RawArgs,
 		SchemaState:     sub.SchemaState,
@@ -135,6 +159,7 @@ func mergeBackToSubJob(job *model.Job, sub *model.SubJob) {
 	sub.Args = job.Args
 	sub.State = job.State
 	sub.Warning = job.Warning
+	sub.RowCount = job.RowCount
 }
 
 func handleRevertibleException(job *model.Job, subJob *model.SubJob, idx int, err *terror.Error) {
@@ -159,6 +184,23 @@ func isAbnormal(job *model.SubJob) bool {
 		job.State == model.JobStateCancelled ||
 		job.State == model.JobStateRollingback ||
 		job.State == model.JobStateRollbackDone
+}
+
+func appendToSubJobs(m *model.MultiSchemaInfo, job *model.Job) error {
+	err := fillMultiSchemaInfo(m, job)
+	if err != nil {
+		return err
+	}
+	m.SubJobs = append(m.SubJobs, &model.SubJob{
+		Type:        job.Type,
+		Args:        job.Args,
+		RawArgs:     job.RawArgs,
+		SchemaState: job.SchemaState,
+		SnapshotVer: job.SnapshotVer,
+		Revertible:  true,
+		CtxVars:     job.CtxVars,
+	})
+	return nil
 }
 
 func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error) {
@@ -276,4 +318,26 @@ func appendMultiChangeWarningsToOwnerCtx(ctx sessionctx.Context, job *model.Job)
 			ctx.GetSessionVars().StmtCtx.AppendNote(sub.Warning)
 		}
 	}
+}
+
+// rollingBackMultiSchemaChange updates a multi-schema change job
+// from cancelling state to rollingback state.
+func rollingBackMultiSchemaChange(job *model.Job) error {
+	if !job.MultiSchemaInfo.Revertible {
+		// Cannot rolling back because the jobs are non-revertible.
+		// Resume the job state to running.
+		job.State = model.JobStateRunning
+		return nil
+	}
+	// Mark all the jobs to cancelling.
+	for _, sub := range job.MultiSchemaInfo.SubJobs {
+		switch sub.State {
+		case model.JobStateRunning:
+			sub.State = model.JobStateCancelling
+		case model.JobStateNone:
+			sub.State = model.JobStateCancelled
+		}
+	}
+	job.State = model.JobStateRollingback
+	return dbterror.ErrCancelledDDLJob
 }

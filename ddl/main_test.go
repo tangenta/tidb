@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/util/testbridge"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/goleak"
@@ -58,9 +61,42 @@ func TestMain(m *testing.M) {
 	}
 
 	opts := []goleak.Option{
+		goleak.IgnoreTopFunction("github.com/golang/glog.(*loggingT).flushDaemon"),
 		goleak.IgnoreTopFunction("go.etcd.io/etcd/client/pkg/v3/logutil.(*MergeLogger).outputLoop"),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 	}
 
 	goleak.VerifyTestMain(m, opts...)
+}
+
+func wrapJobIDExtCallback(oldCallback ddl.Callback) *testDDLJobIDCallback {
+	return &testDDLJobIDCallback{
+		Callback: oldCallback,
+		jobID:    0,
+	}
+}
+
+func checkDelRangeCnt(tk *testkit.TestKit, jobID int64, cnt int) {
+	query := `select sum(cnt) from
+	(select count(1) cnt from mysql.gc_delete_range where job_id = ? union all
+	select count(1) cnt from mysql.gc_delete_range_done where job_id = ?) as gdr;`
+	tk.MustQuery(query, jobID, jobID).Check(testkit.Rows(strconv.Itoa(cnt)))
+}
+
+type testDDLJobIDCallback struct {
+	ddl.Callback
+	jobID int64
+}
+
+func (t *testDDLJobIDCallback) OnJobUpdated(job *model.Job) {
+	if t.jobID == 0 {
+		t.jobID = job.ID
+	}
+	if t.Callback != nil {
+		t.Callback.OnJobUpdated(job)
+	}
+}
+
+func (t *testDDLJobIDCallback) Clear() {
+	t.jobID = 0
 }

@@ -71,7 +71,7 @@ func (s SchemaState) String() string {
 	case StateGlobalTxnOnly:
 		return "global txn only"
 	default:
-		return "queueing"
+		return "none"
 	}
 }
 
@@ -666,6 +666,17 @@ func (t *TableInfo) MoveColumnInfo(from, to int) {
 			if ok {
 				idxCol.Offset = newOffset
 			}
+		}
+	}
+}
+
+// ClearPlacement clears all table and partitions' placement settings
+func (t *TableInfo) ClearPlacement() {
+	t.PlacementPolicyRef = nil
+	if t.Partition != nil {
+		for i := range t.Partition.Definitions {
+			def := &t.Partition.Definitions[i]
+			def.PlacementPolicyRef = nil
 		}
 	}
 }

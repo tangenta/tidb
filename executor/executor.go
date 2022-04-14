@@ -550,6 +550,22 @@ func (e *DDLJobRetriever) appendJobToChunk(req *chunk.Chunk, job *model.Job, che
 		req.AppendNull(10)
 	}
 	req.AppendString(11, job.State.String())
+	if job.Type == model.ActionMultiSchemaChange {
+		for _, subJob := range job.MultiSchemaInfo.SubJobs {
+			req.AppendInt64(0, job.ID)
+			req.AppendString(1, schemaName)
+			req.AppendString(2, tableName)
+			req.AppendString(3, subJob.Type.String()+" /* subjob */")
+			req.AppendString(4, subJob.SchemaState.String())
+			req.AppendInt64(5, job.SchemaID)
+			req.AppendInt64(6, job.TableID)
+			req.AppendInt64(7, subJob.RowCount)
+			req.AppendNull(8)
+			req.AppendNull(9)
+			req.AppendNull(10)
+			req.AppendString(11, subJob.State.String())
+		}
+	}
 }
 
 func ts2Time(timestamp uint64, loc *time.Location) types.Time {
@@ -1881,6 +1897,11 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 			sc.NotFillCache = !opts.SQLCache
 		}
 		sc.WeakConsistency = isWeakConsistencyRead(ctx, stmt)
+		// Try to mark the `RCCheckTS` flag for the first time execution of in-transaction read requests
+		// using read-consistency isolation level.
+		if NeedSetRCCheckTSFlag(ctx, stmt) {
+			sc.RCCheckTS = true
+		}
 	case *ast.SetOprStmt:
 		sc.InSelectStmt = true
 		sc.OverflowAsWarning = true
@@ -2005,4 +2026,14 @@ func isWeakConsistencyRead(ctx sessionctx.Context, node ast.Node) bool {
 	sessionVars := ctx.GetSessionVars()
 	return sessionVars.ConnectionID > 0 && sessionVars.ReadConsistency.IsWeak() &&
 		plannercore.IsAutoCommitTxn(ctx) && plannercore.IsReadOnly(node, sessionVars)
+}
+
+// NeedSetRCCheckTSFlag checks whether it's needed to set `RCCheckTS` flag in current stmtctx.
+func NeedSetRCCheckTSFlag(ctx sessionctx.Context, node ast.Node) bool {
+	sessionVars := ctx.GetSessionVars()
+	if sessionVars.ConnectionID > 0 && sessionVars.RcReadCheckTS && sessionVars.InTxn() &&
+		sessionVars.IsPessimisticReadConsistency() && !sessionVars.RetryInfo.Retrying && plannercore.IsReadOnly(node, sessionVars) {
+		return true
+	}
+	return false
 }

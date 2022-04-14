@@ -61,7 +61,7 @@ func convertAddIdxJob2RollbackJob(t *meta.Meta, job *model.Job, tblInfo *model.T
 	}
 
 	// the second args will be used in onDropIndex.
-	job.Args = []interface{}{indexInfo.Name /* ifExists */, false, getPartitionIDs(tblInfo)}
+	job.Args = []interface{}{indexInfo.Name, false /* ifExists */, getPartitionIDs(tblInfo)}
 	// If add index job rollbacks in write reorganization state, its need to delete all keys which has been added.
 	// Its work is the same as drop index job do.
 	// The write reorganization state in add index job that likes write only state in drop index job.
@@ -81,7 +81,7 @@ func convertAddIdxJob2RollbackJob(t *meta.Meta, job *model.Job, tblInfo *model.T
 // to rollback add index operations. job.SnapshotVer == 0 indicates the workers are not started.
 func convertNotStartAddIdxJob2RollbackJob(t *meta.Meta, job *model.Job, occuredErr error) (ver int64, err error) {
 	schemaID := job.SchemaID
-	tblInfo, err := getTableInfoAndCancelFaultJob(t, job, schemaID)
+	tblInfo, err := GetTableInfoAndCancelFaultJob(t, job, schemaID)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
@@ -119,16 +119,16 @@ func rollingbackModifyColumn(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job)
 		// Give the this kind of ddl one more round to run, the dbterror.ErrCancelledDDLJob should be fetched from the bottom up.
 		return w.onModifyColumn(d, t, job)
 	}
-	_, tblInfo, oldCol, jp, err := getModifyColumnInfo(t, job)
+	_, tblInfo, oldCol, modifyInfo, err := getModifyColumnInfo(t, job)
 	if err != nil {
 		return ver, err
 	}
-	if !needChangeColumnData(oldCol, jp.newCol) {
+	if !needChangeColumnData(oldCol, modifyInfo.newCol) {
 		// Normal-type rolling back
 		if job.SchemaState == model.StateNone {
 			// When change null to not null, although state is unchanged with none, the oldCol flag's has been changed to preNullInsertFlag.
 			// To roll back this kind of normal job, it is necessary to mark the state as JobStateRollingback to restore the old col's flag.
-			if jp.modifyColumnTp == mysql.TypeNull && tblInfo.Columns[oldCol.Offset].Flag|mysql.PreventNullInsertFlag != 0 {
+			if modifyInfo.modifyColumnTp == mysql.TypeNull && tblInfo.Columns[oldCol.Offset].Flag|mysql.PreventNullInsertFlag != 0 {
 				job.State = model.JobStateRollingback
 				return ver, dbterror.ErrCancelledDDLJob
 			}
@@ -141,8 +141,8 @@ func rollingbackModifyColumn(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job)
 		return ver, nil
 	}
 	// reorg-type rolling back
-	if jp.changingCol == nil {
-		// The job hasn't been handled and we cancel it directly.
+	if modifyInfo.changingCol == nil {
+		// The job hasn't been handled, so cancel it directly.
 		job.State = model.JobStateCancelled
 		return ver, dbterror.ErrCancelledDDLJob
 	}
@@ -165,7 +165,7 @@ func rollingbackAddColumn(t *meta.Meta, job *model.Job) (ver int64, err error) {
 	columnInfo.State = model.StateDeleteOnly
 	job.SchemaState = model.StateDeleteOnly
 
-	job.Args = []interface{}{col.Name}
+	job.Args = []interface{}{col.Name, false /* ifExists */}
 	ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != columnInfo.State)
 	if err != nil {
 		return ver, errors.Trace(err)
@@ -287,7 +287,7 @@ func rollingbackDropTableOrView(t *meta.Meta, job *model.Job) error {
 }
 
 func rollingbackDropTablePartition(t *meta.Meta, job *model.Job) (ver int64, err error) {
-	_, err = getTableInfoAndCancelFaultJob(t, job, job.SchemaID)
+	_, err = GetTableInfoAndCancelFaultJob(t, job, job.SchemaID)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
@@ -337,31 +337,11 @@ func cancelOnlyNotHandledJob(job *model.Job) (ver int64, err error) {
 }
 
 func rollingbackTruncateTable(t *meta.Meta, job *model.Job) (ver int64, err error) {
-	_, err = getTableInfoAndCancelFaultJob(t, job, job.SchemaID)
+	_, err = GetTableInfoAndCancelFaultJob(t, job, job.SchemaID)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
 	return cancelOnlyNotHandledJob(job)
-}
-
-func rollingBackMultiSchemaChange(job *model.Job) error {
-	if !job.MultiSchemaInfo.Revertible {
-		// Cannot rolling back because the jobs are non-revertible.
-		// Resume the job state to running.
-		job.State = model.JobStateRunning
-		return nil
-	}
-	// Mark all the jobs to cancelling.
-	for _, sub := range job.MultiSchemaInfo.SubJobs {
-		switch sub.State {
-		case model.JobStateRunning:
-			sub.State = model.JobStateCancelling
-		case model.JobStateNone:
-			sub.State = model.JobStateCancelled
-		}
-	}
-	job.State = model.JobStateRollingback
-	return dbterror.ErrCancelledDDLJob
 }
 
 func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
