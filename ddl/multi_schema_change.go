@@ -291,6 +291,9 @@ func checkOperateSameColumn(info *model.MultiSchemaInfo) error {
 	if err := checkColumns(info.RelativeColumns, false); err != nil {
 		return err
 	}
+	if err := checkColumns(info.ModifyColumns, true); err != nil {
+		return err
+	}
 
 	if err := checkIndexes(info.AddIndexes, true); err != nil {
 		return err
@@ -299,7 +302,7 @@ func checkOperateSameColumn(info *model.MultiSchemaInfo) error {
 		return err
 	}
 
-	return checkColumns(info.ModifyColumns, true)
+	return nil
 }
 
 func checkMultiSchemaInfo(info *model.MultiSchemaInfo, t table.Table) error {
