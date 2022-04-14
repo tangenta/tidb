@@ -386,13 +386,11 @@ func TestMultiSchemaChangeAlterColumns(t *testing.T) {
 		tk.MustExec("insert into t values ();")
 		tk.MustGetErrCode("alter table t alter column b set default 3, rename column b to c", errno.ErrUnsupportedDDLOperation)
 
-		// Test alter and drop with same column
-		/*
-			tk.MustExec("drop table if exists t;")
-			tk.MustExec("create table t (a int default 1, b int default 2);")
-			tk.MustExec("insert into t values ();")
-			tk.MustGetErrCode("alter table t alter column b set default 3, modify column b double", errno.ErrUnsupportedDDLOperation)
-		*/
+		// Test alter and drop modify same column
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int default 1, b int default 2);")
+		tk.MustExec("insert into t values ();")
+		tk.MustGetErrCode("alter table t alter column b set default 3, modify column b double", errno.ErrUnsupportedDDLOperation)
 	}
 
 	tk.MustExec("drop table if exists t;")
