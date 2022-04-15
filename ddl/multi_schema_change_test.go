@@ -406,7 +406,7 @@ func TestMultiSchemaChangeAlterColumns(t *testing.T) {
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int default 1, b int default 2)")
 	hook := newCancelJobHook(store, dom, func(job *model.Job) bool {
-		// Cancel job when the column 'c' is in write-reorg.
+		// Cancel job when the column 'a' is in write-reorg.
 		return job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateWriteReorganization
 	})
 	dom.DDL().SetHook(hook)
