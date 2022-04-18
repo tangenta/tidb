@@ -813,7 +813,6 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustExec("admin check table t;")
 	checkDelRangeCnt(tk, jobIDExt.jobID, 1) // only i2 has tmp index.
 
-	// issue link: https://github.com/tangenta/tidb/issues/74
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t(a bigint null default '1761233443433596323', index t(a));")
 	tk.MustExec("insert into t set a = '-7184819032643664798';")
