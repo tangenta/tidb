@@ -309,14 +309,13 @@ func onRenameIndex(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 		return ver, errors.Trace(dbterror.ErrOptOnCacheTable.GenWithStackByArgs("Rename Index"))
 	}
 
-	idx := tblInfo.FindIndexByName(from.L)
 	if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
 		job.MarkNonRevertible()
 		// Store the mark and enter the next DDL handling loop.
 		return updateVersionAndTableInfoWithCheck(t, job, tblInfo, false)
 	}
 
-	idx.Name = to
+	renameIndexes(tblInfo, from, to)
 	if ver, err = updateVersionAndTableInfo(t, job, tblInfo, true); err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
@@ -1555,4 +1554,16 @@ func findIndexesByColName(tblInfo *model.TableInfo, colName model.CIStr) []index
 		}
 	}
 	return result
+}
+
+func renameIndexes(tblInfo *model.TableInfo, from, to model.CIStr) {
+	for _, idx := range tblInfo.Indices {
+		if idx.Name.L == from.L {
+			idx.Name = to
+		} else if getChangingIndexOriginName(idx) == from.O {
+				idx.Name.L = strings.Replace(idx.Name.L, from.L, to.L, 1)
+				idx.Name.O = strings.Replace(idx.Name.O, from.O, to.O, 1)
+			}
+		}
+	}
 }
