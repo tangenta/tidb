@@ -828,6 +828,11 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustExec("alter table t rename index i to i1, change column b c int;")
 	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='t' and COLUMN_NAME='c' and KEY_NAME='i1';").Check(testkit.Rows("1"))
 	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='t' and COLUMN_NAME='c' and KEY_NAME='_Idx$_i';").Check(testkit.Rows("1"))
+
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int, _Col$_a double, index _Idx$_i(a, _Col$_a), index i(a, _Col$_a));")
+	tk.MustExec("alter table t modify column a tinyint;")
+	tk.MustQuery("select count(distinct KEY_NAME) from information_schema.TIDB_INDEXES where TABLE_NAME='t';").Check(testkit.Rows("2"))
 }
 
 func TestMultiSchemaChangeModifyColumnsCancelled(t *testing.T) {

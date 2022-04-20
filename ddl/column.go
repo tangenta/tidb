@@ -871,7 +871,7 @@ func adjustTableInfoAfterModifyColumnWithData(tblInfo *model.TableInfo, pos *ast
 	internalColName := changingCol.Name
 	changingCol = replaceOldColumn(tblInfo, oldCol, changingCol, newName)
 	if len(changingIdxs) > 0 {
-		indexesToRemove := updateNewIndexesCols(changingIdxs, internalColName, newName, changingCol.Offset)
+		indexesToRemove := updateNewIndexesCols(tblInfo, changingIdxs, internalColName, newName, changingCol.Offset)
 		replaceOldIndexes(tblInfo, indexesToRemove)
 	}
 	// Move the new column to a correct offset.
@@ -927,7 +927,7 @@ func replaceOldIndexes(tblInfo *model.TableInfo, changingIdxs []*model.IndexInfo
 
 // updateNewIndexesCols updates the changing indexes column name&offset, and
 // filter out the indexes that can be removed.
-func updateNewIndexesCols(changingIdxs []*model.IndexInfo,
+func updateNewIndexesCols(tblInfo *model.TableInfo, changingIdxs []*model.IndexInfo,
 	oldName, newName model.CIStr, newOffset int) []*model.IndexInfo {
 	indexesToRemove := make([]*model.IndexInfo, 0, len(changingIdxs))
 	for _, idx := range changingIdxs {
@@ -938,7 +938,8 @@ func updateNewIndexesCols(changingIdxs []*model.IndexInfo,
 				idx.Columns[i].Offset = newOffset
 			} else {
 				if !hasOtherChangingCol {
-					hasOtherChangingCol = getChangingColumnOriginName(col) != col.Name.O
+					// getColumnInfoByName only get column in `PUBLIC` state
+					hasOtherChangingCol = getColumnInfoByName(tblInfo, col.Name.L) == nil
 				}
 			}
 		}
@@ -1421,7 +1422,7 @@ func adjustTableInfoAfterModifyColumn(
 	}
 	tblInfo.Columns[oldCol.Offset] = newCol
 	tblInfo.MoveColumnInfo(oldCol.Offset, destOffset)
-	updateNewIndexesCols(tblInfo.Indices, oldCol.Name, newCol.Name, newCol.Offset)
+	updateNewIndexesCols(tblInfo, tblInfo.Indices, oldCol.Name, newCol.Name, newCol.Offset)
 	return nil
 }
 
@@ -1731,7 +1732,7 @@ func findColumnInIndexCols(c string, cols []*model.IndexColumn) *model.IndexColu
 
 func getColumnInfoByName(tbInfo *model.TableInfo, column string) *model.ColumnInfo {
 	for _, colInfo := range tbInfo.Cols() {
-		if colInfo.Name.L == column {
+		if colInfo != nil && colInfo.Name.L == column {
 			return colInfo
 		}
 	}
@@ -1793,16 +1794,6 @@ func genChangingIndexUniqueName(tblInfo *model.TableInfo, idxInfo *model.IndexIn
 		newIndexLowerName = fmt.Sprintf("%s_%d", strings.ToLower(newIndexNamePrefix), suffix)
 	}
 	return fmt.Sprintf("%s_%d", newIndexNamePrefix, suffix)
-}
-
-func getChangingColumnOriginName(changingCol *model.IndexColumn) string {
-	colName := strings.ToLower(strings.TrimPrefix(changingCol.Name.O, changingColumnPrefix))
-	// Since the unique colName may contain the suffix number (columnName_num), better trim the suffix.
-	var pos int
-	if pos = strings.LastIndex(colName, "_"); pos == -1 {
-		return colName
-	}
-	return colName[:pos]
 }
 
 func getChangingIndexOriginName(changingIdx *model.IndexInfo) string {
