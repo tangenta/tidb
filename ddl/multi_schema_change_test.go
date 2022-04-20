@@ -819,9 +819,15 @@ func TestMultiSchemaChangeModifyColumns(t *testing.T) {
 	tk.MustGetErrCode("alter table t change column a b datetime null default '8972-12-24 10:56:03', rename index t to t1;", errno.ErrTruncatedWrongValue)
 
 	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table a (a int, b double, index i(a, b));")
-	tk.MustExec("alter table a rename index i to i1, change column b c int;")
-	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='a' and COLUMN_NAME='c' and KEY_NAME='i1';").Check(testkit.Rows("1"))
+	tk.MustExec("create table t (a int, b double, index i(a, b));")
+	tk.MustExec("alter table t rename index i to i1, change column b c int;")
+	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='t' and COLUMN_NAME='c' and KEY_NAME='i1';").Check(testkit.Rows("1"))
+
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (a int, b double, index i(a, b), index _Idx$_i(a, b));")
+	tk.MustExec("alter table t rename index i to i1, change column b c int;")
+	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='t' and COLUMN_NAME='c' and KEY_NAME='i1';").Check(testkit.Rows("1"))
+	tk.MustQuery("select count(*) from information_schema.TIDB_INDEXES where TABLE_NAME='t' and COLUMN_NAME='c' and KEY_NAME='_Idx$_i';").Check(testkit.Rows("1"))
 }
 
 func TestMultiSchemaChangeModifyColumnsCancelled(t *testing.T) {
