@@ -1516,10 +1516,9 @@ func (w *worker) updateReorgInfoForPartitions(t table.PartitionedTable, reorg *r
 }
 
 type indexesToChange struct {
-	indexInfo   *model.IndexInfo
-	isModifying bool // whether the index is being modifying by another 'modify column' job
-	idxOffset   int  // index offset in tblInfo.Indices
-	colOffset   int  // column offset in idxInfo.Columns
+	indexInfo *model.IndexInfo
+	idxOffset int // index offset in tblInfo.Indices
+	colOffset int // column offset in idxInfo.Columns
 }
 
 // findIndexesByColName finds the indexes that covering the given column, and deduplicate
@@ -1527,21 +1526,20 @@ type indexesToChange struct {
 func findIndexesByColName(tblInfo *model.TableInfo, colName model.CIStr) []indexesToChange {
 	var result []indexesToChange
 	for i, idxInfo := range tblInfo.Indices {
-		name, origName := idxInfo.Name.O, getChangingIndexOriginName(idxInfo)
-		isModifying := len(name) != len(origName)
+		origName := getChangingIndexOriginName(idxInfo)
 		for j, idxCol := range idxInfo.Columns {
 			if idxCol.Name.L != colName.L {
 				continue
 			}
-			r := indexesToChange{indexInfo: idxInfo, isModifying: isModifying, idxOffset: i, colOffset: j}
-			if !isModifying {
+			r := indexesToChange{indexInfo: idxInfo, idxOffset: i, colOffset: j}
+			if !idxInfo.IsGenerated {
 				result = append(result, r)
 				break
 			}
 			// Deduplicate the index info by original name.
 			var dedup bool
 			for k, rs := range result {
-				if !rs.isModifying && origName == rs.indexInfo.Name.O {
+				if !rs.indexInfo.IsGenerated && origName == rs.indexInfo.Name.O {
 					result[k] = r
 					dedup = true
 					break
@@ -1560,7 +1558,7 @@ func renameIndexes(tblInfo *model.TableInfo, from, to model.CIStr) {
 	for _, idx := range tblInfo.Indices {
 		if idx.Name.L == from.L {
 			idx.Name = to
-		} else if getChangingIndexOriginName(idx) == from.O {
+		} else if idx.IsGenerated && getChangingIndexOriginName(idx) == from.O {
 			idx.Name.L = strings.Replace(idx.Name.L, from.L, to.L, 1)
 			idx.Name.O = strings.Replace(idx.Name.O, from.O, to.O, 1)
 		}

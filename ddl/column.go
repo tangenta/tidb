@@ -577,7 +577,7 @@ func (w *worker) onModifyColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 		var indexesToRemove []int64
 		for _, info := range indexesToChange {
 			newIdxID := allocateIndexID(tblInfo)
-			if info.isModifying {
+			if info.indexInfo.IsGenerated {
 				newIdxName := info.indexInfo.Name
 				newIdxInfo := copyIndexInfoForModifyColumn(info.indexInfo, newIdxID, newIdxName, info.colOffset, changingCol)
 				indexesToRemove = append(indexesToRemove, info.indexInfo.ID)
@@ -585,6 +585,7 @@ func (w *worker) onModifyColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 			} else {
 				newIdxName := model.NewCIStr(genChangingIndexUniqueName(tblInfo, info.indexInfo))
 				newIdxInfo := copyIndexInfoForModifyColumn(info.indexInfo, newIdxID, newIdxName, info.colOffset, changingCol)
+				newIdxInfo.IsGenerated = true
 				tblInfo.Indices = append(tblInfo.Indices, newIdxInfo)
 			}
 		}
@@ -916,6 +917,7 @@ func replaceOldIndexes(tblInfo *model.TableInfo, changingIdxs []*model.IndexInfo
 		for i, idx := range tblInfo.Indices {
 			if strings.EqualFold(idxName, idx.Name.O) {
 				cIdx.Name = model.NewCIStr(idxName)
+				cIdx.IsGenerated = false
 				tblInfo.Indices[i] = cIdx
 				break
 			}
