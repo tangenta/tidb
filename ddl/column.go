@@ -938,7 +938,7 @@ func updateNewIndexesCols(tblInfo *model.TableInfo, changingIdxs []*model.IndexI
 				idx.Columns[i].Offset = newOffset
 			} else {
 				if !hasOtherChangingCol {
-					hasOtherChangingCol = getColumnInfoByName(tblInfo, col.Name.L) == nil
+					hasOtherChangingCol = tblInfo.Columns[col.Offset].State != model.StatePublic
 				}
 			}
 		}
