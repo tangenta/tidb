@@ -938,7 +938,6 @@ func updateNewIndexesCols(tblInfo *model.TableInfo, changingIdxs []*model.IndexI
 				idx.Columns[i].Offset = newOffset
 			} else {
 				if !hasOtherChangingCol {
-					// getColumnInfoByName only get column in `PUBLIC` state
 					hasOtherChangingCol = getColumnInfoByName(tblInfo, col.Name.L) == nil
 				}
 			}
