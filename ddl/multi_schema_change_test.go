@@ -868,12 +868,32 @@ func TestMultiSchemaChangeAlterIndex(t *testing.T) {
 	tk.MustExec("use test;")
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
 
+	// unsupported ddl operations
+	{
+		// Test alter the same index
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int, b int, index idx(a, b));")
+		tk.MustGetErrCode("alter table t alter index idx visible, alter index idx invisible;", errno.ErrUnsupportedDDLOperation)
+
+		// Test drop and alter the same index
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int, b int, index idx(a, b));")
+		tk.MustGetErrCode("alter table t drop index idx, alter index idx visible;", errno.ErrUnsupportedDDLOperation)
+
+		// Test add and alter the same index
+		tk.MustExec("drop table if exists t;")
+		tk.MustExec("create table t (a int, b int);")
+		tk.MustGetErrCode("alter table t add index idx(a, b), alter index idx invisible", errno.ErrKeyDoesNotExist)
+	}
+
+	tk.MustExec("drop table t;")
 	tk.MustExec("create table t (a int, b int, index i1(a, b), index i2(b));")
 	tk.MustExec("insert into t values (1, 2);")
 	tk.MustExec("alter table t modify column a tinyint, alter index i2 invisible, alter index i1 invisible;")
 	tk.MustGetErrCode("select * from t use index (i1);", errno.ErrKeyDoesNotExist)
 	tk.MustGetErrCode("select * from t use index (i2);", errno.ErrKeyDoesNotExist)
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2"))
+	tk.MustExec("admin check table t;")
 
 	tk.MustExec("drop table t;")
 	tk.MustExec("create table t (a int, b int, index i1(a, b), index i2(b));")
@@ -894,6 +914,10 @@ func TestMultiSchemaChangeAlterIndex(t *testing.T) {
 	tk.MustExec("alter table t alter index i1 invisible, modify column a tinyint, alter index i2 invisible;")
 	dom.DDL().SetHook(originHook)
 	require.True(t, checked)
+	tk.MustGetErrCode("select * from t use index (i1);", errno.ErrKeyDoesNotExist)
+	tk.MustGetErrCode("select * from t use index (i2);", errno.ErrKeyDoesNotExist)
+	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2"))
+	tk.MustExec("admin check table t;")
 }
 
 func TestMultiSchemaChangeMix(t *testing.T) {

@@ -324,11 +324,16 @@ func onRenameIndex(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	return ver, nil
 }
 
-func validateAlterIndexVisibility(indexName model.CIStr, invisible bool, tbl *model.TableInfo) (bool, error) {
-	if idx := tbl.FindIndexByName(indexName.L); idx == nil {
+func validateAlterIndexVisibility(ctx sessionctx.Context, indexName model.CIStr, invisible bool, tbl *model.TableInfo) (bool, error) {
+	var idx *model.IndexInfo
+	if idx = tbl.FindIndexByName(indexName.L); idx == nil {
 		return false, errors.Trace(infoschema.ErrKeyNotExists.GenWithStackByArgs(indexName.O, tbl.Name))
-	} else if idx.Invisible == invisible {
-		return true, nil
+	}
+	if ctx == nil || ctx.GetSessionVars() == nil || ctx.GetSessionVars().StmtCtx.MultiSchemaInfo == nil {
+		// Early return.
+		if idx.Invisible == invisible {
+			return true, nil
+		}
 	}
 	return false, nil
 }
@@ -907,7 +912,7 @@ func checkAlterIndexVisibility(t *meta.Meta, job *model.Job) (*model.TableInfo, 
 		return nil, indexName, invisible, errors.Trace(err)
 	}
 
-	skip, err := validateAlterIndexVisibility(indexName, invisible, tblInfo)
+	skip, err := validateAlterIndexVisibility(nil, indexName, invisible, tblInfo)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return nil, indexName, invisible, errors.Trace(err)
