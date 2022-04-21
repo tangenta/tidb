@@ -355,9 +355,7 @@ func onAlterIndexVisibility(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 
 func setIndexVisibility(tblInfo *model.TableInfo, name model.CIStr, invisible bool) {
 	for _, idx := range tblInfo.Indices {
-		if idx.Name.L == name.L {
-			idx.Invisible = invisible
-		} else if idx.IsGenerated && getChangingIndexOriginName(idx) == name.O {
+		if idx.Name.L == name.L || (idx.IsGenerated && getChangingIndexOriginName(idx) == name.O) {
 			idx.Invisible = invisible
 		}
 	}
