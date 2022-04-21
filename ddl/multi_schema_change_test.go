@@ -861,6 +861,41 @@ func TestMultiSchemaChangeModifyColumnsCancelled(t *testing.T) {
 		Check(testkit.Rows("int"))
 }
 
+func TestMultiSchemaChangeAlterIndex(t *testing.T) {
+	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test;")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
+
+	tk.MustExec("create table t (a int, b int, index i1(a, b), index i2(b));")
+	tk.MustExec("insert into t values (1, 2);")
+	tk.MustExec("alter table t modify column a tinyint, alter index i2 invisible, alter index i1 invisible;")
+	tk.MustGetErrCode("select * from t use index (i1);", errno.ErrKeyDoesNotExist)
+	tk.MustGetErrCode("select * from t use index (i2);", errno.ErrKeyDoesNotExist)
+	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2"))
+
+	tk.MustExec("drop table t;")
+	tk.MustExec("create table t (a int, b int, index i1(a, b), index i2(b));")
+	tk.MustExec("insert into t values (1, 2);")
+	originHook := dom.DDL().GetHook()
+	var checked bool
+	dom.DDL().SetHook(&ddl.TestDDLCallback{Do: dom,
+		OnJobUpdatedExported: func(job *model.Job) {
+			assert.NotNil(t, job.MultiSchemaInfo)
+			// "modify column a tinyint" in write-reorg.
+			if job.MultiSchemaInfo.SubJobs[1].SchemaState == model.StateWriteReorganization {
+				checked = true
+				rs, err := tk.Exec("select * from t use index(i1);")
+				assert.NoError(t, err)
+				assert.NoError(t, rs.Close())
+			}
+		}})
+	tk.MustExec("alter table t alter index i1 invisible, modify column a tinyint, alter index i2 invisible;")
+	dom.DDL().SetHook(originHook)
+	require.True(t, checked)
+}
+
 func TestMultiSchemaChangeMix(t *testing.T) {
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()

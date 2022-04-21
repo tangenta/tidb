@@ -338,14 +338,29 @@ func onAlterIndexVisibility(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	if err != nil || tblInfo == nil {
 		return ver, errors.Trace(err)
 	}
-	idx := tblInfo.FindIndexByName(from.L)
-	idx.Invisible = invisible
+
+	if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
+		job.MarkNonRevertible()
+		return updateVersionAndTableInfo(t, job, tblInfo, false)
+	}
+
+	setIndexVisibility(tblInfo, from, invisible)
 	if ver, err = updateVersionAndTableInfoWithCheck(t, job, tblInfo, true); err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
 	}
 	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
 	return ver, nil
+}
+
+func setIndexVisibility(tblInfo *model.TableInfo, name model.CIStr, invisible bool) {
+	for _, idx := range tblInfo.Indices {
+		if idx.Name.L == name.L {
+			idx.Invisible = invisible
+		} else if idx.IsGenerated && getChangingIndexOriginName(idx) == name.O {
+			idx.Invisible = invisible
+		}
+	}
 }
 
 func getNullColInfos(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) ([]*model.ColumnInfo, error) {
