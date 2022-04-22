@@ -94,10 +94,12 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 	}
 	defer dr.sessPool.put(sctx)
 
+	var added bool
 	if job.MultiSchemaInfo != nil {
-		err = insertJobIntoDeleteRangeTableMultiSchema(ctx, sctx, job)
+		added, err = insertJobIntoDeleteRangeTableMultiSchema(ctx, sctx, job)
 	} else {
 		err = insertJobIntoDeleteRangeTable(ctx, sctx, job, &elementIDAlloc{})
+		added = true
 	}
 	if err != nil {
 		logutil.BgLogger().Error("[ddl] add job into delete-range table failed", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()), zap.Error(err))
@@ -106,22 +108,25 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 	if !dr.storeSupport {
 		dr.emulatorCh <- struct{}{}
 	}
-	logutil.BgLogger().Info("[ddl] add job into delete-range table", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()))
+	if added {
+		logutil.BgLogger().Info("[ddl] add job into delete-range table", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()))
+	}
 	return nil
 }
 
-func insertJobIntoDeleteRangeTableMultiSchema(ctx context.Context, sctx sessionctx.Context, job *model.Job) error {
+func insertJobIntoDeleteRangeTableMultiSchema(ctx context.Context, sctx sessionctx.Context, job *model.Job) (bool, error) {
 	var ea elementIDAlloc
 	for _, sub := range job.MultiSchemaInfo.SubJobs {
 		proxyJob := cloneFromSubJob(job, sub)
 		if jobNeedGC(proxyJob) {
 			err := insertJobIntoDeleteRangeTable(ctx, sctx, proxyJob, &ea)
 			if err != nil {
-				return errors.Trace(err)
+				return true, errors.Trace(err)
 			}
 		}
 	}
-	return nil
+	added := len(ea.indexIDs)+len(ea.physicalIDs) != 0
+	return added, nil
 }
 
 // removeFromGCDeleteRange implements delRangeManager interface.
