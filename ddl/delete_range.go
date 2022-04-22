@@ -94,12 +94,14 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 	}
 	defer dr.sessPool.put(sctx)
 
-	var added bool
 	if job.MultiSchemaInfo != nil {
+		var added bool
 		added, err = insertJobIntoDeleteRangeTableMultiSchema(ctx, sctx, job)
+		if !added {
+			return nil
+		}
 	} else {
 		err = insertJobIntoDeleteRangeTable(ctx, sctx, job, &elementIDAlloc{})
-		added = true
 	}
 	if err != nil {
 		logutil.BgLogger().Error("[ddl] add job into delete-range table failed", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()), zap.Error(err))
@@ -108,9 +110,7 @@ func (dr *delRange) addDelRangeJob(ctx context.Context, job *model.Job) error {
 	if !dr.storeSupport {
 		dr.emulatorCh <- struct{}{}
 	}
-	if added {
-		logutil.BgLogger().Info("[ddl] add job into delete-range table", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()))
-	}
+	logutil.BgLogger().Info("[ddl] add job into delete-range table", zap.Int64("jobID", job.ID), zap.String("jobType", job.Type.String()))
 	return nil
 }
 
