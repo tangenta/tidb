@@ -74,6 +74,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 				if i == 0 && isFinished(sub) {
 					job.State = model.JobStateRollbackDone
 				}
+				mergeToParentJob(sub, job)
 				return ver, err
 			}
 			// The last rollback/cancelling sub-job is done.
@@ -94,6 +95,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 			ver, err = w.runDDLJob(d, t, proxyJob)
 			mergeBackToSubJob(proxyJob, sub)
 			handleRevertibleException(job, sub, i, proxyJob.Error)
+			mergeToParentJob(sub, job)
 			return ver, err
 		}
 		// All the sub-jobs are non-revertible.
@@ -106,6 +108,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 			proxyJob := cloneFromSubJob(job, sub)
 			ver, err = w.runDDLJob(d, t, proxyJob)
 			mergeBackToSubJob(proxyJob, sub)
+			mergeToParentJob(sub, job)
 		}
 		return ver, err
 	}
@@ -117,6 +120,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 		proxyJob := cloneFromSubJob(job, sub)
 		ver, err = w.runDDLJob(d, t, proxyJob)
 		mergeBackToSubJob(proxyJob, sub)
+		mergeToParentJob(sub, job)
 		return ver, err
 	}
 	job.State = model.JobStateDone
@@ -168,6 +172,10 @@ func mergeBackToSubJob(job *model.Job, sub *model.SubJob) {
 	sub.State = job.State
 	sub.Warning = job.Warning
 	sub.RowCount = job.RowCount
+}
+
+func mergeToParentJob(sub *model.SubJob, parentJob *model.Job) {
+	parentJob.SchemaState = sub.SchemaState
 }
 
 func handleRevertibleException(job *model.Job, subJob *model.SubJob, idx int, err *terror.Error) {
