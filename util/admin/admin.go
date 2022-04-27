@@ -132,6 +132,9 @@ func CancelJobs(txn kv.Transaction, ids []int64) ([]error, error) {
 			errs[i] = ErrCannotCancelDDLJob.GenWithStackByArgs(job.ID)
 			continue
 		}
+		if job.IsCancelling() {
+			continue
+		}
 
 		job.State = model.JobStateCancelling
 		// Make sure RawArgs isn't overwritten.

@@ -150,7 +150,14 @@ func (w *worker) typeStr() string {
 }
 
 func (w *worker) String() string {
-	return fmt.Sprintf("worker %d, tp %s", w.id, w.typeStr())
+	tp := "unknown"
+	switch w.tp {
+	case generalWorker:
+		tp = "non-reorg"
+	case addIdxWorker:
+		tp = "reorg"
+	}
+	return fmt.Sprintf("worker %d, tp %s", w.id, tp)
 }
 
 func (w *worker) close() {
@@ -300,7 +307,7 @@ func (d *ddl) addBatchDDLJobs(tasks []*limitJobTask) {
 			job.Version = currentVersion
 			job.StartTS = txn.StartTS()
 			job.ID = ids[i]
-			job.State = model.JobStateQueueing
+			setJobStateToQueueing(job)
 			if err = buildJobDependence(t, job); err != nil {
 				return errors.Trace(err)
 			}
@@ -310,7 +317,11 @@ func (d *ddl) addBatchDDLJobs(tasks []*limitJobTask) {
 			}
 			failpoint.Inject("MockModifyJobArg", func(val failpoint.Value) {
 				if val.(bool) {
-					if len(job.Args) > 0 {
+					if job.Type == model.ActionMultiSchemaChange {
+						if len(job.MultiSchemaInfo.SubJobs) > 0 && len(job.MultiSchemaInfo.SubJobs[0].Args) > 0 {
+							job.MultiSchemaInfo.SubJobs[0].Args[0] = 1
+						}
+					} else if len(job.Args) > 0 {
 						job.Args[0] = 1
 					}
 				}
@@ -338,6 +349,15 @@ func (d *ddl) addBatchDDLJobs(tasks []*limitJobTask) {
 	} else {
 		logutil.BgLogger().Info("[ddl] add DDL jobs", zap.Int("batch count", len(tasks)), zap.String("jobs", jobs))
 	}
+}
+
+func setJobStateToQueueing(job *model.Job) {
+	if job.Type == model.ActionMultiSchemaChange && job.MultiSchemaInfo != nil {
+		for _, sub := range job.MultiSchemaInfo.SubJobs {
+			sub.State = model.JobStateQueueing
+		}
+	}
+	job.State = model.JobStateQueueing
 }
 
 // getHistoryDDLJob gets a DDL job with job's ID from history queue.
@@ -422,6 +442,11 @@ func (w *worker) deleteRange(ctx context.Context, job *model.Job) error {
 
 func jobNeedGC(job *model.Job) bool {
 	if !job.IsCancelled() {
+		if job.Warning != nil && dbterror.ErrCantDropFieldOrKey.Equal(job.Warning) {
+			// For the field/key not exists warnings, there is no need to
+			// delete the ranges.
+			return false
+		}
 		switch job.Type {
 		case model.ActionAddIndex, model.ActionAddPrimaryKey:
 			if job.State != model.JobStateRollbackDone {
@@ -430,7 +455,9 @@ func jobNeedGC(job *model.Job) bool {
 			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
 			return true
 		case model.ActionDropSchema, model.ActionDropTable, model.ActionTruncateTable, model.ActionDropIndex, model.ActionDropPrimaryKey,
-			model.ActionDropTablePartition, model.ActionTruncateTablePartition, model.ActionDropColumn, model.ActionDropColumns, model.ActionModifyColumn, model.ActionDropIndexes:
+			model.ActionDropTablePartition, model.ActionTruncateTablePartition, model.ActionDropColumn, model.ActionModifyColumn:
+			return true
+		case model.ActionMultiSchemaChange:
 			return true
 		}
 	}
@@ -448,7 +475,7 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 	if jobNeedGC(job) {
 		err = w.deleteRange(w.ddlJobCtx, job)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
@@ -725,7 +752,7 @@ func writeBinlog(binlogCli *pumpcli.PumpsClient, txn kv.Transaction, job *model.
 		// When this column is in the "delete only" and "delete reorg" states, the binlog of "drop column" has not been written yet,
 		// but the column has been removed from the binlog of the write operation.
 		// So we add this binlog to enable downstream components to handle DML correctly in this schema state.
-		((job.Type == model.ActionDropColumn || job.Type == model.ActionDropColumns) && job.SchemaState == model.StateDeleteOnly) {
+		(job.Type == model.ActionDropColumn && job.SchemaState == model.StateDeleteOnly) {
 		if skipWriteBinlog(job) {
 			return
 		}
@@ -816,7 +843,9 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 	// Mock for run ddl job panic.
 	failpoint.Inject("mockPanicInRunDDLJob", func(val failpoint.Value) {})
 
-	logutil.Logger(w.logCtx).Info("[ddl] run DDL job", zap.String("job", job.String()))
+	if job.Type != model.ActionMultiSchemaChange {
+		logutil.Logger(w.logCtx).Info("[ddl] run DDL job", zap.String("job", job.String()))
+	}
 	timeStart := time.Now()
 	if job.RealStartTS == 0 {
 		job.RealStartTS = t.StartTS
@@ -868,12 +897,8 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = w.onExchangeTablePartition(d, t, job)
 	case model.ActionAddColumn:
 		ver, err = onAddColumn(d, t, job)
-	case model.ActionAddColumns:
-		ver, err = onAddColumns(d, t, job)
 	case model.ActionDropColumn:
 		ver, err = onDropColumn(d, t, job)
-	case model.ActionDropColumns:
-		ver, err = onDropColumns(d, t, job)
 	case model.ActionModifyColumn:
 		ver, err = w.onModifyColumn(d, t, job)
 	case model.ActionSetDefaultValue:
@@ -884,8 +909,6 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = w.onCreateIndex(d, t, job, true)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = onDropIndex(d, t, job)
-	case model.ActionDropIndexes:
-		ver, err = onDropIndexes(d, t, job)
 	case model.ActionRenameIndex:
 		ver, err = onRenameIndex(d, t, job)
 	case model.ActionAddForeignKey:
@@ -946,6 +969,8 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onAlterCacheTable(d, t, job)
 	case model.ActionAlterNoCacheTable:
 		ver, err = onAlterNoCacheTable(d, t, job)
+	case model.ActionMultiSchemaChange:
+		ver, err = onMultiSchemaChange(w, d, t, job)
 	default:
 		// Invalid job, cancel it.
 		job.State = model.JobStateCancelled
