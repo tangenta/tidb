@@ -93,19 +93,33 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 			proxyJob := cloneFromSubJob(job, sub)
 			ver, err = w.runDDLJob(d, t, proxyJob)
 			mergeBackToSubJob(proxyJob, sub)
-			handleRevertibleException(job, sub, i, proxyJob.Error)
+			handleRevertibleException(job, sub, proxyJob.Error)
 			return ver, err
 		}
 		// All the sub-jobs are non-revertible.
 		job.MultiSchemaInfo.Revertible = false
 		// Step the sub-jobs to the non-revertible states all at once.
-		for _, sub := range job.MultiSchemaInfo.SubJobs {
+		for i, sub := range job.MultiSchemaInfo.SubJobs {
 			if isFinished(sub) {
 				continue
 			}
 			proxyJob := cloneFromSubJob(job, sub)
 			ver, err = w.runDDLJob(d, t, proxyJob)
 			mergeBackToSubJob(proxyJob, sub)
+			if err != nil {
+				job.MultiSchemaInfo.Revertible = true
+				handleRevertibleException(job, sub, proxyJob.Error)
+				for j := i - 1; j >= 0; j-- {
+					sub := job.MultiSchemaInfo.SubJobs[j]
+					if isFinished(sub) {
+						continue
+					}
+					proxyJob := cloneFromSubJob(job, sub)
+					ver, err = w.runDDLJob(d, t, proxyJob)
+					mergeBackToSubJob(proxyJob, sub)
+				}
+				return ver, err
+			}
 		}
 		return ver, err
 	}
@@ -170,7 +184,7 @@ func mergeBackToSubJob(job *model.Job, sub *model.SubJob) {
 	sub.RowCount = job.RowCount
 }
 
-func handleRevertibleException(job *model.Job, subJob *model.SubJob, idx int, err *terror.Error) {
+func handleRevertibleException(job *model.Job, subJob *model.SubJob, err *terror.Error) {
 	if !isAbnormal(subJob) {
 		return
 	}
