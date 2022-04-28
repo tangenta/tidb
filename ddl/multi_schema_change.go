@@ -83,7 +83,7 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 
 		// The sub-jobs are normally running.
 		// Run the first executable sub-job.
-		for i, sub := range job.MultiSchemaInfo.SubJobs {
+		for _, sub := range job.MultiSchemaInfo.SubJobs {
 			if !sub.Revertible || isFinished(sub) {
 				// Skip the sub jobs which related schema states
 				// are in the last revertible point.
@@ -96,31 +96,29 @@ func onMultiSchemaChange(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 			handleRevertibleException(job, sub, proxyJob.Error)
 			return ver, err
 		}
-		// All the sub-jobs are non-revertible.
-		job.MultiSchemaInfo.Revertible = false
+
+		// Save tblInfo and subJobs for rollback
+		tblInfo, _ := t.GetTable(job.SchemaID, job.TableID)
+		subJobs := make([]model.SubJob, len(job.MultiSchemaInfo.SubJobs))
 		// Step the sub-jobs to the non-revertible states all at once.
 		for i, sub := range job.MultiSchemaInfo.SubJobs {
 			if isFinished(sub) {
 				continue
 			}
+			subJobs[i] = *sub
 			proxyJob := cloneFromSubJob(job, sub)
 			ver, err = w.runDDLJob(d, t, proxyJob)
 			mergeBackToSubJob(proxyJob, sub)
 			if err != nil {
-				job.MultiSchemaInfo.Revertible = true
-				handleRevertibleException(job, sub, proxyJob.Error)
 				for j := i - 1; j >= 0; j-- {
-					sub := job.MultiSchemaInfo.SubJobs[j]
-					if isFinished(sub) {
-						continue
-					}
-					proxyJob := cloneFromSubJob(job, sub)
-					ver, err = w.runDDLJob(d, t, proxyJob)
-					mergeBackToSubJob(proxyJob, sub)
+					job.MultiSchemaInfo.SubJobs[j] = &subJobs[j]
 				}
-				return ver, err
+				handleRevertibleException(job, sub, proxyJob.Error)
+				return updateVersionAndTableInfo(d, t, job, tblInfo, true)
 			}
 		}
+		// All the sub-jobs are non-revertible.
+		job.MultiSchemaInfo.Revertible = false
 		return ver, err
 	}
 	// Run the rest non-revertible sub-jobs one by one.
