@@ -892,16 +892,19 @@ func verifyNoOverflowShardBits(s *sessionPool, tbl table.Table, shardRowIDBits u
 }
 
 func onRenameTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error) {
-	var oldSchemaID int64
-	var oldSchemaName model.CIStr
+	var oldSchemaID, newSchemaID int64
+	var oldSchemaName, newSchemaName model.CIStr
 	var tableName model.CIStr
-	if err := job.DecodeArgs(&oldSchemaID, &tableName, &oldSchemaName); err != nil {
+	if err := job.DecodeArgs(&oldSchemaID, &tableName, &oldSchemaName, &newSchemaID, &newSchemaName); err != nil {
 		// Invalid arguments, cancel this job.
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
 	}
 
-	newSchemaID := job.SchemaID
+	if job.MultiSchemaInfo == nil {
+		newSchemaID = job.SchemaID
+	}
+
 	err := checkTableNotExists(d, t, newSchemaID, tableName.L)
 	if err != nil {
 		if infoschema.ErrDatabaseNotExists.Equal(err) || infoschema.ErrTableExists.Equal(err) {
@@ -910,7 +913,12 @@ func onRenameTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error)
 		return ver, errors.Trace(err)
 	}
 
-	ver, tblInfo, err := checkAndRenameTables(t, job, oldSchemaID, job.SchemaID, &oldSchemaName, &tableName)
+	if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
+		job.MarkNonRevertible()
+		return ver, nil
+	}
+
+	ver, tblInfo, err := checkAndRenameTables(t, job, oldSchemaID, newSchemaID, &oldSchemaName, &tableName)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
@@ -920,6 +928,13 @@ func onRenameTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error)
 		return ver, errors.Trace(err)
 	}
 	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
+
+	if job.MultiSchemaInfo != nil {
+		job.SchemaID = newSchemaID
+		job.SchemaName = newSchemaName.L
+		job.TableID = tblInfo.ID
+		job.TableName = tableName.L
+	}
 	return ver, nil
 }
 

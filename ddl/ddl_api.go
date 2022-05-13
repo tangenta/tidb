@@ -5245,7 +5245,7 @@ func (d *ddl) RenameTable(ctx sessionctx.Context, oldIdent, newIdent ast.Ident, 
 		TableName:  oldIdent.Name.L,
 		Type:       model.ActionRenameTable,
 		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{schemas[0].ID, newIdent.Name, schemas[0].Name},
+		Args:       []interface{}{schemas[0].ID, newIdent.Name, schemas[0].Name, schemas[1].ID, schemas[1].Name},
 	}
 
 	err = d.DoDDLJob(ctx, job)
