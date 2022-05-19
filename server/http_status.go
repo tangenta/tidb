@@ -190,12 +190,48 @@ func (b *Ballast) GenHTTPHandler() func(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+type customHandler struct {
+	writer     *customResponseWriter
+	subHandler http.Handler
+}
+
+func (c *customHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	c.writer.sizeInBytes = 0
+	c.writer.subResponseWriter = writer
+	c.subHandler.ServeHTTP(c.writer, request)
+	logutil.BgLogger().Info("metric size", zap.Int("size", c.writer.sizeInBytes))
+}
+
+type customResponseWriter struct {
+	sizeInBytes       int
+	subResponseWriter http.ResponseWriter
+}
+
+func (m *customResponseWriter) Header() http.Header {
+	return m.subResponseWriter.Header()
+}
+
+func (m *customResponseWriter) Write(i []byte) (int, error) {
+	m.sizeInBytes += len(i)
+	return m.subResponseWriter.Write(i)
+}
+
+func (m *customResponseWriter) WriteHeader(statusCode int) {
+	m.subResponseWriter.WriteHeader(statusCode)
+}
+
 func (s *Server) startHTTPServer() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/status", s.handleStatus).Name("Status")
 	// HTTP path for prometheus.
-	router.Handle("/metrics", promhttp.Handler()).Name("Metrics")
+	router.Handle("/metrics", &customHandler{
+		writer: &customResponseWriter{
+			sizeInBytes:       0,
+			subResponseWriter: nil,
+		},
+		subHandler: promhttp.Handler(),
+	}).Name("Metrics")
 
 	// HTTP path for dump statistics.
 	router.Handle("/stats/dump/{db}/{table}", s.newStatsHandler()).Name("StatsDump")
