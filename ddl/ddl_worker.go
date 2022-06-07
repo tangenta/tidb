@@ -893,6 +893,8 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = w.onCreateIndex(d, t, job, false)
 	case model.ActionAddPrimaryKey:
 		ver, err = w.onCreateIndex(d, t, job, true)
+	case model.ActionAddIndexes:
+		ver, err = w.onCreateIndex(d, t, job, false)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = onDropIndex(d, t, job)
 	case model.ActionRenameIndex:

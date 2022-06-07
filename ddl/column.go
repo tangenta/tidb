@@ -1082,7 +1082,7 @@ func (w *worker) updateColumnAndIndexes(t table.Table, oldCol, col *model.Column
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = w.addTableIndex(t, idxes[i], reorgInfo)
+		err = w.addTableIndex(t, []*model.IndexInfo{idxes[i]}, reorgInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
