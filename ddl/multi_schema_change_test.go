@@ -517,7 +517,7 @@ func TestMultiSchemaChangeAddIndexes(t *testing.T) {
 	tk.MustExec("insert into t values (1, 1, 1), (2, 2, 2), (3, 3, 1);")
 	tk.MustGetErrCode("alter table t add unique index i1(a), add unique index i2(a, b), add unique index i3(c);",
 		errno.ErrDupEntry)
-	tk.MustQuery("show index from t;").Check(testkit.Rows( /* no index */ ))
+	tk.MustQuery("show index from t;").Check(testkit.Rows( /* no index */))
 	tk.MustExec("alter table t add index i1(a), add index i2(a, b), add index i3(c);")
 }
 
@@ -535,8 +535,8 @@ func TestMultiSchemaChangeAddIndexesCancelled(t *testing.T) {
 	tk.MustExec("insert into t values (1, 2, 3);")
 	jobIDExt := wrapJobIDExtCallback(originHook)
 	cancelHook := newCancelJobHook(store, dom, func(job *model.Job) bool {
-		// Cancel the job when index 't2' is in write-reorg.
-		return job.MultiSchemaInfo.SubJobs[2].SchemaState == model.StateWriteReorganization
+		// Cancel the job when indexes in write-reorg.
+		return job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StateWriteReorganization
 	})
 	dom.DDL().SetHook(composeHooks(dom, jobIDExt, cancelHook))
 	tk.MustGetErrCode("alter table t "+
@@ -544,19 +544,19 @@ func TestMultiSchemaChangeAddIndexesCancelled(t *testing.T) {
 		"add index t2(a), add index t3(a, b);", errno.ErrCancelledDDLJob)
 	dom.DDL().SetHook(originHook)
 	cancelHook.MustCancelDone(t)
-	tk.MustQuery("show index from t;").Check(testkit.Rows( /* no index */ ))
+	tk.MustQuery("show index from t;").Check(testkit.Rows( /* no index */))
 	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2 3"))
 	tk.MustExec("admin check table t;")
 	// Check the adding indexes are put to del-ranges.
-	checkDelRangeCnt(tk, jobIDExt.jobID, 3)
+	checkDelRangeCnt(tk, jobIDExt.jobID, 1)
 
 	// Test cancel failed when some sub-jobs have been finished.
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (a int, b int, c int);")
 	tk.MustExec("insert into t values (1, 2, 3);")
 	cancelHook = newCancelJobHook(store, dom, func(job *model.Job) bool {
-		// Cancel the job when index 't1' is in public.
-		return job.MultiSchemaInfo.SubJobs[1].SchemaState == model.StatePublic
+		// Cancel the job when indexes in public.
+		return job.MultiSchemaInfo.SubJobs[0].SchemaState == model.StatePublic
 	})
 	dom.DDL().SetHook(cancelHook)
 	tk.MustExec("alter table t add index t(a, b), add index t1(a), " +
@@ -1068,7 +1068,7 @@ func TestMultiSchemaChangeAlterIndexVisibility(t *testing.T) {
 	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
 	tk.MustExec("create table t (a int, b int, index idx(b));")
 	tk.MustExec("alter table t add index idx2(a), alter index idx visible;")
-	tk.MustQuery("select * from t use index (idx, idx2);").Check(testkit.Rows( /* no rows */ ))
+	tk.MustQuery("select * from t use index (idx, idx2);").Check(testkit.Rows( /* no rows */))
 }
 
 func composeHooks(dom *domain.Domain, cbs ...ddl.Callback) ddl.Callback {

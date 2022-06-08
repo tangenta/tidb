@@ -344,7 +344,7 @@ func mergeAddIndex(info *model.MultiSchemaInfo) {
 		if subJob.Type == model.ActionAddIndex {
 			if newSubJob == nil {
 				newSubJob = new(model.SubJob)
-				newSubJob.Type = model.ActionAddIndexes
+				newSubJob.Type = model.ActionAddIndex
 				newSubJob.Args = nil
 				newSubJob.RawArgs = nil
 				newSubJob.SchemaState = subJob.SchemaState

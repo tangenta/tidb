@@ -96,7 +96,6 @@ const (
 	ActionAlterNoCacheTable             ActionType = 59
 	ActionCreateTables                  ActionType = 60
 	ActionMultiSchemaChange             ActionType = 61
-	ActionAddIndexes                    ActionType = 62
 )
 
 var actionMap = map[ActionType]string{
@@ -160,7 +159,6 @@ var actionMap = map[ActionType]string{
 	ActionAlterNoCacheTable:             "alter table nocache",
 	ActionAlterTableStatsOptions:        "alter table statistics options",
 	ActionMultiSchemaChange:             "alter table multi-schema change",
-	ActionAddIndexes:                    "add multi-indexes",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.
