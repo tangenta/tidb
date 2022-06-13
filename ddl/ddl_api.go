@@ -3257,6 +3257,20 @@ func (d *ddl) RebaseAutoID(ctx sessionctx.Context, ident ast.Ident, newBase int6
 		actionType = model.ActionRebaseAutoID
 	}
 
+	if !force {
+		newBaseTemp, err := adjustNewBaseToNextGlobalID(ctx, t, tp, newBase)
+		if err != nil {
+			return err
+		}
+		if newBase != newBaseTemp {
+			ctx.GetSessionVars().StmtCtx.AppendNote(
+				fmt.Errorf("Can't reset AUTO_INCREMENT to %d without FORCE option, using %d instead",
+					newBase, newBaseTemp,
+				))
+			return nil
+		}
+	}
+
 	job := &model.Job{
 		SchemaID:   schema.ID,
 		TableID:    t.Meta().ID,
