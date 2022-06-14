@@ -1078,6 +1078,23 @@ func TestMultiSchemaChangeAlterIndexVisibility(t *testing.T) {
 	tk.MustQuery("select * from t use index (idx, idx2);").Check(testkit.Rows( /* no rows */ ))
 }
 
+func TestMultiSchemaChangeWithExpressionIndex(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test;")
+	tk.MustExec("set @@global.tidb_enable_change_multi_schema = 1;")
+	tk.MustExec("create table t (a int, b int);")
+	tk.MustExec("insert into t values (1, 2), (2, 1);")
+	tk.MustGetErrCode("alter table t drop column a, add unique index idx((a + b));", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t add column c int, change column a d bigint, add index idx((a + a))", errno.ErrUnsupportedDDLOperation)
+	tk.MustGetErrCode("alter table t add column c int default 10, add index idx1((a + b)), add unique index idx2((a + b));",
+		errno.ErrDupEntry)
+	tk.MustQuery("select * from t;").Check(testkit.Rows("1 2", "2 1"))
+	tk.MustExec("alter table t add column c int default 10, add index idx1((a + b)), add unique index idx2((a*10 + b));")
+	tk.MustQuery("select * from t use index(idx1, idx2);").Check(testkit.Rows("1 2 10", "2 1 10"))
+}
+
 func composeHooks(dom *domain.Domain, cbs ...ddl.Callback) ddl.Callback {
 	return &ddl.TestDDLCallback{
 		Do: dom,
