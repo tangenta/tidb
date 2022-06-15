@@ -690,14 +690,18 @@ func (t *TableInfo) IsAutoRandomBitColUnsigned() bool {
 
 // Cols returns the columns of the table in public state.
 func (t *TableInfo) Cols() []*ColumnInfo {
-	publicColumns := make([]*ColumnInfo, 0, len(t.Columns))
+	publicColumns := make([]*ColumnInfo, len(t.Columns))
+	maxOffset := -1
 	for _, col := range t.Columns {
 		if col.State != StatePublic {
 			continue
 		}
-		publicColumns = append(publicColumns, col)
+		publicColumns[col.Offset] = col
+		if maxOffset < col.Offset {
+			maxOffset = col.Offset
+		}
 	}
-	return publicColumns
+	return publicColumns[0 : maxOffset+1]
 }
 
 // FindIndexByName finds index by name.

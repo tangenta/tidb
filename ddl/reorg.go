@@ -486,8 +486,9 @@ func (dc *ddlCtx) GetTableMaxHandle(ctx *JobContext, startTS uint64, tbl table.P
 		}
 	case tblInfo.IsCommonHandle:
 		pkIdx = tables.FindPrimaryIndex(tblInfo)
+		cols := tblInfo.Cols()
 		for _, idxCol := range pkIdx.Columns {
-			handleCols = append(handleCols, tblInfo.Columns[idxCol.Offset])
+			handleCols = append(handleCols, cols[idxCol.Offset])
 		}
 	default:
 		handleCols = []*model.ColumnInfo{model.NewExtraHandleColInfo()}
