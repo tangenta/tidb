@@ -325,50 +325,64 @@ func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context,
 	// ActionAddIndex, ActionAddPrimaryKey needs do it, because it needs to be rolled back when it's canceled.
 	case model.ActionAddIndex, model.ActionAddPrimaryKey:
 		tableID := job.TableID
-		var indexID int64
-		var ifExists bool
+		indexID := make([]int64, 1)
+		ifExists := make([]bool, 1)
 		var partitionIDs []int64
-		if err := job.DecodeArgs(&indexID, &ifExists, &partitionIDs); err != nil {
-			return errors.Trace(err)
+		if err := job.DecodeArgs(&indexID[0], &ifExists[0], &partitionIDs); err != nil {
+			if err = job.DecodeArgs(&indexID, &ifExists, &partitionIDs); err != nil {
+				return errors.Trace(err)
+			}
 		}
 		if len(partitionIDs) > 0 {
 			for _, pid := range partitionIDs {
-				startKey := tablecodec.EncodeTableIndexPrefix(pid, indexID)
-				endKey := tablecodec.EncodeTableIndexPrefix(pid, indexID+1)
-				elemID := ea.allocForIndexID(pid, indexID)
-				if err := doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("partition table ID is %d", pid)); err != nil {
-					return errors.Trace(err)
+				for _, idxID := range indexID {
+					startKey := tablecodec.EncodeTableIndexPrefix(pid, idxID)
+					endKey := tablecodec.EncodeTableIndexPrefix(pid, idxID+1)
+					elemID := ea.allocForIndexID(pid, idxID)
+					if err := doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("partition table ID is %d", pid)); err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 		} else {
-			startKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID)
-			endKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID+1)
-			elemID := ea.allocForIndexID(tableID, indexID)
-			return doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("table ID is %d", tableID))
+			for _, idxID := range indexID {
+				startKey := tablecodec.EncodeTableIndexPrefix(tableID, idxID)
+				endKey := tablecodec.EncodeTableIndexPrefix(tableID, idxID+1)
+				elemID := ea.allocForIndexID(tableID, idxID)
+				return doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("table ID is %d", tableID))
+			}
 		}
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		tableID := job.TableID
 		var indexName interface{}
-		var ifExists bool
-		var indexID int64
 		var partitionIDs []int64
-		if err := job.DecodeArgs(&indexName, &ifExists, &indexID, &partitionIDs); err != nil {
-			return errors.Trace(err)
+		ifExists := make([]bool, 1)
+		indexID := make([]int64, 1)
+		if err := job.DecodeArgs(&indexName, &ifExists[0], &indexID[0], &partitionIDs); err != nil {
+			if err = job.DecodeArgs(&indexName, &ifExists, &indexID, &partitionIDs); err != nil {
+				return errors.Trace(err)
+			}
 		}
 		if len(partitionIDs) > 0 {
 			for _, pid := range partitionIDs {
-				startKey := tablecodec.EncodeTableIndexPrefix(pid, indexID)
-				endKey := tablecodec.EncodeTableIndexPrefix(pid, indexID+1)
-				elemID := ea.allocForIndexID(pid, indexID)
-				if err := doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("partition table ID is %d", pid)); err != nil {
-					return errors.Trace(err)
+				for _, idxID := range indexID {
+					startKey := tablecodec.EncodeTableIndexPrefix(pid, idxID)
+					endKey := tablecodec.EncodeTableIndexPrefix(pid, idxID+1)
+					elemID := ea.allocForIndexID(pid, idxID)
+					if err := doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("partition table ID is %d", pid)); err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 		} else {
-			startKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID)
-			endKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID+1)
-			elemID := ea.allocForIndexID(tableID, indexID)
-			return doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("index ID is %d", indexID))
+			for _, idxID := range indexID {
+				startKey := tablecodec.EncodeTableIndexPrefix(tableID, idxID)
+				endKey := tablecodec.EncodeTableIndexPrefix(tableID, idxID+1)
+				elemID := ea.allocForIndexID(tableID, idxID)
+				if err := doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("index ID is %d", idxID)); err != nil {
+					return errors.Trace(err)
+				}
+			}
 		}
 	case model.ActionDropColumn:
 		var colName model.CIStr
