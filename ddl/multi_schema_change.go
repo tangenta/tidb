@@ -192,6 +192,10 @@ func handleRevertibleException(job *model.Job, subJob *model.SubJob, err *terror
 	// Flush the cancelling state and cancelled state to sub-jobs.
 	for _, sub := range job.MultiSchemaInfo.SubJobs {
 		switch sub.State {
+		case model.JobStateCancelled:
+			if !sub.Revertible {
+				sub.State = model.JobStateCancelling
+			}
 		case model.JobStateRunning:
 			sub.State = model.JobStateCancelling
 		case model.JobStateNone, model.JobStateQueueing:
