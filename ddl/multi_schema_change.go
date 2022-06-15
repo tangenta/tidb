@@ -230,8 +230,11 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 		col := job.Args[0].(*table.Column)
 		pos := job.Args[1].(*ast.ColumnPosition)
 		info.AddColumns = append(info.AddColumns, col.Name)
+		for colName := range col.Dependences {
+			info.RelativeColumns = append(info.RelativeColumns, model.CIStr{L: colName, O: colName})
+		}
 		if pos != nil && pos.Tp == ast.ColumnPositionAfter {
-			info.RelativeColumns = append(info.RelativeColumns, pos.RelativeColumn.Name)
+			info.PositionColumns = append(info.PositionColumns, pos.RelativeColumn.Name)
 		}
 	case model.ActionDropColumn:
 		colName := job.Args[0].(model.CIStr)
@@ -269,7 +272,7 @@ func fillMultiSchemaInfo(info *model.MultiSchemaInfo, job *model.Job) (err error
 			info.ModifyColumns = append(info.ModifyColumns, newCol.Name)
 		}
 		if pos != nil && pos.Tp == ast.ColumnPositionAfter {
-			info.RelativeColumns = append(info.RelativeColumns, pos.RelativeColumn.Name)
+			info.PositionColumns = append(info.PositionColumns, pos.RelativeColumn.Name)
 		}
 	case model.ActionSetDefaultValue:
 		col := job.Args[0].(*table.Column)
@@ -321,10 +324,13 @@ func checkOperateSameColAndIdx(info *model.MultiSchemaInfo) error {
 	if err := checkColumns(info.DropColumns, true); err != nil {
 		return err
 	}
-	if err := checkColumns(info.RelativeColumns, false); err != nil {
+	if err := checkColumns(info.PositionColumns, false); err != nil {
 		return err
 	}
 	if err := checkColumns(info.ModifyColumns, true); err != nil {
+		return err
+	}
+	if err := checkColumns(info.RelativeColumns, false); err != nil {
 		return err
 	}
 
