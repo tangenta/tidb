@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 type currentColumn struct {
@@ -46,6 +47,26 @@ type currentTable struct {
 	columns []*currentColumn
 	indexes string
 	rn      *rand.Rand
+}
+
+func (t *currentTable) Clone() *currentTable {
+	newCols := make([]*currentColumn, 0, len(t.columns))
+	for _, c := range t.columns {
+		newCols = append(newCols, &currentColumn{
+			name:      c.name,
+			tp:        c.tp,
+			valInit:   c.valInit,
+			valInsert: c.valInsert,
+			valUpdate: c.valUpdate,
+			descTp:    c.descTp,
+			invisible: c.invisible,
+		})
+	}
+	return &currentTable{
+		columns: newCols,
+		indexes: t.indexes,
+		rn:      t.rn,
+	}
 }
 
 type modification struct {
@@ -77,9 +98,10 @@ func TestMultiSchemaChangeState(t *testing.T) {
 	tk1 := testkit.NewTestKit(t, store)
 	tk1.MustExec("use test")
 	seed := time.Now().UnixNano()
+	seed = 1658389165834859000
 	logutil.BgLogger().Warn("[test] TestMultiSchemaChangeState", zap.Int64("current seed", seed))
 
-	tbl := currentTable{
+	tbl := &currentTable{
 		columns: []*currentColumn{
 			{"c_1", "int", "100", "101", "102", "int(11)", false},
 			{"c_2", "char(20)", "'123'", "'12'", "'1'", "char(20)", false},
@@ -102,6 +124,7 @@ func TestMultiSchemaChangeState(t *testing.T) {
 			"index idx_4(c_4), index idx_5(c_pos_1, c_pos_2), index idx_visible(c_idx_visible)",
 		rn: rand.New(rand.NewSource(seed)),
 	}
+	tblBack := tbl.Clone()
 
 	modifications := modifications{
 		"c_1": {
@@ -175,62 +198,79 @@ func TestMultiSchemaChangeState(t *testing.T) {
 		},
 	}
 
-	tk.MustExec(tbl.createTable())
-	tk.MustExec(tbl.insertInitialData())
+	picker := newModificationPicker(modifications)
+	for {
+		tk.MustExec("drop table if exists t;")
+		createTableSQL := tbl.createTable()
+		tk.MustExec(createTableSQL)
+		initInsertSQL := tbl.insertInitialData()
+		tk.MustExec(initInsertSQL)
+		logutil.BgLogger().Warn("[test] TestMultiSchemaChangeState",
+			zap.String("create table", createTableSQL),
+			zap.String("insert into", initInsertSQL))
 
-	multiSchemaChangeSQL, applyChange := tbl.alterTable(modifications)
+		multiSchemaChangeSQL, applyChange := tbl.alterTable(picker)
+		logutil.BgLogger().Warn("[test] TestMultiSchemaChangeState",
+			zap.Int64("current seed", seed),
+			zap.String("SQL", multiSchemaChangeSQL))
 
-	var lastStates subStates
-	var checkErr error
-	changeNoticeable := false
-	originHook := dom.DDL().GetHook()
-	dom.DDL().SetHook(&ddl.TestDDLCallback{Do: dom, OnJobUpdatedExported: func(job *model.Job) {
-		if checkErr != nil {
-			return
-		}
-		if newStates, updated := updateSubSchemaStates(job, lastStates); updated {
-			lastStates = newStates
-		} else {
-			return
-		}
-		if !changeNoticeable && !job.MultiSchemaInfo.Revertible {
-			changeNoticeable = true
-			applyChange()
-		}
-		colNames := getColNamesFromDescribe(t, tk1, true)
-		insertSQL := tbl.insert(colNames)
-		_, checkErr = tk1.Exec(insertSQL)
-		assert.NoError(t, checkErr)
-		if checkErr != nil {
-			return
-		}
-		updateSQL := tbl.update(colNames)
-		_, checkErr = tk1.Exec(updateSQL)
-		assert.NoError(t, checkErr)
-		if checkErr != nil {
-			return
-		}
-		deleteSQL := tbl.delete(colNames)
-		_, checkErr = tk1.Exec(deleteSQL)
-		assert.NoError(t, checkErr)
-		if checkErr != nil {
-			return
-		}
-		checkErr = assertHasOnlyOneRow(tk1)
-		assert.NoError(t, checkErr)
-	}})
-	tk.MustExec(multiSchemaChangeSQL)
-	require.NoError(t, checkErr)
-	dom.DDL().SetHook(originHook)
+		var lastStates subStates
+		var checkErr error
+		changeNoticeable := false
+		originHook := dom.DDL().GetHook()
+		dom.DDL().SetHook(&ddl.TestDDLCallback{Do: dom, OnJobUpdatedExported: func(job *model.Job) {
+			if checkErr != nil {
+				return
+			}
+			if newStates, updated := updateSubSchemaStates(job, lastStates); updated {
+				lastStates = newStates
+			} else {
+				return
+			}
+			if !changeNoticeable && !job.MultiSchemaInfo.Revertible {
+				changeNoticeable = true
+				applyChange()
+			}
+			colNames := getColNamesFromDescribe(t, tk1, true)
+			insertSQL := tbl.insert(colNames)
+			_, checkErr = tk1.Exec(insertSQL)
+			assert.NoError(t, checkErr)
+			if checkErr != nil {
+				return
+			}
+			updateSQL := tbl.update(colNames)
+			_, checkErr = tk1.Exec(updateSQL)
+			assert.NoError(t, checkErr)
+			if checkErr != nil {
+				return
+			}
+			deleteSQL := tbl.delete(colNames)
+			_, checkErr = tk1.Exec(deleteSQL)
+			assert.NoError(t, checkErr)
+			if checkErr != nil {
+				return
+			}
+			checkErr = assertHasOnlyOneRow(tk1)
+			assert.NoError(t, checkErr)
+		}})
+		tk.MustExec(multiSchemaChangeSQL)
+		require.NoError(t, checkErr)
+		dom.DDL().SetHook(originHook)
 
-	tk.MustExec("admin check table t;")
-	newColNames := getColNamesFromDescribe(t, tk, false)
-	newColTps := getColDescTpsFromDescribe(t, tk)
-	require.Equal(t, len(newColNames), len(newColTps))
-	for i := range newColNames {
-		require.Equal(t, newColTps[i], tbl.findColumn(newColNames[i]).descTp)
+		tk.MustExec("admin check table t;")
+		newColNames := getColNamesFromDescribe(t, tk, false)
+		newColTps := getColDescTpsFromDescribe(t, tk)
+		require.Equal(t, len(newColNames), len(newColTps))
+		for i := range newColNames {
+			require.Equal(t, newColTps[i], tbl.findColumn(newColNames[i]).descTp)
+		}
+		require.NoError(t, assertHasOnlyOneRow(tk))
+		notExhausted := picker.nextPermutation()
+		if !notExhausted {
+			break
+		}
+		tbl = tblBack.Clone()
 	}
-	require.NoError(t, assertHasOnlyOneRow(tk))
 }
 
 func (t *currentTable) createTable() string {
@@ -253,19 +293,18 @@ func (t *currentTable) insertInitialData() string {
 	return fmt.Sprintf("insert into t values (%s);", strings.Join(colVals, ", "))
 }
 
-func (t *currentTable) alterTable(possibleMods modifications) (string, func()) {
+func (t *currentTable) alterTable(picker *modificationPicker) (string, func()) {
 	var specs []string
 	cols := make([]*currentColumn, 0, len(t.columns))
 	fns := make([]func(*currentColumn), 0, len(t.columns))
 	for _, c := range t.columns {
-		m, ok := possibleMods[c.name]
+		m, ok := picker.currentModification(c.name)
 		if !ok {
 			continue
 		}
-		spec := m[t.rn.Intn(len(m))]
 		cols = append(cols, c)
-		fns = append(fns, spec.updateCol)
-		specs = append(specs, spec.alterSpec)
+		fns = append(fns, m.updateCol)
+		specs = append(specs, m.alterSpec)
 	}
 	t.rn.Shuffle(len(specs), func(i, j int) {
 		specs[i], specs[j] = specs[j], specs[i]
@@ -389,4 +428,56 @@ func assertHasOnlyOneRow(tk *testkit.TestKit) error {
 		return fmt.Errorf("expected 1 row, got %v", rows)
 	}
 	return nil
+}
+
+type modificationPicker struct {
+	name2Offset map[string]int
+	currentIdx  []int
+	allMod      modifications
+	allIdx      []int
+}
+
+func newModificationPicker(ms modifications) *modificationPicker {
+	cols := make([]string, 0, len(ms))
+	for c := range ms {
+		cols = append(cols, c)
+	}
+	slices.Sort(cols)
+	name2Offset := make(map[string]int, len(ms))
+	for i, name := range cols {
+		name2Offset[name] = i
+	}
+	allIdx := make([]int, 0, len(ms))
+	for _, colName := range cols {
+		allIdx = append(allIdx, len(ms[colName]))
+	}
+	return &modificationPicker{
+		name2Offset: name2Offset,
+		currentIdx:  make([]int, len(ms)),
+		allMod:      ms,
+		allIdx:      allIdx,
+	}
+}
+
+func (m *modificationPicker) currentModification(name string) (modification, bool) {
+	offset, ok := m.name2Offset[name]
+	if !ok {
+		return modification{}, false
+	}
+	idx := m.currentIdx[offset]
+	return m.allMod[name][idx], true
+}
+
+func (m *modificationPicker) nextPermutation() bool {
+	for i := len(m.currentIdx) - 1; i >= 0; i-- {
+		max := m.allIdx[i]
+		cur := m.currentIdx[i]
+		if cur >= max-1 {
+			m.currentIdx[i] = 0
+			continue
+		}
+		m.currentIdx[i] = cur + 1
+		return true
+	}
+	return false
 }
