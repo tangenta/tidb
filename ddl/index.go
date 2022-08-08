@@ -790,7 +790,7 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 			logutil.BgLogger().Error("Lightning: Add index fast path processing:", zap.String("Error:", err.Error()))
 			return false, ver, err
 		}
-		// Only when BackfillState is in running state, then need start to start new backfill task.
+		// Only when BackfillState is in running state, then need to start a new backfill task.
 		if !doReorg || indexInfo.BackfillState == model.BackfillStateMerging {
 			return doReorg, ver, err
 		}
