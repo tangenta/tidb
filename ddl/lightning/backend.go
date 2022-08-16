@@ -35,12 +35,14 @@ type BackendContext struct {
 	backend     *backend.Backend
 	ctx         context.Context
 	cfg         *config.Config
-	EngMgr      EngineManager
+	EngMgr      engineManager
 	sysVars     map[string]string
 	needRestore bool
 }
 
-func (bc *BackendContext) Finish(engineInfoKey string, unique bool, tbl table.Table) error {
+// FinishImport imports all the key-values in engine into the storage, collects the duplicate errors if any, and
+// removes the engine from the backend context.
+func (bc *BackendContext) FinishImport(engineInfoKey string, unique bool, tbl table.Table) error {
 	var errMsg string
 	var keyMsg string
 	ei, exist := bc.EngMgr.Load(engineInfoKey)
@@ -75,6 +77,7 @@ func (bc *BackendContext) Finish(engineInfoKey string, unique bool, tbl table.Ta
 	return nil
 }
 
+// Flush checks the disk quota and imports the current key-values in engine to the storage.
 func (bc *BackendContext) Flush(engineKey string) error {
 	ei, exist := bc.EngMgr.Load(engineKey)
 	if !exist {
@@ -102,10 +105,12 @@ func (bc *BackendContext) Flush(engineKey string) error {
 	return nil
 }
 
+// NeedRestore indicates whether the backfill job need to be restored.
 func (bc *BackendContext) NeedRestore() bool {
 	return bc.needRestore
 }
 
+// SetNeedRestore sets the need restore flag.
 func (bc *BackendContext) SetNeedRestore(needRestore bool) {
 	bc.needRestore = needRestore
 }

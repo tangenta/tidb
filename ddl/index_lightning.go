@@ -88,7 +88,7 @@ func prepareLightningEngine(job *model.Job, indexID int64, workerCnt int) (wCnt 
 func importIndexDataToStore(ctx context.Context, reorg *reorgInfo, indexID int64, unique bool, tbl table.Table) error {
 	if bc, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok && bc.NeedRestore() {
 		engineInfoKey := lit.GenEngineInfoKey(reorg.ID, indexID)
-		err := bc.Finish(engineInfoKey, unique, tbl)
+		err := bc.FinishImport(engineInfoKey, unique, tbl)
 		if err != nil {
 			err = errors.Trace(err)
 			return err

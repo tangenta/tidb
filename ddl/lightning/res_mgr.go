@@ -16,22 +16,25 @@ package lightning
 
 import "sync"
 
-type ResourceManager[T any] struct {
+// resourceManager is a thread-safe manager for resource.
+type resourceManager[T any] struct {
 	item map[string]*T
 	mu   sync.RWMutex
 }
 
-func (m *ResourceManager[T]) init() {
+func (m *resourceManager[T]) init() {
 	m.item = make(map[string]*T, 10)
 }
 
-func (m *ResourceManager[T]) Store(key string, bc *T) {
+// Store stores a resource.
+func (m *resourceManager[T]) Store(key string, bc *T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.item[key] = bc
 }
 
-func (m *ResourceManager[T]) Load(key string) (*T, bool) {
+// Load loads a resource.
+func (m *resourceManager[T]) Load(key string) (*T, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	bc, exist := m.item[key]
@@ -41,7 +44,8 @@ func (m *ResourceManager[T]) Load(key string) (*T, bool) {
 	return bc, exist
 }
 
-func (m *ResourceManager[T]) Drop(key string) {
+// Drop drops a resource.
+func (m *resourceManager[T]) Drop(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.item, key)

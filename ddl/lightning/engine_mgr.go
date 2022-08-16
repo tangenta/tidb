@@ -23,17 +23,18 @@ import (
 	"go.uber.org/zap"
 )
 
-type EngineManager struct {
-	ResourceManager[engineInfo]
+type engineManager struct {
+	resourceManager[engineInfo]
 	MemRoot MemRoot
 }
 
-func (m *EngineManager) init(memRoot MemRoot) {
-	m.ResourceManager.init()
+func (m *engineManager) init(memRoot MemRoot) {
+	m.resourceManager.init()
 	m.MemRoot = memRoot
 }
 
-func (m *EngineManager) Register(bc *BackendContext, job *model.Job, engineKey string, indexID int64, wCnt int) (int, error) {
+// Register create a new engineInfo and register it to the engineManager.
+func (m *engineManager) Register(bc *BackendContext, job *model.Job, engineKey string, indexID int64, wCnt int) (int, error) {
 	var err error
 	// Calculate lightning concurrency degree and set memory usage.
 	// and pre-allocate memory usage for worker
@@ -85,7 +86,8 @@ func (m *EngineManager) Register(bc *BackendContext, job *model.Job, engineKey s
 	return newWorkerCount, nil
 }
 
-func (m *EngineManager) Unregister(engineKey string) {
+// Unregister delete the engineInfo from the engineManager.
+func (m *engineManager) Unregister(engineKey string) {
 	ei, exists := m.Load(engineKey)
 	if !exists {
 		return
@@ -96,8 +98,8 @@ func (m *EngineManager) Unregister(engineKey string) {
 	m.MemRoot.Release(StructSizeEngineInfo)
 }
 
-func (m *EngineManager) UnregisterAll() {
-	// Delete EngineInfo registered in m.EngineManager.engineCache
+// UnregisterAll delete all engineInfo from the engineManager.
+func (m *engineManager) UnregisterAll() {
 	count := len(m.item)
 	for k, en := range m.item {
 		m.MemRoot.ReleaseWithTag(k)

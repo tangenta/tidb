@@ -55,8 +55,9 @@ type Env struct {
 
 var (
 	// GlobalEnv global lightning environment var.
-	GlobalEnv   Env
-	BackCtxMgr  BackendCtxManager
+	GlobalEnv Env
+	// BackCtxMgr is the entry for the lightning backfill process.
+	BackCtxMgr  backendCtxManager
 	maxMemLimit uint64 = 1 * _gb
 )
 
@@ -138,7 +139,7 @@ func InitGlobalLightningBackendEnv() {
 }
 
 // DiskStat check total lightning disk usage and storage available space.
-func (l *Env) DiskStat() (uint64, uint64) {
+func (*Env) DiskStat() (total uint64, available uint64) {
 	totalDiskUsed := BackCtxMgr.CheckDiskQuota(GlobalEnv.diskQuota)
 	sz, err := lcom.GetStorageSize(GlobalEnv.SortPath)
 	if err != nil {

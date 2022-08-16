@@ -62,6 +62,7 @@ func NewEngineInfo(id int64, key string, cfg *backend.EngineConfig, bCtx *Backen
 	return &ei
 }
 
+// Flush imports all the key-values in engine to the storage.
 func (ei *engineInfo) Flush(ctx context.Context) error {
 	err := ei.openedEngine.Flush(ctx)
 	if err != nil {

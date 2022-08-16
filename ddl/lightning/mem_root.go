@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/util/mathutil"
 )
 
+// MemRoot is used to track the memory usage for the lightning backfill process.
 type MemRoot interface {
 	Consume(size int64)
 	Release(size int64)
@@ -69,16 +70,18 @@ func init() {
 	StructSizeWorkerCtx = int64(unsafe.Sizeof(WorkerContext{}))
 }
 
-type MemRootImpl struct {
+// memRootImpl is an implementation of MemRoot.
+type memRootImpl struct {
 	maxLimit      int64
 	currUsage     int64
 	structSize    map[string]int64
-	backendCtxMgr *BackendCtxManager
+	backendCtxMgr *backendCtxManager
 	mu            sync.RWMutex
 }
 
-func NewMemRootImpl(maxQuota int64, bcCtxMgr *BackendCtxManager) *MemRootImpl {
-	return &MemRootImpl{
+// NewMemRootImpl creates a new memRootImpl.
+func NewMemRootImpl(maxQuota int64, bcCtxMgr *backendCtxManager) *memRootImpl {
+	return &memRootImpl{
 		maxLimit:      mathutil.Max(maxQuota, flushSize),
 		currUsage:     0,
 		structSize:    make(map[string]int64, 10),
@@ -86,50 +89,58 @@ func NewMemRootImpl(maxQuota int64, bcCtxMgr *BackendCtxManager) *MemRootImpl {
 	}
 }
 
-func (m *MemRootImpl) SetMaxMemoryQuota(maxQuota int64) {
+// SetMaxMemoryQuota implements MemRoot.
+func (m *memRootImpl) SetMaxMemoryQuota(maxQuota int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.maxLimit = mathutil.Max(maxQuota, flushSize)
 }
 
-func (m *MemRootImpl) MaxMemoryQuota() int64 {
+// MaxMemoryQuota implements MemRoot.
+func (m *memRootImpl) MaxMemoryQuota() int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.maxLimit
 }
 
-func (m *MemRootImpl) CurrentUsage() int64 {
+// CurrentUsage implements MemRoot.
+func (m *memRootImpl) CurrentUsage() int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.currUsage
 }
 
-func (m *MemRootImpl) CurrentUsageWithTag(tag string) int64 {
+// CurrentUsageWithTag implements MemRoot.
+func (m *memRootImpl) CurrentUsageWithTag(tag string) int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.structSize[tag]
 }
 
-func (m *MemRootImpl) Consume(size int64) {
+// Consume implements MemRoot.
+func (m *memRootImpl) Consume(size int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.currUsage += size
 }
 
-func (m *MemRootImpl) Release(size int64) {
+// Release implements MemRoot.
+func (m *memRootImpl) Release(size int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.currUsage -= size
 }
 
-func (m *MemRootImpl) ConsumeWithTag(tag string, size int64) {
+// ConsumeWithTag implements MemRoot.
+func (m *memRootImpl) ConsumeWithTag(tag string, size int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.currUsage += size
 	m.structSize[tag] = size
 }
 
-func (m *MemRootImpl) TryConsume(size int64) error {
+// TryConsume implements MemRoot.
+func (m *memRootImpl) TryConsume(size int64) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.currUsage+size > m.maxLimit {
@@ -138,18 +149,21 @@ func (m *MemRootImpl) TryConsume(size int64) error {
 	return nil
 }
 
-func (m *MemRootImpl) ReleaseWithTag(tag string) {
+// ReleaseWithTag implements MemRoot.
+func (m *memRootImpl) ReleaseWithTag(tag string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.currUsage -= m.structSize[tag]
 	delete(m.structSize, tag)
 }
 
-func (m *MemRootImpl) RefreshConsumption() {
+// RefreshConsumption implements MemRoot.
+func (m *memRootImpl) RefreshConsumption() {
 	m.backendCtxMgr.UpdateMemoryUsage()
 }
 
-func (m *MemRootImpl) WorkerDegree(workerCnt int, engineKey string, jobID int64) int {
+// WorkerDegree implements MemRoot.
+func (m *memRootImpl) WorkerDegree(workerCnt int, engineKey string, jobID int64) int {
 	var enSize int64
 	var currWorkerNum int
 	m.mu.Lock()
