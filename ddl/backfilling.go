@@ -619,7 +619,7 @@ func (w *worker) writePhysicalTableRecord(t table.PhysicalTable, bfWorkerType ba
 	// if litWorkerCnt is 0 or err exist, means no resource for lightning execution,
 	// then go back use kernel way to backfill index.
 	var litWorkerCnt int
-	if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok && bc.NeedRestore() {
+	if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok && !bc.NeedRestore() {
 		if !isPiTREnable(w) {
 			litWorkerCnt, err = prepareLightningEngine(job, reorgInfo.currElement.ID, int(workerCnt))
 			if err == nil && workerCnt >= int32(litWorkerCnt) {
