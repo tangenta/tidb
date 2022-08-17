@@ -121,8 +121,8 @@ func (m *backendCtxManager) Unregister(jobID int64) {
 	if !exist {
 		logutil.BgLogger().Error(LitErrGetBackendFail, zap.Int64("backend key", jobID))
 	}
-	bc.backend.Close()
 	bc.EngMgr.UnregisterAll()
+	bc.backend.Close()
 	m.Drop(jobID)
 	logutil.BgLogger().Info(LitInfoCloseBackend, zap.Int64("backend key", jobID),
 		zap.String("Current Memory Usage:", strconv.FormatInt(m.MemRoot.CurrentUsage(), 10)),

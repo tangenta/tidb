@@ -55,7 +55,7 @@ func (m *resourceManager[T]) Drop(key string) {
 func (m *resourceManager[T]) Keys() []string {
 	ret := make([]string, 0, len(m.item))
 	m.mu.RLock()
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 	for k := range m.item {
 		ret = append(ret, k)
 	}

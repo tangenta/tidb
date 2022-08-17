@@ -100,7 +100,7 @@ func importIndexDataToStore(ctx context.Context, reorg *reorgInfo, indexID int64
 }
 
 // cleanUpLightningEnv will clean one DDL job's backend context.
-func cleanUpLightningEnv(reorg *reorgInfo, isCanceled bool, indexID int64) {
+func cleanUpLightningEnv(reorg *reorgInfo) {
 	if _, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok {
 		lit.BackCtxMgr.Unregister(reorg.ID)
 	}
