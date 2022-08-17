@@ -118,7 +118,7 @@ func cleanUpLightningEnv(reorg *reorgInfo, isCanceled bool, indexID int64) {
 func cleanUpLightningEngines(reorg *reorgInfo) {
 	if bc, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok {
 		bc.SetNeedRestore(false)
-		lit.BackCtxMgr.Unregister(reorg.ID)
+		bc.EngMgr.UnregisterAll()
 	}
 }
 

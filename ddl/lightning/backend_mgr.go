@@ -25,7 +25,7 @@ type backendCtxManager struct {
 }
 
 func (m *backendCtxManager) init(memRoot MemRoot) {
-	m.resourceManager.init()
+	m.resourceManager.init(10)
 	m.MemRoot = memRoot
 }
 

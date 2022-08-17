@@ -29,7 +29,7 @@ type engineManager struct {
 }
 
 func (m *engineManager) init(memRoot MemRoot) {
-	m.resourceManager.init()
+	m.resourceManager.init(10)
 	m.MemRoot = memRoot
 }
 

@@ -22,8 +22,8 @@ type resourceManager[T any] struct {
 	mu   sync.RWMutex
 }
 
-func (m *resourceManager[T]) init() {
-	m.item = make(map[string]*T, 10)
+func (m *resourceManager[T]) init(size int) {
+	m.item = make(map[string]*T, size)
 }
 
 // Store stores a resource.

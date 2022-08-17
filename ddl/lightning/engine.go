@@ -40,7 +40,7 @@ type engineInfo struct {
 	cfg          *backend.EngineConfig
 	tableName    string
 	writerCount  int
-	writerCache  map[string]*backend.LocalEngineWriter
+	writerCache  resourceManager[backend.LocalEngineWriter]
 	memRoot      MemRoot
 }
 
@@ -56,9 +56,9 @@ func NewEngineInfo(id int64, key string, cfg *backend.EngineConfig, bCtx *Backen
 		uuid:         uuid,
 		tableName:    tblName,
 		writerCount:  wCnt,
-		writerCache:  make(map[string]*backend.LocalEngineWriter, wCnt),
 		memRoot:      memRoot,
 	}
+	ei.writerCache.init(wCnt)
 	return &ei
 }
 
@@ -168,7 +168,7 @@ func (ei *engineInfo) NewWorkerCtx(id int) (*WorkerContext, error) {
 func (ei *engineInfo) newWorkerContext(workerID int) (*WorkerContext, error) {
 	wCtxKey := ei.key + strconv.Itoa(workerID)
 	// First get local writer from engine cache.
-	lWrite, exist := ei.writerCache[wCtxKey]
+	lWrite, exist := ei.writerCache.Load(wCtxKey)
 	// If not exist then build one
 	if !exist {
 		var err error
@@ -178,7 +178,7 @@ func (ei *engineInfo) newWorkerContext(workerID int) (*WorkerContext, error) {
 		}
 		// Cache the lwriter, here we do not lock, because this is done under mem root alloc
 		// process it own the lock already while alloc object.
-		ei.writerCache[wCtxKey] = lWrite
+		ei.writerCache.Store(wCtxKey, lWrite)
 	}
 	return &WorkerContext{
 		ctx:    ei.backCtx.ctx,
