@@ -681,7 +681,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	return ver, errors.Trace(err)
 }
 
-// checkAndInitLightningBackfillCtx determines which backfill process will be used. The following three processes is available:
+// checkAndInitLightningBackfillCtx determines which backfill process will be used. The following three processes are available:
 //  1. Txn backfill(original): all the index KVs are written through the transaction interface.
 //  2. Lightning backfill: the index KVs are encoded to SST files and imported to the storage directly.
 //     The incremental index KVs written by DML are redirected to a temporary index.
