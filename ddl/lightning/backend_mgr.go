@@ -82,6 +82,7 @@ func (m *backendCtxManager) Register(ctx context.Context, unique bool, jobID int
 			zap.String("Current Memory Usage:", strconv.FormatInt(m.MemRoot.CurrentUsage(), 10)),
 			zap.String("Memory limitation:", strconv.FormatInt(m.MemRoot.MaxMemoryQuota(), 10)),
 			zap.String("Unique Index:", strconv.FormatBool(unique)))
+		return nil
 	}
 	return nil
 }

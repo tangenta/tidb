@@ -597,13 +597,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	originalState := indexInfo.State
 	switch indexInfo.State {
 	case model.StateNone:
-		// Determine whether the lightning backfill process will be used.
-		if IsEnableFastReorg() {
-			err = lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
-			if err == nil {
-				indexInfo.BackfillState = model.BackfillStateRunning
-			}
-		}
+		checkAndInitLightningBackfillCtx(w, job, indexInfo)
 		// none -> delete only
 		indexInfo.State = model.StateDeleteOnly
 		moveAndUpdateHiddenColumnsToPublic(tblInfo, indexInfo)
@@ -687,6 +681,18 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	return ver, errors.Trace(err)
 }
 
+func checkAndInitLightningBackfillCtx(w *worker, job *model.Job, indexInfo *model.IndexInfo) {
+	// Determine whether the lightning backfill process will be used.
+	if IsEnableFastReorg() {
+		err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
+		if err != nil {
+			logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
+			return
+		}
+		indexInfo.BackfillState = model.BackfillStateRunning
+	}
+}
+
 func doReorgWorkForCreateIndexMultiSchema(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
 	tbl table.Table, indexInfo *model.IndexInfo) (done bool, ver int64, err error) {
 	if job.MultiSchemaInfo.Revertible {
@@ -712,16 +718,25 @@ func goFastDDLBackfill(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
 		logutil.BgLogger().Info("Lightning backfill state running")
 		// Restore reorg task if it interrupts during backfill state and TiDB owner is not changed or restarted.
 		if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok {
-			if bc.NeedRestore() {
+			needRestore := bc.NeedRestore()
+			pitrEnabled := isPiTREnable(w)
+			switch {
+			case needRestore && pitrEnabled:
+				return false, ver, errors.Trace(errors.New(lightning.LitErrIncompatiblePiTR))
+			case needRestore && !pitrEnabled:
 				// If reorg task can not be restore with lightning execution, should restart reorg task to keep data consistent.
 				// TODO：Should be changed after checkpoint.
 				if !canRestoreReorgTask(job, indexInfo.ID) {
 					job.SnapshotVer = 0
-					reorgInfo, err = getReorgInfo(d.jobContext(job), d, rh, job, tbl, elements)
-					if err != nil || reorgInfo.first {
-						return false, ver, errors.Trace(err)
-					}
+					_, err = getReorgInfo(d.jobContext(job), d, rh, job, tbl, elements)
+					return false, ver, errors.Trace(err)
 				}
+			case !needRestore && pitrEnabled:
+				// The lightning backfill process is incompatible with PiTR.
+				// Use the txn way to do backfill the index.
+				logutil.BgLogger().Info("PiTR enabled, disabled lightning backfill")
+			case !needRestore && !pitrEnabled:
+				bc.SetNeedRestore(true)
 			}
 		} else {
 			// Be here, means the DDL Owner changed or restarted, the reorg state is re-entered.
@@ -826,7 +841,7 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 		return false, ver, errors.Trace(err)
 	}
 	// Ingest data to TiKV
-	err = importIndexDataToStore(w.ctx, reorgInfo, indexInfo.ID, indexInfo.Unique, tbl)
+	err = importIndexDataToStore(reorgInfo, indexInfo.ID, indexInfo.Unique, tbl)
 	if err != nil {
 		if kv.ErrKeyExists.Equal(err) {
 			logutil.BgLogger().Warn("Lightning: [DDL] import index duplicate key, convert job to rollback", zap.String("job", job.String()), zap.Error(err))
