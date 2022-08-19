@@ -52,7 +52,7 @@ var (
 func IsEnableFastReorg() bool {
 	// Only when both TiDBDDLEnableFastReorg is set to on and Lightning env has been inited successful,
 	// the add index could choose lightning path to do backfill procedure.
-	if variable.EnableFastReorg.Load() && lit.GlobalEnv.IsInited {
+	if variable.EnableFastReorg.Load() {
 		// Increase telemetryAddIndexLightningUsage
 		telemetryAddIndexLightningUsage.Inc()
 		return true

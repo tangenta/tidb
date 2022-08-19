@@ -599,11 +599,13 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	case model.StateNone:
 		// Determine whether the lightning backfill process will be used.
 		if IsEnableFastReorg() {
-			err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
-			if err != nil {
-				logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
-			} else {
-				indexInfo.BackfillState = model.BackfillStateRunning
+			if lightning.GlobalEnv.IsInited {
+				err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
+				if err != nil {
+					logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
+				} else {
+					indexInfo.BackfillState = model.BackfillStateRunning
+				}
 			}
 		}
 		// none -> delete only
