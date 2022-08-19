@@ -597,19 +597,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	originalState := indexInfo.State
 	switch indexInfo.State {
 	case model.StateNone:
-		// Determine whether the lightning backfill process will be used.
-		if IsEnableFastReorg() {
-			if lightning.GlobalEnv.IsInited {
-				err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
-				if err != nil {
-					logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
-				} else {
-					indexInfo.BackfillState = model.BackfillStateRunning
-				}
-			} else { // New path without lightning backfill
-				indexInfo.BackfillState = model.BackfillStateRunning
-			}
-		}
+		checkAndInitLightningBackfillCtx(w.ctx, job, indexInfo)
 		// none -> delete only
 		indexInfo.State = model.StateDeleteOnly
 		moveAndUpdateHiddenColumnsToPublic(tblInfo, indexInfo)
@@ -691,6 +679,31 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	}
 
 	return ver, errors.Trace(err)
+}
+
+// checkAndInitLightningBackfillCtx determines which backfill process will be used. The following three processes is available:
+//  1. Txn backfill(original): all the index KVs are written through the transaction interface.
+//  2. Lightning backfill: the index KVs are encoded to SST files and imported to the storage directly.
+//     The incremental index KVs written by DML are redirected to a temporary index.
+//     After the backfill is finished, the temporary index records are merged back to the original index.
+//  3. Txn-merge backfill: the backfill index KVs are written through the transaction interface.
+//     The incremental index KVs written by DML are redirected to a temporary index.
+//     After the backfill is finished, the temporary index records are merged back to the original index.
+func checkAndInitLightningBackfillCtx(ctx context.Context, job *model.Job, indexInfo *model.IndexInfo) {
+	if IsEnableFastReorg() {
+		if lightning.GlobalEnv.IsInited {
+			err := lightning.BackCtxMgr.Register(ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
+			if err != nil {
+				return // Txn backfill
+			}
+			indexInfo.BackfillState = model.BackfillStateRunning
+			return // Lightning backfill
+		}
+		// The lightning environment is unavailable, but we can still use the txn-merge backfill.
+		indexInfo.BackfillState = model.BackfillStateRunning
+		return // Txn-merge backfill
+	}
+	// Txn backfill
 }
 
 func doReorgWorkForCreateIndexMultiSchema(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
