@@ -744,7 +744,7 @@ func spawnAddIndexWorker(sessCtx sessionctx.Context, seq int, job *model.Job, t 
 				logutil.BgLogger().Warn(lightning.LitErrCreateEngineFail, zap.Error(err), zap.Bool("fallback", true))
 			} else {
 				// It may reach to a limit of the lightning workers.
-				logutil.BgLogger().Warn(lightning.LitErrCreateEngineFail, zap.Error(err), zap.Bool("fallback", false))
+				logutil.BgLogger().Warn(lightning.LitWarnExtentWorker, zap.Error(err), zap.Bool("fallback", false))
 				return nil
 			}
 		} else {
