@@ -597,7 +597,15 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	originalState := indexInfo.State
 	switch indexInfo.State {
 	case model.StateNone:
-		checkAndInitLightningBackfillCtx(w, job, indexInfo)
+		// Determine whether the lightning backfill process will be used.
+		if IsEnableFastReorg() {
+			err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
+			if err != nil {
+				logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
+			} else {
+				indexInfo.BackfillState = model.BackfillStateRunning
+			}
+		}
 		// none -> delete only
 		indexInfo.State = model.StateDeleteOnly
 		moveAndUpdateHiddenColumnsToPublic(tblInfo, indexInfo)
@@ -679,18 +687,6 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 	}
 
 	return ver, errors.Trace(err)
-}
-
-func checkAndInitLightningBackfillCtx(w *worker, job *model.Job, indexInfo *model.IndexInfo) {
-	// Determine whether the lightning backfill process will be used.
-	if IsEnableFastReorg() {
-		err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
-		if err != nil {
-			logutil.BgLogger().Info(lightning.LitErrCreateBackendFail, zap.Error(err))
-			return
-		}
-		indexInfo.BackfillState = model.BackfillStateRunning
-	}
 }
 
 func doReorgWorkForCreateIndexMultiSchema(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
