@@ -606,6 +606,8 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 				} else {
 					indexInfo.BackfillState = model.BackfillStateRunning
 				}
+			} else { // New path without lightning backfill
+				indexInfo.BackfillState = model.BackfillStateRunning
 			}
 		}
 		// none -> delete only
