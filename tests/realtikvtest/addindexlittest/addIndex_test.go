@@ -30,10 +30,11 @@ func initTest(t *testing.T) *suiteContext {
 	tk.MustExec("use addindexlit;")
 	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on`)
 
-	ctx := newSuiteContext(t, tk)
+	ctx := newSuiteContext(t, tk, store)
 	// create table
 	createTable(ctx)
 	insertRows(ctx)
+	InitWorkLoadParameters(ctx)
 
 	lit.GlobalEnv.PdAddr = "127.0.0.1:2379"
 	return ctx

@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +32,7 @@ const (
 )
 
 type suiteContext struct {
+	store       kv.Storage
 	t           *testing.T
 	tk          *testkit.TestKit
 	IsUnique    bool
@@ -40,10 +43,20 @@ type suiteContext struct {
 	ColNum      int
 	RowNum      int
 	Wl          workload
+	tkPool      *sync.Pool
 }
 
-func newSuiteContext(t *testing.T, tk *testkit.TestKit) *suiteContext {
+func (s *suiteContext) getTestKit() *testkit.TestKit {
+	return s.tkPool.Get().(*testkit.TestKit)
+}
+
+func (s *suiteContext) putTestKit(tk *testkit.TestKit) {
+	s.tkPool.Put(tk)
+}
+
+func newSuiteContext(t *testing.T, tk *testkit.TestKit, store kv.Storage) *suiteContext {
 	return &suiteContext{
+		store:    store,
 		t:        t,
 		tk:       tk,
 		TableNum: 3,

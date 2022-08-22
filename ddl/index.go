@@ -734,6 +734,11 @@ func goFastDDLBackfill(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
 			pitrEnabled := isPiTREnable(w)
 			switch {
 			case needRestore && pitrEnabled:
+				ver, err = convertAddIdxJob2RollbackJob(d, t, job, tbl.Meta(), indexInfo, err)
+				if err1 := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err1 != nil {
+					logutil.BgLogger().Warn("[ddl] run add index job failed, convert job to rollback, RemoveDDLReorgHandle failed",
+						zap.String("job", job.String()), zap.Error(err1))
+				}
 				return false, ver, errors.Trace(errors.New(lightning.LitErrIncompatiblePiTR))
 			case needRestore && !pitrEnabled:
 				// If reorg task can not be restore with lightning execution, should restart reorg task to keep data consistent.
@@ -751,24 +756,34 @@ func goFastDDLBackfill(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
 				bc.SetNeedRestore(true)
 			}
 		} else {
+			if !IsEnableFastReorg() {
+				// Currently rollback add index job.
+				// With Checkpoint, if index is not backfill by lightning, then still could go txn-merge way to finish build up index.
+				ver, err = convertAddIdxJob2RollbackJob(d, t, job, tbl.Meta(), indexInfo, err)
+				if err1 := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err1 != nil {
+					logutil.BgLogger().Warn("[ddl] run add index job failed, convert job to rollback, RemoveDDLReorgHandle failed", zap.String("job", job.String()), zap.Error(err1))
+				}
+			}
 			// Be here, means the DDL Owner changed or restarted, the reorg state is re-entered.
 			// If it is an empty table, do not need to start lightning backfiller.
 			if reorgInfo.StartKey == nil && reorgInfo.EndKey == nil {
 				return false, ver, nil
 			}
 
-			err = lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, reorgInfo.ReorgMeta.SQLMode)
-			if err == nil {
-				// Todo: refactor when checkpoint implement.
-				if err := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err != nil {
-					logutil.BgLogger().Warn("[ddl] Lightning: removeDDLReorgHandle failed", zap.Error(err))
-					return false, 0, errors.Trace(err)
-				}
-				job.SnapshotVer = 0
-				reorgInfo, err = getReorgInfo(d.jobContext(job), d, rh, job, tbl, elements)
-				if err != nil {
-					logutil.BgLogger().Warn("[ddl] Lightning: resumeDDLReorgHandle failed", zap.Error(err))
-					return false, 0, errors.Trace(err)
+			if lightning.GlobalEnv.IsInited {
+				err = lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, reorgInfo.ReorgMeta.SQLMode)
+				if err == nil {
+					// Todo: refactor when checkpoint implement.
+					if err := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err != nil {
+						logutil.BgLogger().Warn("[ddl] Lightning: removeDDLReorgHandle failed", zap.Error(err))
+						return false, 0, errors.Trace(err)
+					}
+					job.SnapshotVer = 0
+					reorgInfo, err = getReorgInfo(d.jobContext(job), d, rh, job, tbl, elements)
+					if err != nil {
+						logutil.BgLogger().Warn("[ddl] Lightning: resumeDDLReorgHandle failed", zap.Error(err))
+						return false, 0, errors.Trace(err)
+					}
 				}
 			}
 		}
