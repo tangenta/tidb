@@ -81,6 +81,7 @@ func (w *worker) run(ctx *suiteContext) {
 	var err error
 	tk := ctx.getTestKit()
 	tk.MustExec("use addindexlit")
+	tk.MustExec("set @@tidb_general_log = 1;")
 	for {
 		if ctx.EndWorkload {
 			break
@@ -122,6 +123,7 @@ func (wc *workloadContext) StopWorkload(ctx *suiteContext) (err error) {
 	for i := 0; i < 3; i++ {
 		wChan := <-wCtx.wr[i].wChan
 		if wChan.err != nil {
+			require.NoError(ctx.t, wChan.err)
 			return wChan.err
 		}
 		if wChan.finished {
@@ -162,12 +164,14 @@ func insertStr(tableName string, id int, date string) string {
 func insertWorker(ctx *suiteContext, tk *testkit.TestKit) error {
 	insStr := insertStr(wCtx.tableName, wCtx.insertID, wCtx.date)
 	rs, err := tk.Exec(insStr)
-	if err == nil && rs != nil {
-		require.NoError(ctx.t, rs.Close())
-	}
 	if !isSkippedError(err, ctx) {
 		fmt.Printf("Insert failed:%q, err:%q\n", insStr, err.Error())
 		return err
+	}
+	if rs != nil {
+		if err := rs.Close(); err != nil {
+			return err
+		}
 	}
 	wCtx.insertID++
 
@@ -196,14 +200,15 @@ func updateStr(ctx *suiteContext, tableName string, colID []int) (uStr string) {
 func updateWorker(ctx *suiteContext, tk *testkit.TestKit) error {
 	upStr := updateStr(ctx, wCtx.tableName, wCtx.colID)
 	rs, err := tk.Exec(upStr)
-	if err == nil && rs != nil {
-		require.NoError(ctx.t, rs.Close())
-	}
+
 	if !isSkippedError(err, ctx) {
 		fmt.Printf("update failed:%q, err:%q\n", upStr, err.Error())
 		return err
-	} else {
-		err = nil
+	}
+	if rs != nil {
+		if err := rs.Close(); err != nil {
+			return err
+		}
 	}
 	time.Sleep(time.Duration(10) * time.Millisecond)
 	return nil
@@ -221,12 +226,14 @@ func deleteWorker(ctx *suiteContext, tk *testkit.TestKit) error {
 	}
 	delStr := deleteStr(wCtx.tableName, id)
 	rs, err := tk.Exec(delStr)
-	if err == nil && rs != nil {
-		require.NoError(ctx.t, rs.Close())
-	}
 	if !isSkippedError(err, ctx) {
 		fmt.Printf("delete failed:%q, err:%q\n", delStr, err.Error())
 		return err
+	}
+	if rs != nil {
+		if err := rs.Close(); err != nil {
+			return err
+		}
 	}
 	time.Sleep(time.Duration(10) * time.Millisecond)
 	return nil

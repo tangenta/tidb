@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -273,6 +274,33 @@ func createIndexTwoCols(ctx *suiteContext, tableID int, indexID int, colID1 int,
 func checkResult(ctx *suiteContext, tableName string, indexID int) {
 	_, err := ctx.tk.Exec("admin check index " + tableName + " idx" + strconv.Itoa(indexID))
 	fmt.Printf("log ddlStr: %q\n", "admin check index "+tableName+" idx"+strconv.Itoa(indexID))
+	if err != nil {
+		rs, err1 := ctx.tk.Exec("select _tidb_rowid from addindexlit.t0 use index(idx1);")
+		if err1 == nil {
+			rows := ctx.tk.ResultSetToResult(rs, "").Rows()
+			handles := make([]int64, 0, len(rows))
+			for _, row := range rows {
+				v, _ := strconv.Atoi(row[0].(string))
+				handles = append(handles, int64(v))
+			}
+			slices.Sort(handles)
+			fmt.Println("select _tidb_rowid from addindexlit.t0 use index(idx1);")
+			fmt.Printf("%v\n", handles)
+		}
+		rs, err2 := ctx.tk.Exec("select _tidb_rowid from addindexlit.t0 ignore index(idx1);")
+		if err2 == nil {
+			rows := ctx.tk.ResultSetToResult(rs, "").Rows()
+			handles := make([]int64, 0, len(rows))
+			for _, row := range rows {
+				v, _ := strconv.Atoi(row[0].(string))
+				handles = append(handles, int64(v))
+			}
+			slices.Sort(handles)
+			fmt.Println("select tidb_rowid from addindexlit.t0 ignore index(idx1);")
+			fmt.Printf("%v\n", handles)
+		}
+	}
+
 	require.NoError(ctx.t, err)
 	require.Equal(ctx.t, ctx.tk.Session().AffectedRows(), uint64(0))
 	_, err = ctx.tk.Exec("alter table " + tableName + " drop index idx" + strconv.Itoa(indexID))

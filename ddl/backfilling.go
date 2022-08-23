@@ -260,6 +260,9 @@ func (w *backfillWorker) handleBackfillTask(d *ddlCtx, task *reorgBackfillTask, 
 		}
 
 		bf.AddMetricInfo(float64(taskCtx.addedCount))
+		logutil.BgLogger().Info("[ddl] backfill worker finish a batch",
+			zap.Int("handle-count", taskCtx.addedCount),
+			zap.String("next-handle", taskCtx.nextKey.String()))
 		mergeBackfillCtxToResult(&taskCtx, result)
 
 		// Although `handleRange` is for data in one region, but back fill worker still split it into many
