@@ -17,7 +17,6 @@ package addindexlittest
 import (
 	"testing"
 
-	lit "github.com/pingcap/tidb/ddl/lightning"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/tests/realtikvtest"
 )
@@ -35,8 +34,6 @@ func initTest(t *testing.T) *suiteContext {
 	createTable(ctx)
 	insertRows(ctx)
 	InitWorkLoadParameters(ctx)
-
-	lit.GlobalEnv.PdAddr = "127.0.0.1:2379"
 	return ctx
 }
 
