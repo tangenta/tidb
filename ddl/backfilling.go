@@ -765,71 +765,21 @@ func spawnAddIndexWorker(sessCtx sessionctx.Context, seq int, job *model.Job, t 
 // recordIterFunc is used for low-level record iteration.
 type recordIterFunc func(h kv.Handle, rowKey kv.Key, rawRecord []byte) (more bool, err error)
 
-// indexIterFunc is used for low-level index iteration.
-type indexIterFunc func(rowKey kv.Key, rawRecord []byte) (more bool, err error)
-
-func iterateSnapshotIndexes(ctx *JobContext, store kv.Storage, priority int, t table.Table, version uint64,
-	startKey kv.Key, endKey kv.Key, fn indexIterFunc) error {
-	ver := kv.Version{Ver: version}
-	snap := store.GetSnapshot(ver)
-	snap.SetOption(kv.Priority, priority)
-	snap.SetOption(kv.RequestSourceInternal, true)
-	snap.SetOption(kv.RequestSourceType, ctx.ddlJobSourceType())
-	if tagger := ctx.getResourceGroupTaggerForTopSQL(); tagger != nil {
-		snap.SetOption(kv.ResourceGroupTagger, tagger)
-	}
-
-	var upperBound kv.Key
-	if endKey == nil {
-		upperBound = t.IndexPrefix().PrefixNext()
-	} else {
-		upperBound = endKey.PrefixNext()
-	}
-
-	it, err := snap.Iter(startKey, upperBound)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer it.Close()
-
-	for it.Valid() {
-		if !it.Key().HasPrefix(t.IndexPrefix()) {
-			break
-		}
-
-		more, err := fn(it.Key(), it.Value())
-		if !more || err != nil {
-			return errors.Trace(err)
-		}
-
-		err = kv.NextUntil(it, util.RowKeyPrefixFilter(it.Key()))
-		if err != nil {
-			if kv.ErrNotExist.Equal(err) {
-				break
-			}
-			return errors.Trace(err)
-		}
-	}
-
-	return nil
-}
-
-func iterateSnapshotRows(ctx *JobContext, store kv.Storage, priority int, t table.Table, version uint64,
+func iterateSnapshotKeys(ctx *JobContext, store kv.Storage, priority int, prefixKey kv.Key, version uint64,
 	startKey kv.Key, endKey kv.Key, fn recordIterFunc) error {
+	isRecord := tablecodec.IsRecordKey(prefixKey.Next())
 	var firstKey kv.Key
 	if startKey == nil {
-		firstKey = t.RecordPrefix()
+		firstKey = prefixKey
 	} else {
 		firstKey = startKey
 	}
-
 	var upperBound kv.Key
 	if endKey == nil {
-		upperBound = t.RecordPrefix().PrefixNext()
+		upperBound = prefixKey.PrefixNext()
 	} else {
 		upperBound = endKey.PrefixNext()
 	}
-
 	ver := kv.Version{Ver: version}
 	snap := store.GetSnapshot(ver)
 	snap.SetOption(kv.Priority, priority)
@@ -846,16 +796,16 @@ func iterateSnapshotRows(ctx *JobContext, store kv.Storage, priority int, t tabl
 	defer it.Close()
 
 	for it.Valid() {
-		if !it.Key().HasPrefix(t.RecordPrefix()) {
+		if !it.Key().HasPrefix(prefixKey) {
 			break
 		}
-
 		var handle kv.Handle
-		handle, err = tablecodec.DecodeRowKey(it.Key())
-		if err != nil {
-			return errors.Trace(err)
+		if isRecord {
+			handle, err = tablecodec.DecodeRowKey(it.Key())
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
-
 		more, err := fn(handle, it.Key(), it.Value())
 		if !more || err != nil {
 			return errors.Trace(err)

@@ -523,52 +523,54 @@ func (w *backFillIndexWorker) fetchTempIndexVals(txn kv.Transaction, taskRange r
 	// taskDone means that the merged handle is out of taskRange.endHandle.
 	taskDone := false
 	oprStartTime := startTime
-	err := iterateSnapshotIndexes(w.reorgInfo.d.jobContext(w.reorgInfo.Job), w.sessCtx.GetStore(), w.priority, w.table, txn.StartTS(), taskRange.startKey, taskRange.endKey, func(indexKey kv.Key, rawValue []byte) (more bool, err error) {
-		oprEndTime := time.Now()
-		logSlowOperations(oprEndTime.Sub(oprStartTime), "iterate temporary index in merge process", 0)
-		oprStartTime = oprEndTime
+	idxPrefix := w.table.IndexPrefix()
+	err := iterateSnapshotKeys(w.reorgInfo.d.jobContext(w.reorgInfo.Job), w.sessCtx.GetStore(), w.priority, idxPrefix, txn.StartTS(),
+		taskRange.startKey, taskRange.endKey, func(_ kv.Handle, indexKey kv.Key, rawValue []byte) (more bool, err error) {
+			oprEndTime := time.Now()
+			logSlowOperations(oprEndTime.Sub(oprStartTime), "iterate temporary index in merge process", 0)
+			oprStartTime = oprEndTime
 
-		if taskRange.endInclude {
-			taskDone = indexKey.Cmp(taskRange.endKey) > 0
-		} else {
-			taskDone = indexKey.Cmp(taskRange.endKey) >= 0
-		}
+			if taskRange.endInclude {
+				taskDone = indexKey.Cmp(taskRange.endKey) > 0
+			} else {
+				taskDone = indexKey.Cmp(taskRange.endKey) >= 0
+			}
 
-		if taskDone || len(w.tmpIdxRecords) >= w.batchCnt {
-			return false, nil
-		}
+			if taskDone || len(w.tmpIdxRecords) >= w.batchCnt {
+				return false, nil
+			}
 
-		isDelete := false
-		unique := false
-		skip := false
-		var keyVer []byte
-		length := len(rawValue)
-		keyVer = append(keyVer, rawValue[length-1:]...)
-		rawValue = rawValue[:length-1]
-		length--
-		// Just skip it.
-		if bytes.Equal(keyVer, []byte("m")) {
+			isDelete := false
+			unique := false
+			skip := false
+			var keyVer []byte
+			length := len(rawValue)
+			keyVer = append(keyVer, rawValue[length-1:]...)
+			rawValue = rawValue[:length-1]
+			length--
+			// Just skip it.
+			if bytes.Equal(keyVer, []byte("m")) {
+				return true, nil
+			}
+			if bytes.Equal(rawValue, []byte("delete")) {
+				isDelete = true
+				rawValue = rawValue[:length-6]
+			} else if bytes.Equal(rawValue, []byte("deleteu")) {
+				isDelete = true
+				unique = true
+				rawValue = rawValue[:length-7]
+			}
+			var convertedIndexKey []byte
+			convertedIndexKey = append(convertedIndexKey, indexKey...)
+			tablecodec.TempIndexKey2IndexKey(w.index.Meta().ID, convertedIndexKey)
+			idxRecord := &temporaryIndexRecord{key: convertedIndexKey, delete: isDelete, unique: unique, keyVer: keyVer, skip: skip}
+			if !isDelete {
+				idxRecord.vals = rawValue
+			}
+			w.tmpIdxRecords = append(w.tmpIdxRecords, idxRecord)
+			w.batchCheckTmpKeys = append(w.batchCheckTmpKeys, indexKey)
 			return true, nil
-		}
-		if bytes.Equal(rawValue, []byte("delete")) {
-			isDelete = true
-			rawValue = rawValue[:length-6]
-		} else if bytes.Equal(rawValue, []byte("deleteu")) {
-			isDelete = true
-			unique = true
-			rawValue = rawValue[:length-7]
-		}
-		var convertedIndexKey []byte
-		convertedIndexKey = append(convertedIndexKey, indexKey...)
-		tablecodec.TempIndexKey2IndexKey(w.index.Meta().ID, convertedIndexKey)
-		idxRecord := &temporaryIndexRecord{key: convertedIndexKey, delete: isDelete, unique: unique, keyVer: keyVer, skip: skip}
-		if !isDelete {
-			idxRecord.vals = rawValue
-		}
-		w.tmpIdxRecords = append(w.tmpIdxRecords, idxRecord)
-		w.batchCheckTmpKeys = append(w.batchCheckTmpKeys, indexKey)
-		return true, nil
-	})
+		})
 
 	if len(w.tmpIdxRecords) == 0 {
 		taskDone = true
