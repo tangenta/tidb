@@ -106,8 +106,3 @@ func (bc *BackendContext) Flush(engineKey string) error {
 func (bc *BackendContext) NeedRestore() bool {
 	return bc.needRestore
 }
-
-// SetNeedRestore sets the need restore flag.
-func (bc *BackendContext) SetNeedRestore(needRestore bool) {
-	bc.needRestore = needRestore
-}

@@ -660,9 +660,9 @@ func (w *worker) writePhysicalTableRecord(t table.PhysicalTable, bfWorkerType ba
 
 			switch bfWorkerType {
 			case typeAddIndexWorker:
-				backfillWorker := spawnAddIndexWorker(sessCtx, i, job, t, decodeColMap, reorgInfo, jc)
-				if backfillWorker == nil {
-					break
+				backfillWorker, err := spawnAddIndexWorker(sessCtx, i, job, t, decodeColMap, reorgInfo, jc)
+				if err != nil {
+					return err
 				}
 				backfillWorkers = append(backfillWorkers, backfillWorker)
 			case typeUpdateColumnWorker:
@@ -712,13 +712,17 @@ func (w *worker) writePhysicalTableRecord(t table.PhysicalTable, bfWorkerType ba
 			zap.String("startHandle", tryDecodeToHandleString(startKey)),
 			zap.String("endHandle", tryDecodeToHandleString(endKey)))
 
-		// Disk quota checking and import partial data into TiKV if needed.
-		// Do lightning flush data to make checkpoint.
-		if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok && bc.NeedRestore() {
-			engineKey := lightning.GenEngineInfoKey(job.ID, reorgInfo.currElement.ID)
-			err := bc.Flush(engineKey)
-			if err != nil {
-				return errors.Trace(err)
+		if job.ReorgMeta.ReorgTp == model.ReorgTypeLitMerge {
+			// Disk quota checking and import partial data into TiKV if needed.
+			// Do lightning flush data to make checkpoint.
+			if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok {
+				engineKey := lightning.GenEngineInfoKey(job.ID, reorgInfo.currElement.ID)
+				err := bc.Flush(engineKey)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				return errors.New(lightning.LitErrGetBackendFail)
 			}
 		}
 		remains, err := w.sendRangeTaskToWorkers(t, backfillWorkers, reorgInfo, &totalAddedCount, kvRanges)
@@ -735,31 +739,27 @@ func (w *worker) writePhysicalTableRecord(t table.PhysicalTable, bfWorkerType ba
 }
 
 func spawnAddIndexWorker(sessCtx sessionctx.Context, seq int, job *model.Job, t table.PhysicalTable,
-	decodeColMap map[int64]decoder.Column, reorgInfo *reorgInfo, jc *JobContext) *backfillWorker {
-	// Firstly, check and try lightning path.
-	if bc, ok := lightning.BackCtxMgr.Load(job.ID); ok && bc.NeedRestore() {
+	decodeColMap map[int64]decoder.Column, reorgInfo *reorgInfo, jc *JobContext) (*backfillWorker, error) {
+	switch job.ReorgMeta.ReorgTp {
+	case model.ReorgTypeTxn, model.ReorgTypeTxnMerge:
+		idxWorker := newAddIndexWorker(sessCtx, seq, t, decodeColMap, reorgInfo, jc)
+		go idxWorker.backfillWorker.run(reorgInfo.d, idxWorker, job)
+		return idxWorker.backfillWorker, nil
+	case model.ReorgTypeLitMerge:
+		bc, ok := lightning.BackCtxMgr.Load(job.ID)
+		if !ok {
+			return nil, errors.Trace(errors.New(lightning.LitErrGetBackendFail))
+		}
 		err := bc.EngMgr.Register(bc, job, reorgInfo.currElement.ID)
 		if err != nil {
-			if seq == 0 { // The first worker.
-				lightning.BackCtxMgr.Unregister(job.ID) // fallback to the general worker.
-				logutil.BgLogger().Warn(lightning.LitErrCreateEngineFail, zap.Error(err), zap.Bool("fallback", true))
-			} else {
-				// It may reach to a limit of the lightning workers.
-				logutil.BgLogger().Warn(lightning.LitWarnExtentWorker, zap.Error(err), zap.Bool("fallback", false))
-				return nil
-			}
-		} else {
-			idxWorker, err := newAddIndexWorkerLit(sessCtx, seq, t, decodeColMap, reorgInfo, jc)
-			if err == nil {
-				go idxWorker.backfillWorker.run(reorgInfo.d, idxWorker, job)
-				return idxWorker.backfillWorker
-			}
+			return nil, errors.Trace(errors.New(lightning.LitErrCreateEngineFail))
 		}
+		idxWorker, err := newAddIndexWorkerLit(sessCtx, seq, t, decodeColMap, reorgInfo, jc)
+		go idxWorker.backfillWorker.run(reorgInfo.d, idxWorker, job)
+		return idxWorker.backfillWorker, nil
+	default:
+		return nil, errors.New(fmt.Sprintf("unknown reorg type %v", job.ReorgMeta.ReorgTp))
 	}
-	// Fallback to the general add index worker.
-	idxWorker := newAddIndexWorker(sessCtx, seq, t, decodeColMap, reorgInfo, jc)
-	go idxWorker.backfillWorker.run(reorgInfo.d, idxWorker, job)
-	return idxWorker.backfillWorker
 }
 
 // recordIterFunc is used for low-level record iteration.

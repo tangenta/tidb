@@ -76,7 +76,7 @@ func isPiTREnable(w *worker) bool {
 
 // importIndexDataToStore import local index sst file into TiKV.
 func importIndexDataToStore(jobID int64, indexID int64, unique bool, tbl table.Table) error {
-	if bc, ok := lit.BackCtxMgr.Load(jobID); ok && bc.NeedRestore() {
+	if bc, ok := lit.BackCtxMgr.Load(jobID); ok {
 		engineInfoKey := lit.GenEngineInfoKey(jobID, indexID)
 		err := bc.FinishImport(engineInfoKey, unique, tbl)
 		if err != nil {
@@ -85,37 +85,6 @@ func importIndexDataToStore(jobID int64, indexID int64, unique bool, tbl table.T
 		}
 	}
 	return nil
-}
-
-// cleanUpLightningEnv will clean one DDL job's backend context.
-func cleanUpLightningEnv(reorg *reorgInfo) {
-	if _, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok {
-		lit.BackCtxMgr.Unregister(reorg.ID)
-	}
-}
-
-// cleanUpLightningEngines will clean one DDL job's engines.
-func cleanUpLightningEngines(reorg *reorgInfo) {
-	if bc, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok {
-		bc.SetNeedRestore(false)
-		bc.EngMgr.UnregisterAll()
-	}
-}
-
-// Check if this reorg is a restore reorg task
-// Check if current lightning reorg task can keep on executing.
-// Otherwise, restart the reorg task.
-func canRestoreReorgTask(job *model.Job, indexID int64) bool {
-	// The reorg stage is just started, do nothing
-	if job.SnapshotVer == 0 {
-		return false
-	}
-
-	// Check if backend and engine are both active in memory.
-	if !lit.CanRestoreReorgTask(job.ID, indexID) {
-		return false
-	}
-	return true
 }
 
 // Below is lightning worker implementation

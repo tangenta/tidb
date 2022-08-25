@@ -259,8 +259,6 @@ func (w *worker) runReorgJob(rh *reorgHandler, reorgInfo *reorgInfo, tblInfo *mo
 		case model.ActionModifyColumn:
 			metrics.GetBackfillProgressByLabel(metrics.LblModifyColumn, job.SchemaName, tblInfo.Name.String()).Set(0)
 		}
-		// For the lightning backfill process, we will delay to remove reorg handle because
-		// the data is not imported to the storage yet.
 		if job.ReorgMeta.ReorgTp != model.ReorgTypeLitMerge {
 			if err1 := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err1 != nil {
 				logutil.BgLogger().Warn("[ddl] run reorg job done, removeDDLReorgHandle failed", zap.Error(err1))
