@@ -680,10 +680,6 @@ func pickBackfillProcess(w *worker, job *model.Job, indexInfo *model.IndexInfo) 
 	if IsEnableFastReorg() {
 		piTREnabled := isPiTREnable(w)
 		if lightning.GlobalEnv.IsInited && !piTREnabled {
-			err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
-			if err != nil {
-				logutil.BgLogger().Info("fallback to txn-merge backfill process", zap.Error(err))
-			}
 			job.ReorgMeta.ReorgTp = model.ReorgTypeLitMerge
 			return model.ReorgTypeLitMerge
 		}
@@ -696,6 +692,12 @@ func pickBackfillProcess(w *worker, job *model.Job, indexInfo *model.IndexInfo) 
 	}
 	job.ReorgMeta.ReorgTp = model.ReorgTypeTxn
 	return model.ReorgTypeTxn
+}
+
+// fallbackToTxnMerge changes the reorg type to txn-merge if the lightning backfill meets something wrong.
+func fallbackToTxnMerge(job *model.Job, err error) {
+	logutil.BgLogger().Info("fallback to txn-merge backfill process", zap.Error(err))
+	job.ReorgMeta.ReorgTp = model.ReorgTypeTxnMerge
 }
 
 func doReorgWorkForCreateIndexMultiSchema(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
@@ -726,9 +728,15 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 		logutil.BgLogger().Info("Lightning backfill state running")
 		switch bfProcess {
 		case model.ReorgTypeLitMerge:
+			err = lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
+			if err != nil {
+				fallbackToTxnMerge(job, err)
+				return false, ver, errors.Trace(err)
+			}
 			done, ver, err = runReorgJobAndHandleAddIndexErr(w, d, t, job, tbl, indexInfo)
 			if err != nil {
 				lightning.BackCtxMgr.Unregister(job.ID)
+				fallbackToTxnMerge(job, err)
 				return false, ver, errors.Trace(err)
 			}
 			if !done {
@@ -741,19 +749,19 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 					ver, err = convertAddIdxJob2RollbackJob(d, t, job, tbl.Meta(), indexInfo, err)
 				} else {
 					logutil.BgLogger().Warn("Lightning import error:", zap.Error(err))
-					job.ReorgMeta.Started = false // Retry this job.
+					fallbackToTxnMerge(job, err)
 				}
 				lightning.BackCtxMgr.Unregister(job.ID)
 				return false, ver, errors.Trace(err)
 			}
 			rh := newReorgHandler(t, w.sess, w.concurrentDDL)
-			err := rh.RemoveDDLReorgHandle(job, []*meta.Element{{ID: indexInfo.ID, TypeKey: meta.IndexElementKey}})
+			err = rh.RemoveDDLReorgHandle(job, []*meta.Element{{ID: indexInfo.ID, TypeKey: meta.IndexElementKey}})
 			if err != nil {
 				logutil.BgLogger().Warn("Lightning: [DDL] remove reorg handle error", zap.Error(err))
+				fallbackToTxnMerge(job, err)
 				return false, ver, errors.Trace(err)
 			}
 			lightning.BackCtxMgr.Unregister(job.ID)
-
 		case model.ReorgTypeTxnMerge:
 			done, ver, err = runReorgJobAndHandleAddIndexErr(w, d, t, job, tbl, indexInfo)
 			if !done {
