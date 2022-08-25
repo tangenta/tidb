@@ -682,9 +682,7 @@ func pickBackfillProcess(w *worker, job *model.Job, indexInfo *model.IndexInfo) 
 		if lightning.GlobalEnv.IsInited && !piTREnabled {
 			err := lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
 			if err != nil {
-				logutil.BgLogger().Info("fallback to default backfill process", zap.Error(err))
-				job.ReorgMeta.ReorgTp = model.ReorgTypeTxn
-				return model.ReorgTypeTxn
+				logutil.BgLogger().Info("fallback to txn-merge backfill process", zap.Error(err))
 			}
 			job.ReorgMeta.ReorgTp = model.ReorgTypeLitMerge
 			return model.ReorgTypeLitMerge
