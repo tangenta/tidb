@@ -17,6 +17,7 @@ package ddl
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"sync"
@@ -456,7 +457,7 @@ func tryDecodeToHandleString(key kv.Key) string {
 	if err != nil {
 		recordPrefixIdx := bytes.Index(key, []byte("_r"))
 		if recordPrefixIdx == -1 {
-			return fmt.Sprintf("key: %x", key)
+			return fmt.Sprintf("key: %s", hex.EncodeToString(key))
 		}
 		handleBytes := key[recordPrefixIdx+2:]
 		terminatedWithZero := len(handleBytes) > 0 && handleBytes[len(handleBytes)-1] == 0
@@ -466,7 +467,7 @@ func tryDecodeToHandleString(key kv.Key) string {
 				return handle.String() + ".next"
 			}
 		}
-		return fmt.Sprintf("%x", handleBytes)
+		return fmt.Sprintf("handleBytes: %s", hex.EncodeToString(handleBytes))
 	}
 	return handle.String()
 }
@@ -778,7 +779,14 @@ func iterateSnapshotIndexes(ctx *JobContext, store kv.Storage, priority int, t t
 		snap.SetOption(kv.ResourceGroupTagger, tagger)
 	}
 
-	it, err := snap.Iter(startKey, endKey)
+	var upperBound kv.Key
+	if endKey == nil {
+		upperBound = t.IndexPrefix().PrefixNext()
+	} else {
+		upperBound = endKey.PrefixNext()
+	}
+
+	it, err := snap.Iter(startKey, upperBound)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1079,7 +1087,7 @@ func (w *backfillWorker) handleMergeTask(d *ddlCtx, task *reorgBackfillTask, bf 
 	for {
 		// Give job chance to be canceled, if we not check it here,
 		// if there is panic in bf.BackfillDataInTxn we will never cancel the job.
-		// Because mergeIndexTask may run a peroid time,
+		// Because mergeIndexTask may run a period time,
 		// we should check whether this ddl job is still runnable.
 		err := d.isReorgRunnable(w.reorgInfo.Job)
 		if err != nil {
@@ -1128,7 +1136,7 @@ func (w *worker) sendRangeTaskToMergeWorkers(t table.Table, workers []*backfillW
 	physicalTableID := phyicID
 
 	// Build reorg tasks.
-	for _, keyRange := range kvRanges {
+	for i, keyRange := range kvRanges {
 		endKey := keyRange.EndKey
 		endK, err := getIndexRangeEndKey(reorgInfo.d.jobContext(reorgInfo.Job), workers[0].sessCtx.GetStore(), workers[0].priority, t, keyRange.StartKey, endKey)
 		if err != nil {
@@ -1142,7 +1150,9 @@ func (w *worker) sendRangeTaskToMergeWorkers(t table.Table, workers []*backfillW
 		task := &reorgBackfillTask{
 			physicalTableID: physicalTableID,
 			startKey:        keyRange.StartKey,
-			endKey:          endKey}
+			endKey:          endKey,
+			// If the boundaries overlap, we should ignore the preceding endKey.
+			endInclude: endK.Cmp(keyRange.EndKey) != 0 || i == len(kvRanges)-1}
 		batchTasks = append(batchTasks, task)
 
 		if len(batchTasks) >= len(workers) {
@@ -1195,7 +1205,6 @@ func (w *worker) handleMergeTasks(reorgInfo *reorgInfo, totalAddedCount *int64, 
 			zap.String("startHandle", tryDecodeToHandleString(startKey)),
 			zap.String("nextHandle", tryDecodeToHandleString(nextKey)),
 			zap.Int64("batchAddedCount", taskAddedCount),
-			zap.String("taskFailedError", err.Error()),
 			zap.String("takeTime", elapsedTime.String()),
 			zap.NamedError("updateHandleError", err))
 		return errors.Trace(err)

@@ -15,6 +15,7 @@
 package ddl
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"sync"
@@ -258,8 +259,9 @@ func (w *worker) runReorgJob(rh *reorgHandler, reorgInfo *reorgInfo, tblInfo *mo
 		case model.ActionModifyColumn:
 			metrics.GetBackfillProgressByLabel(metrics.LblModifyColumn, job.SchemaName, tblInfo.Name.String()).Set(0)
 		}
-		// If go through new backfill path, will delay remove operation.
-		if _, ok := lightning.BackCtxMgr.Load(reorgInfo.Job.ID); !ok {
+		// For the lightning backfill process, we will delay to remove reorg handle because
+		// the data is not imported to the storage yet.
+		if job.ReorgMeta.ReorgTp != model.ReorgTypeLitMerge {
 			if err1 := rh.RemoveDDLReorgHandle(job, reorgInfo.elements); err1 != nil {
 				logutil.BgLogger().Warn("[ddl] run reorg job done, removeDDLReorgHandle failed", zap.Error(err1))
 				return errors.Trace(err1)
@@ -962,13 +964,13 @@ func getMergeReorgInfo(ctx *JobContext, d *ddlCtx, rh *reorgHandler, job *model.
 		}
 		logutil.BgLogger().Info("[ddl] job get table range",
 			zap.Int64("jobID", job.ID), zap.Int64("physicalTableID", pid),
-			zap.String("startHandle", tryDecodeToHandleString(start)),
-			zap.String("endHandle", tryDecodeToHandleString(end)))
+			zap.String("start key", hex.EncodeToString(start)),
+			zap.String("end key", hex.EncodeToString(end)))
 
 		failpoint.Inject("errorUpdateReorgHandle", func() (*reorgInfo, error) {
 			return &info, errors.New("occur an error when update reorg handle")
 		})
-		err = rh.UpdateDDLReorgHandle(job, start, end, pid, elements[0])
+		err = rh.InitDDLReorgHandle(job, start, end, pid, elements[0])
 		if err != nil {
 			return &info, errors.Trace(err)
 		}

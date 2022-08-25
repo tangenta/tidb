@@ -75,16 +75,14 @@ func isPiTREnable(w *worker) bool {
 }
 
 // importIndexDataToStore import local index sst file into TiKV.
-func importIndexDataToStore(reorg *reorgInfo, indexID int64, unique bool, tbl table.Table) error {
-	if bc, ok := lit.BackCtxMgr.Load(reorg.Job.ID); ok && bc.NeedRestore() {
-		engineInfoKey := lit.GenEngineInfoKey(reorg.ID, indexID)
+func importIndexDataToStore(jobID int64, indexID int64, unique bool, tbl table.Table) error {
+	if bc, ok := lit.BackCtxMgr.Load(jobID); ok && bc.NeedRestore() {
+		engineInfoKey := lit.GenEngineInfoKey(jobID, indexID)
 		err := bc.FinishImport(engineInfoKey, unique, tbl)
 		if err != nil {
 			err = errors.Trace(err)
 			return err
 		}
-		// After import local data into TiKV, then the progress set to 85.
-		metrics.GetBackfillProgressByLabel(metrics.LblAddIndex, reorg.SchemaName, reorg.TableName).Set(85)
 	}
 	return nil
 }
@@ -530,7 +528,11 @@ func (w *backFillIndexWorker) fetchTempIndexVals(txn kv.Transaction, taskRange r
 		logSlowOperations(oprEndTime.Sub(oprStartTime), "iterate temporary index in merge process", 0)
 		oprStartTime = oprEndTime
 
-		taskDone := indexKey.Cmp(taskRange.endKey) > 0
+		if taskRange.endInclude {
+			taskDone = indexKey.Cmp(taskRange.endKey) > 0
+		} else {
+			taskDone = indexKey.Cmp(taskRange.endKey) >= 0
+		}
 
 		if taskDone || len(w.tmpIdxRecords) >= w.batchCnt {
 			return false, nil
