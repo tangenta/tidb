@@ -728,6 +728,17 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 		logutil.BgLogger().Info("Lightning backfill state running")
 		switch bfProcess {
 		case model.ReorgTypeLitMerge:
+			rh := newReorgHandler(t, w.sess, w.concurrentDDL)
+			elem := []*meta.Element{{ID: indexInfo.ID, TypeKey: meta.IndexElementKey}}
+			if _, ok := lightning.BackCtxMgr.Load(job.ID); !ok && job.ReorgMeta.Started {
+				// The owner is crashed or changed, we need to restart the backfill.
+				err = rh.RemoveDDLReorgHandle(job, elem)
+				if err != nil {
+					logutil.BgLogger().Warn("unable to remove ddl reorg handle", zap.Error(err))
+				}
+				job.ReorgMeta.Started = false
+				return false, ver, nil
+			}
 			err = lightning.BackCtxMgr.Register(w.ctx, indexInfo.Unique, job.ID, job.ReorgMeta.SQLMode)
 			if err != nil {
 				fallbackToTxnMerge(job, err)
@@ -754,8 +765,7 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 				lightning.BackCtxMgr.Unregister(job.ID)
 				return false, ver, errors.Trace(err)
 			}
-			rh := newReorgHandler(t, w.sess, w.concurrentDDL)
-			err = rh.RemoveDDLReorgHandle(job, []*meta.Element{{ID: indexInfo.ID, TypeKey: meta.IndexElementKey}})
+			err = rh.RemoveDDLReorgHandle(job, elem)
 			if err != nil {
 				logutil.BgLogger().Warn("Lightning: [DDL] remove reorg handle error", zap.Error(err))
 				fallbackToTxnMerge(job, err)
