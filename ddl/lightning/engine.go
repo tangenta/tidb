@@ -100,6 +100,7 @@ func (ei *engineInfo) ImportAndClean() error {
 		logutil.BgLogger().Error(errMsg)
 		return errors.New(errMsg)
 	}
+	ei.openedEngine = nil
 
 	// Reset disk quota before ingest, if user changed it.
 	GlobalEnv.checkAndResetQuota()
@@ -122,7 +123,6 @@ func (ei *engineInfo) ImportAndClean() error {
 		logutil.BgLogger().Error(errMsg)
 		return errors.New(errMsg)
 	}
-	ei.openedEngine = nil
 	return nil
 }
 
