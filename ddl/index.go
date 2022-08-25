@@ -768,7 +768,6 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 			err = rh.RemoveDDLReorgHandle(job, elem)
 			if err != nil {
 				logutil.BgLogger().Warn("Lightning: [DDL] remove reorg handle error", zap.Error(err))
-				return false, ver, errors.Trace(err)
 			}
 			lightning.BackCtxMgr.Unregister(job.ID)
 		case model.ReorgTypeTxnMerge:
