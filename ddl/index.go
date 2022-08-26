@@ -671,7 +671,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 }
 
 // pickBackfillProcess determines which backfill process will be used.
-func pickBackfillProcess(w *worker, job *model.Job, indexInfo *model.IndexInfo) model.ReorgType {
+func pickBackfillProcess(w *worker, job *model.Job) model.ReorgType {
 	if job.ReorgMeta.Started {
 		// The backfill task has been started.
 		// Don't switch the backfill process.
@@ -715,7 +715,7 @@ func doReorgWorkForCreateIndexMultiSchema(w *worker, d *ddlCtx, t *meta.Meta, jo
 
 func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job,
 	tbl table.Table, indexInfo *model.IndexInfo) (done bool, ver int64, err error) {
-	bfProcess := pickBackfillProcess(w, job, indexInfo)
+	bfProcess := pickBackfillProcess(w, job)
 	if bfProcess == model.ReorgTypeTxn {
 		return runReorgJobAndHandleAddIndexErr(w, d, t, job, tbl, indexInfo)
 	}
