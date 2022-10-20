@@ -67,6 +67,7 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 	tblInfos := make(map[uint64]*model.TableInfo, len(planMap))
 	decoders := make(map[uint64]*rowcodec.ChunkDecoder, len(planMap))
 	allIdxInfos := make(map[uint64]*model.IndexInfo, len(planMap))
+	allDone := make(map[uint64]bool, len(planMap))
 	for id, p := range planMap {
 		pgPlan := p.(*plannercore.PointGetPlan)
 		allSchemas[id] = pgPlan.Schema()
@@ -80,6 +81,7 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 		tblInfos[id] = pgPlan.TblInfo
 		decoders[id] = NewRowDecoder(b.ctx, p.Schema(), pgPlan.TblInfo)
 		allIdxInfos[id] = pgPlan.IndexInfo
+		allDone[id] = false
 	}
 
 	e := &PointGetExecutor{
@@ -88,6 +90,7 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 		resultFieldTypes: resultFts,
 		allTableInfos:    tblInfos,
 		allIndexInfos:    allIdxInfos,
+		allDone:          allDone,
 		allHandles:       handles,
 		txnScope:         b.txnScope,
 		readReplicaScope: b.readReplicaScope,
@@ -171,6 +174,7 @@ type PointGetExecutor struct {
 	txn              kv.Transaction
 	snapshot         kv.Snapshot
 	done             bool
+	allDone          map[uint64]bool
 	lock             bool
 	lockWaitTime     int64
 	rowDecoder       *rowcodec.ChunkDecoder
@@ -252,10 +256,17 @@ func (e *PointGetExecutor) Close() error {
 // Next implements the Executor interface.
 func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
-	if e.done {
-		return nil
+	if len(e.allDone) > 0 {
+		if e.allDone[req.ConnID] {
+			return nil
+		}
+		e.allDone[req.ConnID] = true
+	} else {
+		if e.done {
+			return nil
+		}
+		e.done = true
 	}
-	e.done = true
 
 	var tblID int64
 	var err error
