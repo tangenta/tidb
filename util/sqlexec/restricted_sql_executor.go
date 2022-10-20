@@ -198,6 +198,8 @@ type RecordSet interface {
 	// NewChunk create a chunk, if allocator is nil, the default one is used.
 	NewChunk(chunk.Allocator) *chunk.Chunk
 
+	NewChunkWithID(allocator chunk.Allocator, id uint64) *chunk.Chunk
+
 	// Close closes the underlying iterator, call Next after Close will
 	// restart the iteration.
 	Close() error

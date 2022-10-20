@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessiontxn"
 	"github.com/pingcap/tidb/sessiontxn/staleread"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/memory"
 	"go.uber.org/zap"
@@ -54,8 +55,7 @@ type Compiler struct {
 	Ctx sessionctx.Context
 }
 
-// Compile compiles an ast.StmtNode to a physical plan.
-func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecStmt, err error) {
+func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, ids []uint64) (_ *ExecStmt, err error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("executor.Compile", opentracing.ChildOf(span.Context()))
 		defer span1.Finish()
@@ -70,14 +70,14 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecS
 			panic(r)
 		}
 		err = errors.Errorf("%v", r)
-		logutil.Logger(ctx).Error("compile SQL panic", zap.String("SQL", stmtNode.Text()), zap.Stack("stack"), zap.Any("recover", r))
+		logutil.Logger(ctx).Error("compile SQL panic", zap.String("SQL", stmtNodes[0].Text()), zap.Stack("stack"), zap.Any("recover", r))
 	}()
 
-	c.Ctx.GetSessionVars().StmtCtx.IsReadOnly = plannercore.IsReadOnly(stmtNode, c.Ctx.GetSessionVars())
+	c.Ctx.GetSessionVars().StmtCtx.IsReadOnly = plannercore.IsReadOnly(stmtNodes[0], c.Ctx.GetSessionVars())
 
 	ret := &plannercore.PreprocessorReturn{}
 	err = plannercore.Preprocess(c.Ctx,
-		stmtNode,
+		stmtNodes[0],
 		plannercore.WithPreprocessorReturn(ret),
 		plannercore.InitTxnContextProvider,
 	)
@@ -103,7 +103,7 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecS
 		preparedObj          *plannercore.PlanCacheStmt
 	)
 
-	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
+	if execStmt, ok := stmtNodes[0].(*ast.ExecuteStmt); ok {
 		if preparedObj, err = plannercore.GetPreparedStmt(execStmt, sessVars); err != nil {
 			return nil, err
 		}
@@ -111,9 +111,16 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecS
 			return nil, err
 		}
 	}
-	finalPlan, names, err := planner.Optimize(ctx, c.Ctx, stmtNode, is)
-	if err != nil {
-		return nil, err
+
+	finalPlans := make(map[uint64]plannercore.Plan, len(stmtNodes))
+	outputNames := make(map[uint64][]*types.FieldName, len(stmtNodes))
+	for i := 0; i < len(stmtNodes); i++ {
+		finalPlan, names, err := planner.Optimize(ctx, c.Ctx, stmtNodes[i], is)
+		if err != nil {
+			return nil, err
+		}
+		finalPlans[ids[i]] = finalPlan
+		outputNames[ids[i]] = names
 	}
 
 	failpoint.Inject("assertStmtCtxIsStaleness", func(val failpoint.Value) {
@@ -123,23 +130,25 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecS
 	if preparedObj != nil {
 		CountStmtNode(preparedObj.PreparedAst.Stmt, sessVars.InRestrictedSQL)
 	} else {
-		CountStmtNode(stmtNode, sessVars.InRestrictedSQL)
+		CountStmtNode(stmtNodes[0], sessVars.InRestrictedSQL)
 	}
 	var lowerPriority bool
 	if c.Ctx.GetSessionVars().StmtCtx.Priority == mysql.NoPriority {
-		lowerPriority = needLowerPriority(finalPlan)
+		lowerPriority = needLowerPriority(finalPlans[0])
 	}
-	stmtCtx.SetPlan(finalPlan)
+	stmtCtx.SetPlan(finalPlans[0])
 	stmt := &ExecStmt{
-		GoCtx:         ctx,
-		InfoSchema:    is,
-		Plan:          finalPlan,
-		LowerPriority: lowerPriority,
-		Text:          stmtNode.Text(),
-		StmtNode:      stmtNode,
-		Ctx:           c.Ctx,
-		OutputNames:   names,
-		Ti:            &TelemetryInfo{},
+		GoCtx:          ctx,
+		InfoSchema:     is,
+		Plan:           finalPlans[0],
+		Plans:          finalPlans,
+		LowerPriority:  lowerPriority,
+		Text:           stmtNodes[0].Text(),
+		StmtNode:       stmtNodes[0],
+		Ctx:            c.Ctx,
+		OutputNames:    outputNames[0],
+		AllOutputNames: outputNames,
+		Ti:             &TelemetryInfo{},
 	}
 	if pointPlanShortPathOK {
 		if ep, ok := stmt.Plan.(*plannercore.Execute); ok {
@@ -155,6 +164,11 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecS
 		}
 	}
 	return stmt, nil
+}
+
+// Compile compiles an ast.StmtNode to a physical plan.
+func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (_ *ExecStmt, err error) {
+	return c.CompileStmts(ctx, []ast.StmtNode{stmtNode}, []uint64{0})
 }
 
 // needLowerPriority checks whether it's needed to lower the execution priority

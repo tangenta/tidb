@@ -47,6 +47,8 @@ type Chunk struct {
 
 	// requiredRows indicates how many rows the parent executor want.
 	requiredRows int
+
+	ConnID uint64
 }
 
 // Capacity constants.

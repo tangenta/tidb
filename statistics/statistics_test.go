@@ -97,6 +97,10 @@ func (r *recordSet) NewChunk(chunk.Allocator) *chunk.Chunk {
 	return chunk.NewChunkWithCapacity(fields, 32)
 }
 
+func (r *recordSet) NewChunkWithID(alloc chunk.Allocator, id uint64) *chunk.Chunk {
+	return nil
+}
+
 func (r *recordSet) Close() error {
 	r.cursor = 0
 	return nil

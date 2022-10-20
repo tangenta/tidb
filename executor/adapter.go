@@ -21,6 +21,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -92,6 +93,7 @@ type recordSet struct {
 	stmt       *ExecStmt
 	lastErr    error
 	txnStartTS uint64
+	mu         sync.Mutex
 }
 
 func (a *recordSet) Fields() []*ast.ResultField {
@@ -178,6 +180,22 @@ func (a *recordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 	return alloc.Alloc(base.retFieldTypes, base.initCap, base.maxChunkSize)
 }
 
+func (a *recordSet) NewChunkWithID(alloc chunk.Allocator, id uint64) *chunk.Chunk {
+	if alloc == nil {
+		return newFirstChunk(a.executor)
+	}
+	base := a.executor.base()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if pge, ok := a.executor.(*PointGetExecutor); ok && len(pge.resultFieldTypes) > 0 {
+		chk := alloc.Alloc(pge.resultFieldTypes[id], base.initCap, base.maxChunkSize)
+		chk.ConnID = id
+		return chk
+	} else {
+		return alloc.Alloc(base.retFieldTypes, base.initCap, base.maxChunkSize)
+	}
+}
+
 func (a *recordSet) Close() error {
 	err := a.executor.Close()
 	a.stmt.CloseRecordSet(a.txnStartTS, a.lastErr)
@@ -233,7 +251,8 @@ type ExecStmt struct {
 	// InfoSchema stores a reference to the schema information.
 	InfoSchema infoschema.InfoSchema
 	// Plan stores a reference to the final physical plan.
-	Plan plannercore.Plan
+	Plan  plannercore.Plan
+	Plans map[uint64]plannercore.Plan
 	// Text represents the origin query text.
 	Text string
 
@@ -260,9 +279,10 @@ type ExecStmt struct {
 	phaseLockDurations  [2]time.Duration
 
 	// OutputNames will be set if using cached plan
-	OutputNames []*types.FieldName
-	PsStmt      *plannercore.PlanCacheStmt
-	Ti          *TelemetryInfo
+	OutputNames    []*types.FieldName
+	AllOutputNames map[uint64][]*types.FieldName
+	PsStmt         *plannercore.PlanCacheStmt
+	Ti             *TelemetryInfo
 }
 
 // GetStmtNode returns the stmtNode inside Statement
@@ -685,6 +705,10 @@ func (c *chunkRowRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 	return alloc.Alloc(base.retFieldTypes, base.initCap, base.maxChunkSize)
 }
 
+func (c *chunkRowRecordSet) NewChunkWithID(_ chunk.Allocator, _ uint64) *chunk.Chunk {
+	return nil
+}
+
 func (c *chunkRowRecordSet) Close() error {
 	c.execStmt.CloseRecordSet(c.execStmt.Ctx.GetSessionVars().TxnCtx.StartTS, nil)
 	return nil
@@ -943,7 +967,7 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 	}
 
 	b := newExecutorBuilder(ctx, a.InfoSchema, a.Ti)
-	e := b.build(a.Plan)
+	e := b.build(a.Plan, a.Plans)
 	if b.err != nil {
 		return nil, errors.Trace(b.err)
 	}
@@ -986,9 +1010,9 @@ func (a *ExecStmt) openExecutor(ctx context.Context, e Executor) (err error) {
 }
 
 func (a *ExecStmt) next(ctx context.Context, e Executor, req *chunk.Chunk) error {
-	start := time.Now()
+	//start := time.Now()
 	err := Next(ctx, e, req)
-	a.phaseNextDurations[0] += time.Since(start)
+	//a.phaseNextDurations[0] += time.Since(start)
 	return err
 }
 

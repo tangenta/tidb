@@ -157,7 +157,7 @@ func (b *MockExecutorBuilder) Build(p plannercore.Plan) Executor {
 	return b.build(p)
 }
 
-func (b *executorBuilder) build(p plannercore.Plan) Executor {
+func (b *executorBuilder) build(p plannercore.Plan, allPlans ...map[uint64]plannercore.Plan) Executor {
 	switch v := p.(type) {
 	case nil:
 		return nil
@@ -192,7 +192,7 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 	case *plannercore.Explain:
 		return b.buildExplain(v)
 	case *plannercore.PointGetPlan:
-		return b.buildPointGet(v)
+		return b.buildPointGet(v, allPlans...)
 	case *plannercore.BatchPointGetPlan:
 		return b.buildBatchPointGet(v)
 	case *plannercore.Insert:

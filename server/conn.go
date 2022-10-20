@@ -2230,7 +2230,12 @@ func (cc *clientConn) writeColumnInfo(columns []*ColumnInfo) error {
 // The first return value indicates whether error occurs at the first call of ResultSet.Next.
 func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool, serverStatus uint16) (bool, error) {
 	data := cc.alloc.AllocWithLen(4, 1024)
-	req := rs.NewChunk(cc.chunkAlloc)
+	var req *chunk.Chunk
+	if rs.Shared() {
+		req = rs.NewChunkWithID(cc.chunkAlloc, cc.connectionID)
+	} else {
+		req = rs.NewChunk(cc.chunkAlloc)
+	}
 	gotColumnInfo := false
 	firstNext := true
 	validNextCount := 0

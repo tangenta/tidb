@@ -829,6 +829,8 @@ const (
 	TiDBServerMemoryLimitGCTrigger = "tidb_server_memory_limit_gc_trigger"
 	// TiDBEnableGOGCTuner is to enable GOGC tuner. it can tuner GOGC
 	TiDBEnableGOGCTuner = "tidb_enable_gogc_tuner"
+	// TiDBEnableDoubleQPS is to enable double qps.
+	TiDBEnableDoubleQPS = "tidb_enable_double_qps"
 )
 
 // TiDB intentional limits
@@ -1059,6 +1061,7 @@ const (
 	DefTiDBServerMemoryLimitSessMinSize             = 128 << 20
 	DefTiDBServerMemoryLimitGCTrigger               = 0.7
 	DefTiDBEnableGOGCTuner                          = true
+	DefTiDBEnableDoubleQPS                          = false
 )
 
 // Process global variables.
@@ -1116,6 +1119,8 @@ var (
 	// DefTiDBServerMemoryLimit indicates the default value of TiDBServerMemoryLimit(TotalMem * 80%).
 	// It should be a const and shouldn't be modified after tidb is started.
 	DefTiDBServerMemoryLimit = mathutil.Max(memory.GetMemTotalIgnoreErr()/10*8, 512<<20)
+
+	EnableDoubleQPS = atomic.NewBool(false)
 )
 
 var (

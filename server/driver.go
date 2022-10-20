@@ -68,12 +68,14 @@ type PreparedStatement interface {
 type ResultSet interface {
 	Columns() []*ColumnInfo
 	NewChunk(chunk.Allocator) *chunk.Chunk
+	NewChunkWithID(allocator chunk.Allocator, id uint64) *chunk.Chunk
 	Next(context.Context, *chunk.Chunk) error
 	StoreFetchedRows(rows []chunk.Row)
 	GetFetchedRows() []chunk.Row
 	Close() error
 	// IsClosed checks whether the result set is closed.
 	IsClosed() bool
+	Shared() bool
 }
 
 // fetchNotifier represents notifier will be called in COM_FETCH.

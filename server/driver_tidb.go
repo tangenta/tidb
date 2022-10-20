@@ -19,7 +19,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
@@ -33,8 +35,10 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/sessionstates"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	"github.com/pingcap/tidb/util/generic"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/topsql/stmtstats"
 )
@@ -221,14 +225,122 @@ func (tc *TiDBContext) WarningCount() uint16 {
 	return tc.GetSessionVars().StmtCtx.WarningCount()
 }
 
+const (
+	poolSize      = 3
+	taskChSize    = 100
+	resultMapSize = taskChSize
+	batchSize     = 3
+	timeout       = 300 * time.Millisecond
+)
+
+var (
+	batchExec     *batchExecutor
+	batchExecInit sync.Once
+)
+
+func batchExecute(sess session.Session, stmtNode ast.StmtNode) (sqlexec.RecordSet, error) {
+	connID := sess.GetSessionVars().ConnectionID
+	batchExecInit.Do(func() {
+		taskCh := make(chan *task, taskChSize)
+		batchExec = newBatchExecutor(taskCh, poolSize)
+	})
+	batchExec.taskCh <- &task{
+		sess:     sess,
+		connID:   connID,
+		stmtNode: stmtNode,
+	}
+	for {
+		if result, ok := batchExec.resultMap.Load(connID); ok {
+			batchExec.resultMap.Delete(connID)
+			return result.recordSet, result.err
+		} else {
+			batchExec.cond.L.Lock()
+			batchExec.cond.Wait()
+			batchExec.cond.L.Unlock()
+		}
+	}
+}
+
+type batchExecutor struct {
+	taskCh    chan *task
+	resultMap generic.SyncMap[uint64, *result]
+	cond      sync.Cond
+}
+
+type task struct {
+	sess     session.Session
+	connID   uint64
+	stmtNode ast.StmtNode
+}
+
+type result struct {
+	recordSet sqlexec.RecordSet
+	err       error
+}
+
+func newBatchExecutor(taskCh chan *task, execCnt int) *batchExecutor {
+	be := &batchExecutor{
+		taskCh:    taskCh,
+		resultMap: generic.NewSyncMap[uint64, *result](resultMapSize),
+		cond:      sync.Cond{L: &sync.Mutex{}},
+	}
+	for i := 0; i < execCnt; i++ {
+		go be.run()
+	}
+	return be
+}
+
+func (b *batchExecutor) run() {
+	executeTask := func(tsks []*task) {
+		stmts := make([]ast.StmtNode, 0, len(tsks))
+		ids := make([]uint64, 0, len(tsks))
+		sess := tsks[0].sess
+		for _, tsk := range tsks {
+			stmts = append(stmts, tsk.stmtNode)
+			ids = append(ids, tsk.connID)
+		}
+		recordSet, err := sess.ExecuteStmts(context.Background(), stmts, ids)
+		for _, tsk := range tsks {
+			var r result
+			r.recordSet, r.err = recordSet, err
+			b.resultMap.Store(tsk.connID, &r)
+			b.cond.Broadcast()
+		}
+	}
+	tasks := make([]*task, 0, batchSize)
+	ticker := time.NewTicker(timeout)
+	for {
+		select {
+		case task := <-b.taskCh:
+			tasks = append(tasks, task)
+			if len(tasks) == batchSize {
+				executeTask(tasks)
+				tasks = tasks[:0]
+			}
+		case <-ticker.C:
+			if len(tasks) > 0 {
+				executeTask(tasks)
+				tasks = tasks[:0]
+			}
+		}
+	}
+}
+
 // ExecuteStmt implements QueryCtx interface.
 func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (ResultSet, error) {
 	var rs sqlexec.RecordSet
 	var err error
+	var shared bool
 	if s, ok := stmt.(*ast.NonTransactionalDeleteStmt); ok {
 		rs, err = session.HandleNonTransactionalDelete(ctx, s, tc.Session)
 	} else {
-		rs, err = tc.Session.ExecuteStmt(ctx, stmt)
+		_, isSelect := stmt.(*ast.SelectStmt)
+		if variable.EnableDoubleQPS.Load() && !tc.Session.GetSessionVars().InRestrictedSQL && isSelect {
+			rs, err = batchExecute(tc.Session, stmt)
+			shared = true
+		} else {
+			rs, err = tc.Session.ExecuteStmt(ctx, stmt)
+		}
 	}
 	if err != nil {
 		tc.Session.GetSessionVars().StmtCtx.AppendError(err)
@@ -239,6 +351,7 @@ func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (Resu
 	}
 	return &tidbResultSet{
 		recordSet: rs,
+		shared:    shared,
 	}, nil
 }
 
@@ -397,10 +510,19 @@ type tidbResultSet struct {
 	rows         []chunk.Row
 	closed       int32
 	preparedStmt *core.PlanCacheStmt
+	shared       bool
+}
+
+func (trs *tidbResultSet) Shared() bool {
+	return trs.shared
 }
 
 func (trs *tidbResultSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 	return trs.recordSet.NewChunk(alloc)
+}
+
+func (trs *tidbResultSet) NewChunkWithID(alloc chunk.Allocator, id uint64) *chunk.Chunk {
+	return trs.recordSet.NewChunkWithID(alloc, id)
 }
 
 func (trs *tidbResultSet) Next(ctx context.Context, req *chunk.Chunk) error {

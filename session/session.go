@@ -158,6 +158,7 @@ type Session interface {
 	Execute(context.Context, string) ([]sqlexec.RecordSet, error) // Execute a sql statement.
 	// ExecuteStmt executes a parsed statement.
 	ExecuteStmt(context.Context, ast.StmtNode) (sqlexec.RecordSet, error)
+	ExecuteStmts(context.Context, []ast.StmtNode, []uint64) (sqlexec.RecordSet, error)
 	// Parse is deprecated, use ParseWithParams() instead.
 	Parse(ctx context.Context, sql string) ([]ast.StmtNode, error)
 	// ExecuteInternal is a helper around ParseWithParams() and ExecuteStmt(). It is not allowed to execute multiple statements.
@@ -2063,6 +2064,126 @@ func (s *session) ExecRestrictedSQL(ctx context.Context, opts []sqlexec.OptionFu
 		metrics.QueryDurationHistogram.WithLabelValues(metrics.LblInternal).Observe(time.Since(startTime).Seconds())
 		return rows, rs.Fields(), err
 	})
+}
+
+func (s *session) ExecuteStmts(ctx context.Context, stmtNodes []ast.StmtNode, ids []uint64) (sqlexec.RecordSet, error) {
+	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
+		span1 := span.Tracer().StartSpan("session.ExecuteStmt", opentracing.ChildOf(span.Context()))
+		defer span1.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span1)
+	}
+
+	if err := s.PrepareTxnCtx(ctx); err != nil {
+		return nil, err
+	}
+
+	if err := s.loadCommonGlobalVariablesIfNeeded(); err != nil {
+		return nil, err
+	}
+
+	s.sessionVars.StartTime = time.Now()
+
+	// Some executions are done in compile stage, so we reset them before compile.
+	if err := executor.ResetContextOfStmt(s, stmtNodes[0]); err != nil {
+		return nil, err
+	}
+	normalizedSQL, digest := s.sessionVars.StmtCtx.SQLDigest()
+	if topsqlstate.TopSQLEnabled() {
+		s.sessionVars.StmtCtx.IsSQLRegistered.Store(true)
+		ctx = topsql.AttachAndRegisterSQLInfo(ctx, normalizedSQL, digest, s.sessionVars.InRestrictedSQL)
+	}
+
+	if err := s.validateStatementReadOnlyInStaleness(stmtNodes[0]); err != nil {
+		return nil, err
+	}
+
+	// Uncorrelated subqueries will execute once when building plan, so we reset process info before building plan.
+	cmd32 := atomic.LoadUint32(&s.GetSessionVars().CommandValue)
+	s.SetProcessInfo(stmtNodes[0].Text(), time.Now(), byte(cmd32), 0)
+	s.txn.onStmtStart(digest.String())
+	defer s.txn.onStmtEnd()
+
+	if err := s.onTxnManagerStmtStartOrRetry(ctx, stmtNodes[0]); err != nil {
+		return nil, err
+	}
+
+	failpoint.Inject("mockStmtSlow", func(val failpoint.Value) {
+		if strings.Contains(stmtNodes[0].Text(), "/* sleep */") {
+			v, _ := val.(int)
+			time.Sleep(time.Duration(v) * time.Millisecond)
+		}
+	})
+
+	stmtLabel := ast.GetStmtLabel(stmtNodes[0])
+	s.setRequestSource(ctx, stmtLabel, stmtNodes[0])
+
+	// Transform abstract syntax tree to a physical plan(stored in executor.ExecStmt).
+	compiler := executor.Compiler{Ctx: s}
+	stmt, err := compiler.CompileStmts(ctx, stmtNodes, ids)
+	if err == nil {
+		err = sessiontxn.OptimizeWithPlanAndThenWarmUp(s, stmt.Plan)
+	}
+
+	if err != nil {
+		s.rollbackOnError(ctx)
+
+		// Only print log message when this SQL is from the user.
+		// Mute the warning for internal SQLs.
+		if !s.sessionVars.InRestrictedSQL {
+			if !variable.ErrUnknownSystemVar.Equal(err) {
+				logutil.Logger(ctx).Warn("compile SQL failed", zap.Error(err),
+					zap.String("SQL", stmtNodes[0].Text()))
+			}
+		}
+		return nil, err
+	}
+
+	durCompile := time.Since(s.sessionVars.StartTime)
+	s.GetSessionVars().DurationCompile = durCompile
+	if s.isInternal() {
+		sessionExecuteCompileDurationInternal.Observe(durCompile.Seconds())
+	} else {
+		sessionExecuteCompileDurationGeneral.Observe(durCompile.Seconds())
+	}
+	s.currentPlan = stmt.Plan
+	if execStmt, ok := stmtNodes[0].(*ast.ExecuteStmt); ok {
+		if execStmt.Name == "" {
+			// for exec-stmt on bin-protocol, ignore the plan detail in `show process` to gain performance benefits.
+			s.currentPlan = nil
+		}
+	}
+
+	// Execute the physical plan.
+	logStmt(stmt, s)
+
+	var recordSet sqlexec.RecordSet
+	if stmt.PsStmt != nil { // point plan short path
+		recordSet, err = stmt.PointGet(ctx)
+		s.txn.changeToInvalid()
+	} else {
+		recordSet, err = runStmt(ctx, s, stmt)
+	}
+
+	if err != nil {
+		if !errIsNoisy(err) {
+			logutil.Logger(ctx).Warn("run statement failed",
+				zap.Int64("schemaVersion", s.GetInfoSchema().SchemaMetaVersion()),
+				zap.Error(err),
+				zap.String("session", s.String()))
+		}
+		return recordSet, err
+	}
+	if !s.isInternal() && config.GetGlobalConfig().EnableTelemetry {
+		telemetry.CurrentExecuteCount.Inc()
+		tiFlashPushDown, tiFlashExchangePushDown := plannercore.IsTiFlashContained(stmt.Plan)
+		if tiFlashPushDown {
+			telemetry.CurrentTiFlashPushDownCount.Inc()
+		}
+		if tiFlashExchangePushDown {
+			telemetry.CurrentTiFlashExchangePushDownCount.Inc()
+		}
+	}
+	return recordSet, nil
 }
 
 func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlexec.RecordSet, error) {

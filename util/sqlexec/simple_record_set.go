@@ -63,6 +63,10 @@ func (r *SimpleRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 	return chunk.New(fields, r.MaxChunkSize, r.MaxChunkSize)
 }
 
+func (r *SimpleRecordSet) NewChunkWithID(alloc chunk.Allocator, id uint64) *chunk.Chunk {
+	return nil
+}
+
 // Close implements the sqlexec.RecordSet interface.
 func (r *SimpleRecordSet) Close() error {
 	r.idx = 0

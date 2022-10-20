@@ -520,6 +520,10 @@ func (e *analyzeColumnsExec) NewChunk(_ chunk.Allocator) *chunk.Chunk {
 	return chunk.NewChunkWithCapacity(fields, 1024)
 }
 
+func (e *analyzeColumnsExec) NewChunkWithID(_ chunk.Allocator, _ uint64) *chunk.Chunk {
+	return nil
+}
+
 // Close implements the sqlexec.RecordSet Close interface.
 func (e *analyzeColumnsExec) Close() error {
 	return nil

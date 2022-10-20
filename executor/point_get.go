@@ -36,12 +36,13 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/execdetails"
+	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/logutil/consistency"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 )
 
-func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan) Executor {
+func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ...map[uint64]plannercore.Plan) Executor {
 	var err error
 	if err = b.validCanReadTemporaryOrCacheTable(p.TblInfo); err != nil {
 		b.err = err
@@ -55,8 +56,39 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan) Executor {
 		}()
 	}
 
+	var planMap map[uint64]plannercore.Plan
+	if len(planMaps) == 1 {
+		planMap = planMaps[0]
+	}
+
+	allSchemas := make(map[uint64]*expression.Schema, len(planMap))
+	resultFts := make(map[uint64][]*types.FieldType, len(planMap))
+	handles := make(map[uint64]kv.Handle, len(planMap))
+	tblInfos := make(map[uint64]*model.TableInfo, len(planMap))
+	decoders := make(map[uint64]*rowcodec.ChunkDecoder, len(planMap))
+	allIdxInfos := make(map[uint64]*model.IndexInfo, len(planMap))
+	for id, p := range planMap {
+		pgPlan := p.(*plannercore.PointGetPlan)
+		allSchemas[id] = pgPlan.Schema()
+		cols := pgPlan.Schema().Columns
+		fts := make([]*types.FieldType, len(cols))
+		for i := range cols {
+			fts[i] = cols[i].RetType
+		}
+		resultFts[id] = fts
+		handles[id] = pgPlan.Handle
+		tblInfos[id] = pgPlan.TblInfo
+		decoders[id] = NewRowDecoder(b.ctx, p.Schema(), pgPlan.TblInfo)
+		allIdxInfos[id] = pgPlan.IndexInfo
+	}
+
 	e := &PointGetExecutor{
 		baseExecutor:     newBaseExecutor(b.ctx, p.Schema(), p.ID()),
+		allSchemas:       allSchemas,
+		resultFieldTypes: resultFts,
+		allTableInfos:    tblInfos,
+		allIndexInfos:    allIdxInfos,
+		allHandles:       handles,
 		txnScope:         b.txnScope,
 		readReplicaScope: b.readReplicaScope,
 		isStaleness:      b.isStaleness,
@@ -65,6 +97,7 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan) Executor {
 	e.base().initCap = 1
 	e.base().maxChunkSize = 1
 	e.Init(p)
+	e.allRowDecoders = decoders
 
 	e.snapshot, err = b.getSnapshot()
 	if err != nil {
@@ -116,6 +149,14 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan) Executor {
 // PointGetExecutor executes point select query.
 type PointGetExecutor struct {
 	baseExecutor
+
+	allSchemas       map[uint64]*expression.Schema
+	resultFieldTypes map[uint64][]*types.FieldType
+	allTableInfos    map[uint64]*model.TableInfo
+	allIndexInfos    map[uint64]*model.IndexInfo
+	allHandles       map[uint64]kv.Handle
+	allRowDecoders   map[uint64]*rowcodec.ChunkDecoder
+	resultVals       map[string][]byte
 
 	tblInfo          *model.TableInfo
 	handle           kv.Handle
@@ -218,29 +259,50 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 
 	var tblID int64
 	var err error
-	if e.partInfo != nil {
-		tblID = e.partInfo.ID
+	if len(e.allTableInfos) > 0 {
+		tblID = e.allTableInfos[req.ConnID].ID
 	} else {
-		tblID = e.tblInfo.ID
+		if e.partInfo != nil {
+			tblID = e.partInfo.ID
+		} else {
+			tblID = e.tblInfo.ID
+		}
+	}
+	tblInfo := e.tblInfo
+	if len(e.allTableInfos) > 0 {
+		tblInfo = e.allTableInfos[req.ConnID]
 	}
 	if e.lock {
 		e.updateDeltaForTableID(tblID)
 	}
-	if e.idxInfo != nil {
-		if isCommonHandleRead(e.tblInfo, e.idxInfo) {
-			handleBytes, err := EncodeUniqueIndexValuesForKey(e.ctx, e.tblInfo, e.idxInfo, e.idxVals)
+	indexInfo := e.idxInfo
+	if len(e.allIndexInfos) > 0 {
+		indexInfo = e.allIndexInfos[req.ConnID]
+	}
+	handle := e.handle
+	if len(e.allHandles) > 0 {
+		handle = e.allHandles[req.ConnID]
+	}
+	var idxKey kv.Key
+
+	if indexInfo != nil {
+		if req.ConnID != 0 {
+			panic("unsupported index point select")
+		}
+		if isCommonHandleRead(tblInfo, indexInfo) {
+			handleBytes, err := EncodeUniqueIndexValuesForKey(e.ctx, tblInfo, indexInfo, e.idxVals)
 			if err != nil {
 				if kv.ErrNotExist.Equal(err) {
 					return nil
 				}
 				return err
 			}
-			e.handle, err = kv.NewCommonHandle(handleBytes)
+			handle, err = kv.NewCommonHandle(handleBytes)
 			if err != nil {
 				return err
 			}
 		} else {
-			e.idxKey, err = EncodeUniqueIndexKey(e.ctx, e.tblInfo, e.idxInfo, e.idxVals, tblID)
+			idxKey, err = EncodeUniqueIndexKey(e.ctx, tblInfo, indexInfo, e.idxVals, tblID)
 			if err != nil && !kv.ErrNotExist.Equal(err) {
 				return err
 			}
@@ -250,11 +312,11 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 			// Non-exist keys are also locked if the isolation level is not read consistency,
 			// lock it before read here, then it's able to read from pessimistic lock cache.
 			if lockNonExistIdxKey {
-				err = e.lockKeyIfNeeded(ctx, e.idxKey)
+				err = e.lockKeyIfNeeded(ctx, idxKey)
 				if err != nil {
 					return err
 				}
-				e.handleVal, err = e.get(ctx, e.idxKey)
+				e.handleVal, err = e.get(ctx, idxKey)
 				if err != nil {
 					if !kv.ErrNotExist.Equal(err) {
 						return err
@@ -262,12 +324,12 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 				}
 			} else {
 				if e.lock {
-					e.handleVal, err = e.lockKeyIfExists(ctx, e.idxKey)
+					e.handleVal, err = e.lockKeyIfExists(ctx, idxKey)
 					if err != nil {
 						return err
 					}
 				} else {
-					e.handleVal, err = e.get(ctx, e.idxKey)
+					e.handleVal, err = e.get(ctx, idxKey)
 					if err != nil {
 						if !kv.ErrNotExist.Equal(err) {
 							return err
@@ -297,7 +359,7 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 			if err != nil {
 				return err
 			}
-			e.handle = iv
+			handle = iv
 
 			// The injection is used to simulate following scenario:
 			// 1. Session A create a point get query but pause before second time `GET` kv from backend
@@ -315,8 +377,20 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 		}
 	}
 
-	key := tablecodec.EncodeRowKeyWithHandle(tblID, e.handle)
-	val, err := e.getAndLock(ctx, key)
+	var key kv.Key
+	allKeys := make(map[uint64]kv.Key)
+	if len(e.allHandles) > 0 {
+		hd := e.allHandles[req.ConnID]
+		if hd == nil {
+			key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
+		} else {
+			allKeys[req.ConnID] = tablecodec.EncodeRowKeyWithHandle(tblID, hd)
+		}
+	} else {
+		key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
+	}
+
+	val, err := e.getAndLock(ctx, key, allKeys, req.ConnID)
 	if err != nil {
 		return err
 	}
@@ -328,34 +402,41 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 					return key
 				},
 				IndexEncode: func(idxRow *consistency.RecordData) kv.Key {
-					return e.idxKey
+					return idxKey
 				},
 				Tbl:  e.tblInfo,
 				Idx:  e.idxInfo,
 				Sctx: e.ctx,
 			}).ReportLookupInconsistent(ctx,
 				1, 0,
-				[]kv.Handle{e.handle},
-				[]kv.Handle{e.handle},
+				[]kv.Handle{handle},
+				[]kv.Handle{handle},
 				[]consistency.RecordData{{}},
 			)
 		}
 		return nil
 	}
-	err = DecodeRowValToChunk(e.base().ctx, e.schema, e.tblInfo, e.handle, val, req, e.rowDecoder)
+
+	schema := e.schema
+	rowDecoder := e.rowDecoder
+	if len(e.allSchemas) > 0 {
+		schema = e.allSchemas[req.ConnID]
+		rowDecoder = e.allRowDecoders[req.ConnID]
+	}
+	err = DecodeRowValToChunk(e.base().ctx, schema, tblInfo, handle, val, req, rowDecoder)
 	if err != nil {
 		return err
 	}
 
-	err = FillVirtualColumnValue(e.virtualColumnRetFieldTypes, e.virtualColumnIndex,
-		e.schema, e.columns, e.ctx, req)
-	if err != nil {
-		return err
-	}
+	//err = FillVirtualColumnValue(e.virtualColumnRetFieldTypes, e.virtualColumnIndex,
+	//	e.schema, e.columns, e.ctx, req)
+	//if err != nil {
+	//	return err
+	//}
 	return nil
 }
 
-func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key) (val []byte, err error) {
+func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key, allKeys map[uint64]kv.Key, connID uint64) (val []byte, err error) {
 	if e.ctx.GetSessionVars().IsPessimisticReadConsistency() {
 		// Only Lock the existing keys in RC isolation.
 		if e.lock {
@@ -379,12 +460,23 @@ func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key) (val []by
 	if err != nil {
 		return nil, err
 	}
-	val, err = e.get(ctx, key)
-	if err != nil {
-		if !kv.ErrNotExist.Equal(err) {
-			return nil, err
+	if len(allKeys) > 0 {
+		vals, err := e.batchGet(ctx, allKeys)
+		if err != nil {
+			if !kv.ErrNotExist.Equal(err) {
+				return nil, err
+			}
+			return nil, nil
 		}
-		return nil, nil
+		val = vals[string(allKeys[connID])]
+	} else {
+		val, err = e.get(ctx, key)
+		if err != nil {
+			if !kv.ErrNotExist.Equal(err) {
+				return nil, err
+			}
+			return nil, nil
+		}
 	}
 	return val, nil
 }
@@ -500,6 +592,58 @@ func (e *PointGetExecutor) get(ctx context.Context, key kv.Key) ([]byte, error) 
 	}
 	// if not read lock or table was unlock then snapshot get
 	return e.snapshot.Get(ctx, key)
+}
+
+func (e *PointGetExecutor) batchGet(ctx context.Context, keys map[uint64]kv.Key) (map[string][]byte, error) {
+	if e.resultVals != nil {
+		return e.resultVals, nil
+	}
+	if len(keys) == 0 {
+		return nil, kv.ErrNotExist
+	}
+
+	if e.txn.Valid() && !e.txn.IsReadOnly() {
+		// We cannot use txn.Get directly here because the snapshot in txn and the snapshot of e.snapshot may be
+		// different for pessimistic transaction.
+		val, err := e.txn.GetMemBuffer().Get(ctx, keys[0])
+		if err == nil {
+			logutil.BgLogger().Fatal("batch point-get should not be non-read-only")
+			return map[string][]byte{string(keys[0]): val}, err
+		}
+		if !kv.IsErrNotFound(err) {
+			return nil, err
+		}
+		// key does not exist in mem buffer, check the lock cache
+		if e.lock {
+			var ok bool
+			val, ok = e.ctx.GetSessionVars().TxnCtx.GetKeyInPessimisticLockCache(keys[0])
+			if ok {
+				return nil, nil
+			}
+		}
+		// fallthrough to snapshot get.
+	}
+
+	lock := e.tblInfo.Lock
+	if lock != nil && (lock.Tp == model.TableLockRead || lock.Tp == model.TableLockReadOnly) {
+		if e.ctx.GetSessionVars().EnablePointGetCache {
+			cacheDB := e.ctx.GetStore().GetMemCache()
+			val, err := cacheDB.UnionGet(ctx, e.tblInfo.ID, e.snapshot, keys[0])
+			if err != nil {
+				return nil, err
+			}
+			logutil.BgLogger().Fatal("batch point-get should not be lock")
+			return map[string][]byte{string(keys[0]): val}, nil
+		}
+	}
+	// if not read lock or table was unlock then snapshot get
+	keyArr := make([]kv.Key, 0, len(keys))
+	for _, v := range keys {
+		keyArr = append(keyArr, v)
+	}
+	ret, err := e.snapshot.BatchGet(ctx, keyArr)
+	e.resultVals = ret
+	return ret, err
 }
 
 func (e *PointGetExecutor) verifyTxnScope() error {
