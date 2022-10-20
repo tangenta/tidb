@@ -132,21 +132,31 @@ func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, i
 	} else {
 		CountStmtNode(stmtNodes[0], sessVars.InRestrictedSQL)
 	}
+	var firstPlan plannercore.Plan
+	for _, p := range finalPlans {
+		firstPlan = p
+		break
+	}
 	var lowerPriority bool
 	if c.Ctx.GetSessionVars().StmtCtx.Priority == mysql.NoPriority {
-		lowerPriority = needLowerPriority(finalPlans[0])
+		lowerPriority = needLowerPriority(firstPlan)
 	}
-	stmtCtx.SetPlan(finalPlans[0])
+	stmtCtx.SetPlan(firstPlan)
+	var firstOutputName []*types.FieldName
+	for _, name := range outputNames {
+		firstOutputName = name
+		break
+	}
 	stmt := &ExecStmt{
 		GoCtx:          ctx,
 		InfoSchema:     is,
-		Plan:           finalPlans[0],
+		Plan:           firstPlan,
 		Plans:          finalPlans,
 		LowerPriority:  lowerPriority,
 		Text:           stmtNodes[0].Text(),
 		StmtNode:       stmtNodes[0],
 		Ctx:            c.Ctx,
-		OutputNames:    outputNames[0],
+		OutputNames:    firstOutputName,
 		AllOutputNames: outputNames,
 		Ti:             &TelemetryInfo{},
 	}

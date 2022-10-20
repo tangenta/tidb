@@ -507,10 +507,12 @@ func (tc *TiDBContext) DecodeSessionStates(ctx context.Context, sctx sessionctx.
 type tidbResultSet struct {
 	recordSet    sqlexec.RecordSet
 	columns      []*ColumnInfo
+	allColumns   map[uint64][]*ColumnInfo
 	rows         []chunk.Row
 	closed       int32
 	preparedStmt *core.PlanCacheStmt
 	shared       bool
+	mu           sync.Mutex
 }
 
 func (trs *tidbResultSet) Shared() bool {
@@ -584,6 +586,33 @@ func (trs *tidbResultSet) Columns() []*ColumnInfo {
 		}
 	}
 	return trs.columns
+}
+
+func (trs *tidbResultSet) ColumnsWithID(id uint64) []*ColumnInfo {
+	// for prepare statement, try to get cached columnInfo array
+	if trs.preparedStmt != nil {
+		ps := trs.preparedStmt
+		if colInfos, ok := ps.ColumnInfos.([]*ColumnInfo); ok {
+			trs.columns = colInfos
+		}
+	}
+	trs.mu.Lock()
+	if trs.allColumns == nil {
+		trs.allColumns = make(map[uint64][]*ColumnInfo)
+	}
+	trs.mu.Unlock()
+	if cols, ok := trs.allColumns[id]; ok {
+		return cols
+	}
+	fields := trs.recordSet.FieldsWithID(id)
+	cols := make([]*ColumnInfo, 0, len(fields))
+	for _, v := range fields {
+		cols = append(cols, convertColumnInfo(v))
+	}
+	trs.mu.Lock()
+	trs.allColumns[id] = cols
+	trs.mu.Unlock()
+	return cols
 }
 
 func convertColumnInfo(fld *ast.ResultField) (ci *ColumnInfo) {

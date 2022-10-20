@@ -89,6 +89,7 @@ type processinfoSetter interface {
 // recordSet wraps an executor, implements sqlexec.RecordSet interface
 type recordSet struct {
 	fields     []*ast.ResultField
+	allFields  map[uint64][]*ast.ResultField
 	executor   Executor
 	stmt       *ExecStmt
 	lastErr    error
@@ -101,6 +102,29 @@ func (a *recordSet) Fields() []*ast.ResultField {
 		a.fields = colNames2ResultFields(a.executor.Schema(), a.stmt.OutputNames, a.stmt.Ctx.GetSessionVars().CurrentDB)
 	}
 	return a.fields
+}
+
+func (a *recordSet) FieldsWithID(id uint64) []*ast.ResultField {
+	a.mu.Lock()
+	if len(a.allFields) == 0 {
+		a.allFields = make(map[uint64][]*ast.ResultField)
+	}
+	a.mu.Unlock()
+	if rf, ok := a.allFields[id]; ok {
+		return rf
+	}
+	if pge, ok := a.executor.(*PointGetExecutor); ok {
+		schema := pge.allSchemas[id]
+		outputNames := a.stmt.AllOutputNames[id]
+		curDB := a.stmt.Ctx.GetSessionVars().CurrentDB
+		rf := colNames2ResultFields(schema, outputNames, curDB)
+		a.mu.Lock()
+		a.allFields[id] = rf
+		a.mu.Unlock()
+		return rf
+	} else {
+		return a.Fields()
+	}
 }
 
 func colNames2ResultFields(schema *expression.Schema, names []*types.FieldName, defaultDB string) []*ast.ResultField {
@@ -684,6 +708,10 @@ func (c *chunkRowRecordSet) Fields() []*ast.ResultField {
 		c.fields = colNames2ResultFields(c.e.Schema(), c.execStmt.OutputNames, c.execStmt.Ctx.GetSessionVars().CurrentDB)
 	}
 	return c.fields
+}
+
+func (c *chunkRowRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
+	return nil
 }
 
 func (c *chunkRowRecordSet) Next(ctx context.Context, chk *chunk.Chunk) error {

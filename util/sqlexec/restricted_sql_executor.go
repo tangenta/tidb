@@ -192,6 +192,8 @@ type RecordSet interface {
 	// Fields gets result fields.
 	Fields() []*ast.ResultField
 
+	FieldsWithID(id uint64) []*ast.ResultField
+
 	// Next reads records into chunk.
 	Next(ctx context.Context, req *chunk.Chunk) error
 

@@ -2270,7 +2270,12 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 		if !gotColumnInfo {
 			// We need to call Next before we get columns.
 			// Otherwise, we will get incorrect columns info.
-			columns := rs.Columns()
+			var columns []*ColumnInfo
+			if rs.Shared() {
+				columns = rs.ColumnsWithID(cc.connectionID)
+			} else {
+				columns = rs.Columns()
+			}
 			if stmtDetail != nil {
 				start = time.Now()
 			}

@@ -462,6 +462,10 @@ func (e *analyzeColumnsExec) Fields() []*ast.ResultField {
 	return e.fields
 }
 
+func (e *analyzeColumnsExec) FieldsWithID(id uint64) []*ast.ResultField {
+	return nil
+}
+
 func (e *analyzeColumnsExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
 	e.req = req

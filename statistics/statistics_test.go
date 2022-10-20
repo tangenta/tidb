@@ -55,6 +55,10 @@ func (r *recordSet) Fields() []*ast.ResultField {
 	return r.fields
 }
 
+func (r *recordSet) FieldsWithID(id uint64) []*ast.ResultField {
+	return nil
+}
+
 func (r *recordSet) setFields(tps ...uint8) {
 	r.fields = make([]*ast.ResultField, len(tps))
 	for i := 0; i < len(tps); i++ {

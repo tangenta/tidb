@@ -35,6 +35,10 @@ func (r *SimpleRecordSet) Fields() []*ast.ResultField {
 	return r.ResultFields
 }
 
+func (r *SimpleRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
+	return nil
+}
+
 // Next implements the sqlexec.RecordSet interface.
 func (r *SimpleRecordSet) Next(_ context.Context, req *chunk.Chunk) error {
 	req.Reset()
