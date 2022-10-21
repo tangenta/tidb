@@ -109,11 +109,17 @@ func (a *recordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	if len(a.allFields) == 0 {
 		a.allFields = make(map[uint64][]*ast.ResultField)
 	}
-	a.mu.Unlock()
 	if rf, ok := a.allFields[id]; ok {
-		return rf
+		a.mu.Unlock()
+		rsf := make([]*ast.ResultField, len(rf))
+		copy(rsf, rf)
+		return rsf
 	}
+	a.mu.Unlock()
 	if pge, ok := a.executor.(*PointGetExecutor); ok {
+		if len(pge.allSchemas) == 0 {
+			return a.Fields()
+		}
 		schema := pge.allSchemas[id]
 		outputNames := a.stmt.AllOutputNames[id]
 		curDB := a.stmt.Ctx.GetSessionVars().CurrentDB
@@ -307,6 +313,7 @@ type ExecStmt struct {
 	AllOutputNames map[uint64][]*types.FieldName
 	PsStmt         *plannercore.PlanCacheStmt
 	Ti             *TelemetryInfo
+	Closed         atomic.Bool
 }
 
 // GetStmtNode returns the stmtNode inside Statement
@@ -351,7 +358,7 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	}
 	if a.PsStmt.Executor == nil {
 		b := newExecutorBuilder(a.Ctx, a.InfoSchema, a.Ti)
-		newExecutor := b.build(a.Plan)
+		newExecutor := b.build(a.Plan, a.Plans)
 		if b.err != nil {
 			return nil, b.err
 		}
@@ -1315,6 +1322,10 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 
 // CloseRecordSet will finish the execution of current statement and do some record work
 func (a *ExecStmt) CloseRecordSet(txnStartTS uint64, lastErr error) {
+	if a.Closed.Load() {
+		return
+	}
+	a.Closed.Store(true)
 	a.FinishExecuteStmt(txnStartTS, lastErr, false)
 	a.logAudit()
 	// Detach the Memory and disk tracker for the previous stmtCtx from GlobalMemoryUsageTracker and GlobalDiskUsageTracker

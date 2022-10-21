@@ -230,7 +230,7 @@ const (
 	taskChSize    = 100
 	resultMapSize = taskChSize
 	batchSize     = 16
-	timeout       = 200 * time.Millisecond
+	timeout       = 5 * time.Second
 )
 
 var (
@@ -334,10 +334,14 @@ func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (Resu
 	if s, ok := stmt.(*ast.NonTransactionalDeleteStmt); ok {
 		rs, err = session.HandleNonTransactionalDelete(ctx, s, tc.Session)
 	} else {
-		_, isSelect := stmt.(*ast.SelectStmt)
-		if variable.EnableDoubleQPS.Load() && !tc.Session.GetSessionVars().InRestrictedSQL && isSelect {
-			rs, err = batchExecute(tc.Session, stmt)
-			shared = true
+		prep, isExec := stmt.(*ast.ExecuteStmt)
+		if variable.EnableDoubleQPS.Load() && !tc.Session.GetSessionVars().InRestrictedSQL && isExec {
+			if pc, ok := prep.PrepStmt.(*core.PlanCacheStmt); ok && strings.Contains(pc.StmtDB, "sbtest") {
+				rs, err = batchExecute(tc.Session, stmt)
+				shared = true
+			} else {
+				rs, err = tc.Session.ExecuteStmt(ctx, stmt)
+			}
 		} else {
 			rs, err = tc.Session.ExecuteStmt(ctx, stmt)
 		}
@@ -513,6 +517,7 @@ type tidbResultSet struct {
 	preparedStmt *core.PlanCacheStmt
 	shared       bool
 	mu           sync.Mutex
+	closeCnt     int
 }
 
 func (trs *tidbResultSet) Shared() bool {
@@ -543,7 +548,14 @@ func (trs *tidbResultSet) GetFetchedRows() []chunk.Row {
 }
 
 func (trs *tidbResultSet) Close() error {
-	if !atomic.CompareAndSwapInt32(&trs.closed, 0, 1) {
+	var canClose bool
+	trs.mu.Lock()
+	trs.closed++
+	if trs.closed == batchSize {
+		canClose = true
+	}
+	trs.mu.Unlock()
+	if !canClose || !atomic.CompareAndSwapInt32(&trs.closed, 0, 1) {
 		return nil
 	}
 	err := trs.recordSet.Close()

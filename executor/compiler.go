@@ -172,6 +172,13 @@ func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, i
 				preparedObj.PreparedAst.CachedPlan = nil
 			}
 		}
+		for id, p := range stmt.Plans {
+			if ep, ok := p.(*plannercore.Execute); ok {
+				if pointPlan, ok := ep.Plan.(*plannercore.PointGetPlan); ok {
+					stmt.Plans[id] = pointPlan
+				}
+			}
+		}
 	}
 	return stmt, nil
 }

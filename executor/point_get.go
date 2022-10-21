@@ -17,6 +17,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -60,7 +61,6 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 	if len(planMaps) == 1 {
 		planMap = planMaps[0]
 	}
-
 	allSchemas := make(map[uint64]*expression.Schema, len(planMap))
 	resultFts := make(map[uint64][]*types.FieldType, len(planMap))
 	handles := make(map[uint64]kv.Handle, len(planMap))
@@ -188,6 +188,8 @@ type PointGetExecutor struct {
 	virtualColumnRetFieldTypes []*types.FieldType
 
 	stats *runtimeStatsWithSnapshot
+
+	mu sync.Mutex
 }
 
 // Init set fields needed for PointGetExecutor reuse, this does NOT change baseExecutor field
@@ -198,6 +200,11 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan) {
 	e.idxInfo = p.IndexInfo
 	e.idxVals = p.IndexValues
 	e.done = false
+	if e.allDone != nil {
+		for id := range e.allDone {
+			e.allDone[id] = false
+		}
+	}
 	if e.tblInfo.TempTableType == model.TempTableNone {
 		e.lock = p.Lock
 		e.lockWaitTime = p.LockWaitTime
@@ -250,28 +257,37 @@ func (e *PointGetExecutor) Close() error {
 		e.ctx.StoreIndexUsage(e.tblInfo.ID, e.idxInfo.ID, actRows)
 	}
 	e.done = false
+	if e.allDone != nil {
+		for id := range e.allDone {
+			e.allDone[id] = false
+		}
+	}
 	return nil
 }
 
 // Next implements the Executor interface.
 func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
+	e.mu.Lock()
 	if len(e.allDone) > 0 {
 		if e.allDone[req.ConnID] {
+			e.mu.Unlock()
 			return nil
 		}
 		e.allDone[req.ConnID] = true
 	} else {
 		if e.done {
+			e.mu.Unlock()
 			return nil
 		}
 		e.done = true
 	}
-
+	e.mu.Unlock()
 	var tblID int64
 	var err error
 	if len(e.allTableInfos) > 0 {
-		tblID = e.allTableInfos[req.ConnID].ID
+		connID := req.ConnID
+		tblID = e.allTableInfos[connID].ID
 	} else {
 		if e.partInfo != nil {
 			tblID = e.partInfo.ID
@@ -391,11 +407,13 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	var key kv.Key
 	allKeys := make(map[uint64]kv.Key)
 	if len(e.allHandles) > 0 {
-		hd := e.allHandles[req.ConnID]
-		if hd == nil {
-			key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
-		} else {
-			allKeys[req.ConnID] = tablecodec.EncodeRowKeyWithHandle(tblID, hd)
+		for id, hd := range e.allHandles {
+			if hd != nil {
+				allKeys[id] = tablecodec.EncodeRowKeyWithHandle(tblID, hd)
+			} else {
+				allKeys = nil
+				key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
+			}
 		}
 	} else {
 		key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
@@ -472,7 +490,11 @@ func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key, allKeys m
 		return nil, err
 	}
 	if len(allKeys) > 0 {
-		vals, err := e.batchGet(ctx, allKeys)
+		keyArr := make([]kv.Key, 0, len(allKeys))
+		for _, k := range allKeys {
+			keyArr = append(keyArr, k)
+		}
+		vals, err := e.batchGet(ctx, keyArr)
 		if err != nil {
 			if !kv.ErrNotExist.Equal(err) {
 				return nil, err
@@ -605,7 +627,7 @@ func (e *PointGetExecutor) get(ctx context.Context, key kv.Key) ([]byte, error) 
 	return e.snapshot.Get(ctx, key)
 }
 
-func (e *PointGetExecutor) batchGet(ctx context.Context, keys map[uint64]kv.Key) (map[string][]byte, error) {
+func (e *PointGetExecutor) batchGet(ctx context.Context, keys []kv.Key) (map[string][]byte, error) {
 	if e.resultVals != nil {
 		return e.resultVals, nil
 	}
@@ -648,11 +670,7 @@ func (e *PointGetExecutor) batchGet(ctx context.Context, keys map[uint64]kv.Key)
 		}
 	}
 	// if not read lock or table was unlock then snapshot get
-	keyArr := make([]kv.Key, 0, len(keys))
-	for _, v := range keys {
-		keyArr = append(keyArr, v)
-	}
-	ret, err := e.snapshot.BatchGet(ctx, keyArr)
+	ret, err := e.snapshot.BatchGet(ctx, keys)
 	e.resultVals = ret
 	return ret, err
 }
