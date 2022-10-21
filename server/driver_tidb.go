@@ -230,7 +230,7 @@ const (
 	taskChSize    = 100
 	resultMapSize = taskChSize
 	batchSize     = 16
-	timeout       = 5 * time.Second
+	timeout       = 200 * time.Millisecond
 )
 
 var (

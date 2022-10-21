@@ -343,27 +343,12 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	}
 	a.Ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityHigh
 
-	// try to reuse point get executor
-	if a.PsStmt.Executor != nil {
-		exec, ok := a.PsStmt.Executor.(*PointGetExecutor)
-		if !ok {
-			logutil.Logger(ctx).Error("invalid executor type, not PointGetExecutor for point get path")
-			a.PsStmt.Executor = nil
-		} else {
-			// CachedPlan type is already checked in last step
-			pointGetPlan := a.PsStmt.PreparedAst.CachedPlan.(*plannercore.PointGetPlan)
-			exec.Init(pointGetPlan)
-			a.PsStmt.Executor = exec
-		}
+	b := newExecutorBuilder(a.Ctx, a.InfoSchema, a.Ti)
+	newExecutor := b.build(a.Plan, a.Plans)
+	if b.err != nil {
+		return nil, b.err
 	}
-	if a.PsStmt.Executor == nil {
-		b := newExecutorBuilder(a.Ctx, a.InfoSchema, a.Ti)
-		newExecutor := b.build(a.Plan, a.Plans)
-		if b.err != nil {
-			return nil, b.err
-		}
-		a.PsStmt.Executor = newExecutor
-	}
+	a.PsStmt.Executor = newExecutor
 	pointExecutor := a.PsStmt.Executor.(*PointGetExecutor)
 
 	if err = pointExecutor.Open(ctx); err != nil {
