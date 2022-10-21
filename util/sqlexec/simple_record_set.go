@@ -39,6 +39,10 @@ func (r *SimpleRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
 }
 
+func (r *SimpleRecordSet) CheckIDExist(id uint64) bool {
+	return false
+}
+
 // Next implements the sqlexec.RecordSet interface.
 func (r *SimpleRecordSet) Next(_ context.Context, req *chunk.Chunk) error {
 	req.Reset()

@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/util/logutil/consistency"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
+	"go.uber.org/zap"
 )
 
 func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ...map[uint64]plannercore.Plan) Executor {
@@ -57,41 +58,8 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 		}()
 	}
 
-	var planMap map[uint64]plannercore.Plan
-	if len(planMaps) == 1 {
-		planMap = planMaps[0]
-	}
-	allSchemas := make(map[uint64]*expression.Schema, len(planMap))
-	resultFts := make(map[uint64][]*types.FieldType, len(planMap))
-	handles := make(map[uint64]kv.Handle, len(planMap))
-	tblInfos := make(map[uint64]*model.TableInfo, len(planMap))
-	decoders := make(map[uint64]*rowcodec.ChunkDecoder, len(planMap))
-	allIdxInfos := make(map[uint64]*model.IndexInfo, len(planMap))
-	allDone := make(map[uint64]bool, len(planMap))
-	for id, p := range planMap {
-		pgPlan := p.(*plannercore.PointGetPlan)
-		allSchemas[id] = pgPlan.Schema()
-		cols := pgPlan.Schema().Columns
-		fts := make([]*types.FieldType, len(cols))
-		for i := range cols {
-			fts[i] = cols[i].RetType
-		}
-		resultFts[id] = fts
-		handles[id] = pgPlan.Handle
-		tblInfos[id] = pgPlan.TblInfo
-		decoders[id] = NewRowDecoder(b.ctx, p.Schema(), pgPlan.TblInfo)
-		allIdxInfos[id] = pgPlan.IndexInfo
-		allDone[id] = false
-	}
-
 	e := &PointGetExecutor{
 		baseExecutor:     newBaseExecutor(b.ctx, p.Schema(), p.ID()),
-		allSchemas:       allSchemas,
-		resultFieldTypes: resultFts,
-		allTableInfos:    tblInfos,
-		allIndexInfos:    allIdxInfos,
-		allDone:          allDone,
-		allHandles:       handles,
 		txnScope:         b.txnScope,
 		readReplicaScope: b.readReplicaScope,
 		isStaleness:      b.isStaleness,
@@ -99,8 +67,7 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ..
 
 	e.base().initCap = 1
 	e.base().maxChunkSize = 1
-	e.Init(p)
-	e.allRowDecoders = decoders
+	e.Init(p, planMaps...)
 
 	e.snapshot, err = b.getSnapshot()
 	if err != nil {
@@ -193,7 +160,7 @@ type PointGetExecutor struct {
 }
 
 // Init set fields needed for PointGetExecutor reuse, this does NOT change baseExecutor field
-func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan) {
+func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan, planMaps ...map[uint64]plannercore.Plan) {
 	decoder := NewRowDecoder(e.ctx, p.Schema(), p.TblInfo)
 	e.tblInfo = p.TblInfo
 	e.handle = p.Handle
@@ -217,6 +184,40 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan) {
 	e.partInfo = p.PartitionInfo
 	e.columns = p.Columns
 	e.buildVirtualColumnInfo()
+	var planMap map[uint64]plannercore.Plan
+	if len(planMaps) == 1 {
+		planMap = planMaps[0]
+	}
+	allSchemas := make(map[uint64]*expression.Schema, len(planMap))
+	resultFts := make(map[uint64][]*types.FieldType, len(planMap))
+	handles := make(map[uint64]kv.Handle, len(planMap))
+	tblInfos := make(map[uint64]*model.TableInfo, len(planMap))
+	decoders := make(map[uint64]*rowcodec.ChunkDecoder, len(planMap))
+	allIdxInfos := make(map[uint64]*model.IndexInfo, len(planMap))
+	allDone := make(map[uint64]bool, len(planMap))
+	for id, p := range planMap {
+		pgPlan := p.(*plannercore.PointGetPlan)
+		allSchemas[id] = pgPlan.Schema()
+		cols := pgPlan.Schema().Columns
+		fts := make([]*types.FieldType, len(cols))
+		for i := range cols {
+			fts[i] = cols[i].RetType
+		}
+		resultFts[id] = fts
+		handles[id] = pgPlan.Handle
+		tblInfos[id] = pgPlan.TblInfo
+		decoders[id] = NewRowDecoder(e.ctx, pgPlan.Schema(), pgPlan.TblInfo)
+		allIdxInfos[id] = pgPlan.IndexInfo
+		allDone[id] = false
+		logutil.BgLogger().Info("update conn ID", zap.Uint64("conn ID", id))
+	}
+	e.allSchemas = allSchemas
+	e.resultFieldTypes = resultFts
+	e.allHandles = handles
+	e.allTableInfos = tblInfos
+	e.allRowDecoders = decoders
+	e.allIndexInfos = allIdxInfos
+	e.allDone = allDone
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order
@@ -287,7 +288,12 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	var err error
 	if len(e.allTableInfos) > 0 {
 		connID := req.ConnID
-		tblID = e.allTableInfos[connID].ID
+		if info, ok := e.allTableInfos[connID]; ok {
+			tblID = info.ID
+		} else {
+			panic("?")
+		}
+
 	} else {
 		if e.partInfo != nil {
 			tblID = e.partInfo.ID
@@ -446,13 +452,13 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 		return nil
 	}
 
-	schema := e.schema
-	rowDecoder := e.rowDecoder
-	if len(e.allSchemas) > 0 {
-		schema = e.allSchemas[req.ConnID]
-		rowDecoder = e.allRowDecoders[req.ConnID]
-	}
-	err = DecodeRowValToChunk(e.base().ctx, schema, tblInfo, handle, val, req, rowDecoder)
+	//schema := e.schema
+	//rowDecoder := e.rowDecoder
+	//if len(e.allSchemas) > 0 {
+	//	schema = e.allSchemas[req.ConnID]
+	//	rowDecoder = e.allRowDecoders[req.ConnID]
+	//}
+	err = DecodeRowValToChunk(e.base().ctx, e.schema, tblInfo, handle, val, req, e.rowDecoder)
 	if err != nil {
 		return err
 	}

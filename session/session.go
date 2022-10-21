@@ -2470,6 +2470,15 @@ type execStmtResult struct {
 	sql sqlexec.Statement
 }
 
+func (rs *execStmtResult) CheckConnIDExists(id uint64) bool {
+	if exec, ok := rs.sql.(*executor.ExecStmt); ok {
+		if _, ok := exec.Plans[id]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (rs *execStmtResult) Close() error {
 	se := rs.se
 	if err := rs.RecordSet.Close(); err != nil {

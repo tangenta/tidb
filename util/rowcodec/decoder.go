@@ -198,6 +198,9 @@ func NewChunkDecoder(columns []ColInfo, handleColIDs []int64, defDatum func(i in
 
 // DecodeToChunk decodes a row to chunk.
 func (decoder *ChunkDecoder) DecodeToChunk(rowData []byte, handle kv.Handle, chk *chunk.Chunk) error {
+	if decoder == nil {
+		panic("?")
+	}
 	err := decoder.fromBytes(rowData)
 	if err != nil {
 		return err

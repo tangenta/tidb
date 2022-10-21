@@ -251,6 +251,10 @@ func (e *analyzeColumnsExec) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
 }
 
+func (e *analyzeColumnsExec) CheckIDExist(id uint64) bool {
+	return false
+}
+
 func (e *analyzeColumnsExec) getNext(ctx context.Context) ([]types.Datum, error) {
 	values, err := e.tblExec.Next(ctx)
 	if err != nil {

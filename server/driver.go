@@ -77,6 +77,7 @@ type ResultSet interface {
 	// IsClosed checks whether the result set is closed.
 	IsClosed() bool
 	Shared() bool
+	CheckConnIDExists(id uint64) bool
 }
 
 // fetchNotifier represents notifier will be called in COM_FETCH.

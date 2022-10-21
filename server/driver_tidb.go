@@ -517,11 +517,14 @@ type tidbResultSet struct {
 	preparedStmt *core.PlanCacheStmt
 	shared       bool
 	mu           sync.Mutex
-	closeCnt     int
 }
 
 func (trs *tidbResultSet) Shared() bool {
 	return trs.shared
+}
+
+func (trs *tidbResultSet) CheckConnIDExists(id uint64) bool {
+	return trs.recordSet.CheckIDExist(id)
 }
 
 func (trs *tidbResultSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {

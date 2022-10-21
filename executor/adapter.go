@@ -104,6 +104,14 @@ func (a *recordSet) Fields() []*ast.ResultField {
 	return a.fields
 }
 
+func (a *recordSet) CheckIDExist(id uint64) bool {
+	if pge, ok := a.executor.(*PointGetExecutor); ok {
+		_, ok := pge.allHandles[id]
+		return ok
+	}
+	return false
+}
+
 func (a *recordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	a.mu.Lock()
 	if len(a.allFields) == 0 {
@@ -343,12 +351,27 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	}
 	a.Ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityHigh
 
-	b := newExecutorBuilder(a.Ctx, a.InfoSchema, a.Ti)
-	newExecutor := b.build(a.Plan, a.Plans)
-	if b.err != nil {
-		return nil, b.err
+	// try to reuse point get executor
+	if a.PsStmt.Executor != nil {
+		exec, ok := a.PsStmt.Executor.(*PointGetExecutor)
+		if !ok {
+			logutil.Logger(ctx).Error("invalid executor type, not PointGetExecutor for point get path")
+			a.PsStmt.Executor = nil
+		} else {
+			// CachedPlan type is already checked in last step
+			pointGetPlan := a.PsStmt.PreparedAst.CachedPlan.(*plannercore.PointGetPlan)
+			exec.Init(pointGetPlan, a.Plans)
+			a.PsStmt.Executor = exec
+		}
 	}
-	a.PsStmt.Executor = newExecutor
+	if a.PsStmt.Executor == nil {
+		b := newExecutorBuilder(a.Ctx, a.InfoSchema, a.Ti)
+		newExecutor := b.build(a.Plan, a.Plans)
+		if b.err != nil {
+			return nil, b.err
+		}
+		a.PsStmt.Executor = newExecutor
+	}
 	pointExecutor := a.PsStmt.Executor.(*PointGetExecutor)
 
 	if err = pointExecutor.Open(ctx); err != nil {
@@ -704,6 +727,10 @@ func (c *chunkRowRecordSet) Fields() []*ast.ResultField {
 
 func (c *chunkRowRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
+}
+
+func (c *chunkRowRecordSet) CheckIDExist(id uint64) bool {
+	return false
 }
 
 func (c *chunkRowRecordSet) Next(ctx context.Context, chk *chunk.Chunk) error {

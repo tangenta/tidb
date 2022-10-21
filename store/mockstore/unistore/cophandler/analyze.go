@@ -466,6 +466,10 @@ func (e *analyzeColumnsExec) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
 }
 
+func (e *analyzeColumnsExec) CheckIDExist(id uint64) bool {
+	return false
+}
+
 func (e *analyzeColumnsExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
 	e.req = req

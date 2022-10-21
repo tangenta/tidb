@@ -147,6 +147,10 @@ func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, i
 		firstOutputName = name
 		break
 	}
+	if len(finalPlans) == 1 && ids[0] == 0 {
+		finalPlans = nil
+		outputNames = nil
+	}
 	stmt := &ExecStmt{
 		GoCtx:          ctx,
 		InfoSchema:     is,

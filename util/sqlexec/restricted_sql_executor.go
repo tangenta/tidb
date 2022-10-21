@@ -194,6 +194,8 @@ type RecordSet interface {
 
 	FieldsWithID(id uint64) []*ast.ResultField
 
+	CheckIDExist(id uint64) bool
+
 	// Next reads records into chunk.
 	Next(ctx context.Context, req *chunk.Chunk) error
 
