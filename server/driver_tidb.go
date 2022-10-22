@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/generic"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/topsql/stmtstats"
 )
@@ -226,11 +225,10 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 const (
-	poolSize      = 4
-	taskChSize    = 1000
-	resultMapSize = taskChSize
-	batchSize     = 16
-	timeout       = 200 * time.Millisecond
+	poolSize   = 4
+	taskChSize = 1000
+	batchSize  = 16
+	timeout    = 200 * time.Millisecond
 )
 
 var (
@@ -244,33 +242,27 @@ func batchExecute(sess session.Session, stmtNode ast.StmtNode) *result {
 		taskCh := make(chan *task, taskChSize)
 		batchExec = newBatchExecutor(taskCh, poolSize)
 	})
+	doneCh := make(chan *result)
 	batchExec.taskCh <- &task{
 		sess:     sess,
 		connID:   connID,
 		stmtNode: stmtNode,
+		done:     doneCh,
 	}
-	for {
-		if result, ok := batchExec.resultMap.Load(connID); ok {
-			batchExec.resultMap.Delete(connID)
-			return result
-		} else {
-			batchExec.cond.L.Lock()
-			batchExec.cond.Wait()
-			batchExec.cond.L.Unlock()
-		}
-	}
+	return <-doneCh
 }
 
 type batchExecutor struct {
-	taskCh    chan *task
-	resultMap generic.SyncMap[uint64, *result]
-	cond      sync.Cond
+	taskCh  chan *task
+	batchCh chan []*task
+	mu      sync.Mutex
 }
 
 type task struct {
 	sess     session.Session
 	connID   uint64
 	stmtNode ast.StmtNode
+	done     chan *result
 }
 
 type result struct {
@@ -281,51 +273,53 @@ type result struct {
 
 func newBatchExecutor(taskCh chan *task, execCnt int) *batchExecutor {
 	be := &batchExecutor{
-		taskCh:    taskCh,
-		resultMap: generic.NewSyncMap[uint64, *result](resultMapSize),
-		cond:      sync.Cond{L: &sync.Mutex{}},
+		taskCh:  taskCh,
+		batchCh: make(chan []*task, execCnt*10),
 	}
+	go be.run()
 	for i := 0; i < execCnt; i++ {
-		go be.run()
+		go func() {
+			for tsks := range be.batchCh {
+				stmts := make([]ast.StmtNode, 0, len(tsks))
+				ids := make([]uint64, 0, len(tsks))
+				sess := tsks[0].sess
+				for _, tsk := range tsks {
+					stmts = append(stmts, tsk.stmtNode)
+					ids = append(ids, tsk.connID)
+				}
+				recordSet, err := sess.ExecuteStmts(context.Background(), stmts, ids)
+				for _, tsk := range tsks {
+					tsk.done <- &result{
+						recordSet:   recordSet,
+						pivotConnID: tsks[0].connID,
+						err:         err,
+					}
+				}
+			}
+		}()
 	}
 	return be
 }
 
 func (b *batchExecutor) run() {
-	executeTask := func(tsks []*task) {
-		stmts := make([]ast.StmtNode, 0, len(tsks))
-		ids := make([]uint64, 0, len(tsks))
-		sess := tsks[0].sess
-		for _, tsk := range tsks {
-			stmts = append(stmts, tsk.stmtNode)
-			ids = append(ids, tsk.connID)
-		}
-		recordSet, err := sess.ExecuteStmts(context.Background(), stmts, ids)
-		//logutil.BgLogger().Info("batch execute",
-		//	zap.Uint64("pivot", sess.GetSessionVars().ConnectionID),
-		//	zap.Int("stmts", len(stmts)), zap.Uint64s("ids", ids))
-		for _, tsk := range tsks {
-			b.resultMap.Store(tsk.connID, &result{
-				recordSet:   recordSet,
-				pivotConnID: sess.GetSessionVars().ConnectionID,
-				err:         err,
-			})
-			b.cond.Broadcast()
-		}
+	sendToBatchCh := func(tsks []*task) {
+		toSend := make([]*task, len(tsks))
+		copy(toSend, tsks)
+		b.batchCh <- toSend
 	}
 	tasks := make([]*task, 0, batchSize)
 	ticker := time.NewTicker(timeout)
 	for {
 		select {
-		case task := <-b.taskCh:
-			tasks = append(tasks, task)
+		case t := <-b.taskCh:
+			tasks = append(tasks, t)
 			if len(tasks) == batchSize {
-				executeTask(tasks)
+				sendToBatchCh(tasks)
 				tasks = tasks[:0]
 			}
 		case <-ticker.C:
 			if len(tasks) > 0 {
-				executeTask(tasks)
+				sendToBatchCh(tasks)
 				tasks = tasks[:0]
 			}
 		}
