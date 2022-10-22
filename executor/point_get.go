@@ -217,6 +217,8 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan, planMaps ...map[uin
 	e.allRowDecoders = decoders
 	e.allIndexInfos = allIdxInfos
 	e.allDone = allDone
+	e.resultVals = nil
+	e.allKeys = nil
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order
