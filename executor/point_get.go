@@ -41,7 +41,6 @@ import (
 	"github.com/pingcap/tidb/util/logutil/consistency"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
-	"go.uber.org/zap"
 )
 
 func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan, planMaps ...map[uint64]plannercore.Plan) Executor {
@@ -209,7 +208,6 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan, planMaps ...map[uin
 		decoders[id] = NewRowDecoder(e.ctx, pgPlan.Schema(), pgPlan.TblInfo)
 		allIdxInfos[id] = pgPlan.IndexInfo
 		allDone[id] = false
-		logutil.BgLogger().Info("update conn ID", zap.Uint64("conn ID", id))
 	}
 	e.allSchemas = allSchemas
 	e.resultFieldTypes = resultFts
@@ -290,10 +288,7 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 		connID := req.ConnID
 		if info, ok := e.allTableInfos[connID]; ok {
 			tblID = info.ID
-		} else {
-			panic("?")
 		}
-
 	} else {
 		if e.partInfo != nil {
 			tblID = e.partInfo.ID
