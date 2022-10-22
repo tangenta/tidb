@@ -337,6 +337,7 @@ type ExecStmt struct {
 	// Plan stores a reference to the final physical plan.
 	Plan  plannercore.Plan
 	Plans map[uint64]plannercore.Plan
+	IDs   []uint64
 	// Text represents the origin query text.
 	Text string
 
@@ -407,6 +408,7 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 			// CachedPlan type is already checked in last step
 			pointGetPlan := a.PsStmt.PreparedAst.CachedPlan.(*plannercore.PointGetPlan)
 			exec.Init(pointGetPlan, a.Plans)
+			//logutil.BgLogger().Info("init point-get plan", zap.Uint64("pivot", a.IDs[0]))
 			a.PsStmt.Executor = exec
 		}
 	}

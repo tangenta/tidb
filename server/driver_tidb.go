@@ -226,10 +226,10 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 const (
-	poolSize      = 20
+	poolSize      = 4
 	taskChSize    = 1000
 	resultMapSize = taskChSize
-	batchSize     = 4
+	batchSize     = 16
 	timeout       = 200 * time.Millisecond
 )
 

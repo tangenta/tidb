@@ -219,6 +219,7 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan, planMaps ...map[uin
 	e.allDone = allDone
 	e.resultVals = nil
 	e.allKeys = nil
+	//logutil.BgLogger().Info("init point-get exec")
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order
@@ -505,7 +506,7 @@ func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key, allKeys m
 		for _, k := range allKeys {
 			keyArr = append(keyArr, k)
 		}
-		vals, err := e.batchGet(ctx, keyArr)
+		vals, err := e.batchGet(ctx, keyArr, connID)
 		if err != nil {
 			if !kv.ErrNotExist.Equal(err) {
 				return nil, err
@@ -638,10 +639,14 @@ func (e *PointGetExecutor) get(ctx context.Context, key kv.Key) ([]byte, error) 
 	return e.snapshot.Get(ctx, key)
 }
 
-func (e *PointGetExecutor) batchGet(ctx context.Context, keys []kv.Key) (map[string][]byte, error) {
+func (e *PointGetExecutor) batchGet(ctx context.Context, keys []kv.Key, connID uint64) (map[string][]byte, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.resultVals != nil {
 		return e.resultVals, nil
 	}
+	//logutil.BgLogger().Info("batchGet", zap.Uint64("connID", connID),
+	//	zap.Int("len", len(keys)), zap.String("exec", fmt.Sprintf("%p", e)))
 	if len(keys) == 0 {
 		return nil, kv.ErrNotExist
 	}

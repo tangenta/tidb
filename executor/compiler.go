@@ -156,6 +156,7 @@ func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, i
 		InfoSchema:     is,
 		Plan:           firstPlan,
 		Plans:          finalPlans,
+		IDs:            ids,
 		LowerPriority:  lowerPriority,
 		Text:           stmtNodes[0].Text(),
 		StmtNode:       stmtNodes[0],
