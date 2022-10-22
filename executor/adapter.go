@@ -97,8 +97,7 @@ type recordSet struct {
 	mu          sync.Mutex
 	pivotConnID uint64
 	batchCnt    int
-	cond        *sync.Cond
-	closed      int
+	wg          sync.WaitGroup
 }
 
 func (a *recordSet) Fields() []*ast.ResultField {
@@ -244,28 +243,45 @@ func (a *recordSet) Close() error {
 	return err
 }
 
+//type blockStatus struct {
+//	closedCnt int
+//	batchCnt  int
+//}
+//
+//var blockingCnt generic.SyncMap[uint64, blockStatus]
+//
+//var once sync.Once
+
 func (a *recordSet) CloseWithID(id uint64) error {
-	if pge, ok := a.executor.(*PointGetExecutor); ok && len(pge.resultFieldTypes) > 0 {
+	//logutil.BgLogger().Info("close with ID", zap.Uint64("ID", id), zap.Uint64("pivot", a.pivotConnID),
+	//	zap.String("record set", fmt.Sprintf("%p", a)))
+	//once.Do(func() {
+	//	blockingCnt = generic.NewSyncMap[uint64, blockStatus](1000)
+	//	timer := time.Tick(5 * time.Second)
+	//	go func() {
+	//		for {
+	//			select {
+	//			case <-timer:
+	//				logutil.BgLogger().Info("blocking cnt", zap.Int("cnt", len(blockingCnt.Keys())))
+	//			}
+	//		}
+	//	}()
+	//})
+	if a.batchCnt > 0 {
 		if a.pivotConnID == id {
-			for {
-				a.mu.Lock()
-				if a.closed+1 == a.batchCnt {
-					a.mu.Unlock()
-					return a.Close()
-				}
-				a.mu.Unlock()
-				a.cond.L.Lock()
-				a.cond.Wait()
-				a.cond.L.Unlock()
-			}
+			a.wg.Done()
+			a.wg.Wait()
+			//logutil.BgLogger().Info("close DONE with ID", zap.Uint64("ID", id), zap.Int("batchCnt", a.batchCnt), zap.String("record set", fmt.Sprintf("%p", a)))
+			//blockingCnt.Delete(id)
+			return a.Close()
 		} else {
-			a.mu.Lock()
-			a.closed++
-			a.mu.Unlock()
-			a.cond.Signal()
+			//logutil.BgLogger().Info("close with ID++", zap.Uint64("ID", id), zap.Uint64("pivot", a.pivotConnID), zap.String("record set", fmt.Sprintf("%p", a)))
+			a.wg.Done()
 			return nil
 		}
 	} else {
+		//logutil.BgLogger().Info("close with ID ELSE", zap.Uint64("ID", id), zap.Uint64("pivot", a.pivotConnID),
+		//	zap.String("type", reflect.TypeOf(a.executor).String()), zap.String("record set", fmt.Sprintf("%p", a)))
 		return a.Close()
 	}
 }
@@ -424,14 +440,16 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		}
 	}
 
-	return &recordSet{
+	rs := &recordSet{
 		executor:    pointExecutor,
 		stmt:        a,
 		txnStartTS:  startTs,
 		pivotConnID: a.Ctx.GetSessionVars().ConnectionID,
 		batchCnt:    len(a.Plans),
-		cond:        sync.NewCond(&sync.Mutex{}),
-	}, nil
+		wg:          sync.WaitGroup{},
+	}
+	rs.wg.Add(rs.batchCnt)
+	return rs, nil
 }
 
 // OriginText returns original statement as a string.
@@ -646,14 +664,16 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		txnStartTS = txn.StartTS()
 	}
 
-	return &recordSet{
+	rs := &recordSet{
 		executor:    e,
 		stmt:        a,
 		txnStartTS:  txnStartTS,
 		pivotConnID: sctx.GetSessionVars().ConnectionID,
 		batchCnt:    len(a.Plans),
-		cond:        sync.NewCond(&sync.Mutex{}),
-	}, nil
+		wg:          sync.WaitGroup{},
+	}
+	rs.wg.Add(rs.batchCnt)
+	return rs, nil
 }
 
 func (a *ExecStmt) handleForeignKeyTrigger(ctx context.Context, e Executor) error {

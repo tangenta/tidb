@@ -95,9 +95,19 @@ func EncodeRowKey(tableID int64, encodedHandle []byte) kv.Key {
 	return buf
 }
 
+func EncodeRowKeyBuf(tableID int64, encodedHandle []byte, buf []byte) kv.Key {
+	buf = appendTableRecordPrefix(buf, tableID)
+	buf = append(buf, encodedHandle...)
+	return buf
+}
+
 // EncodeRowKeyWithHandle encodes the table id, row handle into a kv.Key
 func EncodeRowKeyWithHandle(tableID int64, handle kv.Handle) kv.Key {
 	return EncodeRowKey(tableID, handle.Encoded())
+}
+
+func EncodeRowKeyWithHandleBuf(tableID int64, handle kv.Handle, buf []byte) kv.Key {
+	return EncodeRowKeyBuf(tableID, handle.Encoded(), buf)
 }
 
 // CutRowKeyPrefix cuts the row key prefix.

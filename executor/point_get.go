@@ -406,7 +406,7 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	}
 
 	var key kv.Key
-	allKeys := make(map[uint64]kv.Key)
+	allKeys := make(map[uint64]kv.Key, len(e.allHandles))
 	if len(e.allHandles) > 0 {
 		for id, hd := range e.allHandles {
 			if hd != nil {

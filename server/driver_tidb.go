@@ -226,10 +226,10 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 const (
-	poolSize      = 3
-	taskChSize    = 100
+	poolSize      = 1
+	taskChSize    = 1000
 	resultMapSize = taskChSize
-	batchSize     = 16
+	batchSize     = 4
 	timeout       = 200 * time.Millisecond
 )
 
@@ -301,6 +301,9 @@ func (b *batchExecutor) run() {
 			ids = append(ids, tsk.connID)
 		}
 		recordSet, err := sess.ExecuteStmts(context.Background(), stmts, ids)
+		//logutil.BgLogger().Info("batch execute",
+		//	zap.Uint64("pivot", sess.GetSessionVars().ConnectionID),
+		//	zap.Int("stmts", len(stmts)), zap.Uint64s("ids", ids))
 		for _, tsk := range tsks {
 			b.resultMap.Store(tsk.connID, &result{
 				recordSet:   recordSet,
