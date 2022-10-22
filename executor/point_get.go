@@ -220,6 +220,8 @@ func (e *PointGetExecutor) Init(p *plannercore.PointGetPlan, planMaps ...map[uin
 	e.resultVals = nil
 	e.allKeys = nil
 	//logutil.BgLogger().Info("init point-get exec")
+	//sctx := e.ctx.GetSessionVars()
+	//e.snapshot = sctx.GetStore().GetSnapshot(kv.Version{Ver: math.MaxUint64})
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order
