@@ -229,7 +229,7 @@ const (
 	poolSize      = 1
 	taskChSize    = 1000
 	resultMapSize = taskChSize
-	batchSize     = 4
+	batchSize     = 64
 	timeout       = 200 * time.Millisecond
 )
 

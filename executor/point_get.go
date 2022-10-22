@@ -124,6 +124,7 @@ type PointGetExecutor struct {
 	allTableInfos    map[uint64]*model.TableInfo
 	allIndexInfos    map[uint64]*model.IndexInfo
 	allHandles       map[uint64]kv.Handle
+	allKeys          map[uint64]kv.Key
 	allRowDecoders   map[uint64]*rowcodec.ChunkDecoder
 	resultVals       map[string][]byte
 
@@ -405,22 +406,29 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 		}
 	}
 
-	var key kv.Key
-	allKeys := make(map[uint64]kv.Key, len(e.allHandles))
-	if len(e.allHandles) > 0 {
-		for id, hd := range e.allHandles {
-			if hd != nil {
-				allKeys[id] = tablecodec.EncodeRowKeyWithHandle(tblID, hd)
-			} else {
-				allKeys = nil
-				key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
+	allKeyInited := false
+	e.mu.Lock()
+	allKeyInited = e.allKeys != nil
+	e.mu.Unlock()
+	if !allKeyInited {
+		allKeys := make(map[uint64]kv.Key, len(e.allHandles))
+		if len(e.allHandles) > 0 {
+			for id, hd := range e.allHandles {
+				if hd != nil {
+					allKeys[id] = tablecodec.EncodeRowKeyWithHandle(tblID, hd)
+				}
 			}
 		}
-	} else {
+		e.mu.Lock()
+		e.allKeys = allKeys
+		e.mu.Unlock()
+	}
+	var key kv.Key
+	if len(e.allHandles) == 0 {
 		key = tablecodec.EncodeRowKeyWithHandle(tblID, handle)
 	}
 
-	val, err := e.getAndLock(ctx, key, allKeys, req.ConnID)
+	val, err := e.getAndLock(ctx, key, e.allKeys, req.ConnID)
 	if err != nil {
 		return err
 	}
