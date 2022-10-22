@@ -63,6 +63,10 @@ func (r *recordSet) CheckIDExist(id uint64) bool {
 	return false
 }
 
+func (r *recordSet) CloseWithID(id uint64) error {
+	return r.Close()
+}
+
 func (r *recordSet) setFields(tps ...uint8) {
 	r.fields = make([]*ast.ResultField, len(tps))
 	for i := 0; i < len(tps); i++ {

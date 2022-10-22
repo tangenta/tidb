@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/terror"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessiontxn"
@@ -280,7 +279,9 @@ func (cc *clientConn) executePreparedStmtAndWriteResult(ctx context.Context, stm
 		}
 		return false, cc.flush(ctx)
 	}
-	defer terror.Call(rs.Close)
+	defer func() {
+		_ = rs.CloseWithID(cc.connectionID)
+	}()
 	retryable, err := cc.writeResultset(ctx, rs, true, cc.ctx.Status(), 0)
 	if err != nil {
 		return retryable, errors.Annotate(err, cc.preparedStmt2String(uint32(stmt.ID())))

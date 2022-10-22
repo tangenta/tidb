@@ -78,6 +78,7 @@ type ResultSet interface {
 	IsClosed() bool
 	Shared() bool
 	CheckConnIDExists(id uint64) bool
+	CloseWithID(id uint64) error
 }
 
 // fetchNotifier represents notifier will be called in COM_FETCH.

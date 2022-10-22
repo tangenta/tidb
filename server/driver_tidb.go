@@ -226,7 +226,7 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 const (
-	poolSize      = 1
+	poolSize      = 3
 	taskChSize    = 100
 	resultMapSize = taskChSize
 	batchSize     = 16
@@ -238,7 +238,7 @@ var (
 	batchExecInit sync.Once
 )
 
-func batchExecute(sess session.Session, stmtNode ast.StmtNode) (sqlexec.RecordSet, error) {
+func batchExecute(sess session.Session, stmtNode ast.StmtNode) *result {
 	connID := sess.GetSessionVars().ConnectionID
 	batchExecInit.Do(func() {
 		taskCh := make(chan *task, taskChSize)
@@ -252,7 +252,7 @@ func batchExecute(sess session.Session, stmtNode ast.StmtNode) (sqlexec.RecordSe
 	for {
 		if result, ok := batchExec.resultMap.Load(connID); ok {
 			batchExec.resultMap.Delete(connID)
-			return result.recordSet, result.err
+			return result
 		} else {
 			batchExec.cond.L.Lock()
 			batchExec.cond.Wait()
@@ -274,8 +274,9 @@ type task struct {
 }
 
 type result struct {
-	recordSet sqlexec.RecordSet
-	err       error
+	recordSet   sqlexec.RecordSet
+	pivotConnID uint64
+	err         error
 }
 
 func newBatchExecutor(taskCh chan *task, execCnt int) *batchExecutor {
@@ -301,9 +302,11 @@ func (b *batchExecutor) run() {
 		}
 		recordSet, err := sess.ExecuteStmts(context.Background(), stmts, ids)
 		for _, tsk := range tsks {
-			var r result
-			r.recordSet, r.err = recordSet, err
-			b.resultMap.Store(tsk.connID, &r)
+			b.resultMap.Store(tsk.connID, &result{
+				recordSet:   recordSet,
+				pivotConnID: sess.GetSessionVars().ConnectionID,
+				err:         err,
+			})
 			b.cond.Broadcast()
 		}
 	}
@@ -330,15 +333,15 @@ func (b *batchExecutor) run() {
 func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (ResultSet, error) {
 	var rs sqlexec.RecordSet
 	var err error
-	var shared bool
+	var pivotConnID uint64
 	if s, ok := stmt.(*ast.NonTransactionalDeleteStmt); ok {
 		rs, err = session.HandleNonTransactionalDelete(ctx, s, tc.Session)
 	} else {
 		prep, isExec := stmt.(*ast.ExecuteStmt)
 		if variable.EnableDoubleQPS.Load() && !tc.Session.GetSessionVars().InRestrictedSQL && isExec {
 			if pc, ok := prep.PrepStmt.(*core.PlanCacheStmt); ok && strings.Contains(pc.StmtDB, "sbtest") {
-				rs, err = batchExecute(tc.Session, stmt)
-				shared = true
+				result := batchExecute(tc.Session, stmt)
+				rs, pivotConnID, err = result.recordSet, result.pivotConnID, result.err
 			} else {
 				rs, err = tc.Session.ExecuteStmt(ctx, stmt)
 			}
@@ -354,8 +357,8 @@ func (tc *TiDBContext) ExecuteStmt(ctx context.Context, stmt ast.StmtNode) (Resu
 		return nil, nil
 	}
 	return &tidbResultSet{
-		recordSet: rs,
-		shared:    shared,
+		recordSet:   rs,
+		pivotConnID: pivotConnID,
 	}, nil
 }
 
@@ -511,16 +514,14 @@ func (tc *TiDBContext) DecodeSessionStates(ctx context.Context, sctx sessionctx.
 type tidbResultSet struct {
 	recordSet    sqlexec.RecordSet
 	columns      []*ColumnInfo
-	allColumns   map[uint64][]*ColumnInfo
 	rows         []chunk.Row
 	closed       int32
 	preparedStmt *core.PlanCacheStmt
-	shared       bool
-	mu           sync.Mutex
+	pivotConnID  uint64
 }
 
 func (trs *tidbResultSet) Shared() bool {
-	return trs.shared
+	return trs.pivotConnID != 0
 }
 
 func (trs *tidbResultSet) CheckConnIDExists(id uint64) bool {
@@ -551,17 +552,19 @@ func (trs *tidbResultSet) GetFetchedRows() []chunk.Row {
 }
 
 func (trs *tidbResultSet) Close() error {
-	var canClose bool
-	trs.mu.Lock()
-	trs.closed++
-	if trs.closed == batchSize {
-		canClose = true
-	}
-	trs.mu.Unlock()
-	if !canClose || !atomic.CompareAndSwapInt32(&trs.closed, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&trs.closed, 0, 1) {
 		return nil
 	}
 	err := trs.recordSet.Close()
+	trs.recordSet = nil
+	return err
+}
+
+func (trs *tidbResultSet) CloseWithID(id uint64) error {
+	if !atomic.CompareAndSwapInt32(&trs.closed, 0, 1) {
+		return nil
+	}
+	err := trs.recordSet.CloseWithID(id)
 	trs.recordSet = nil
 	return err
 }
@@ -611,22 +614,11 @@ func (trs *tidbResultSet) ColumnsWithID(id uint64) []*ColumnInfo {
 			trs.columns = colInfos
 		}
 	}
-	trs.mu.Lock()
-	if trs.allColumns == nil {
-		trs.allColumns = make(map[uint64][]*ColumnInfo)
-	}
-	trs.mu.Unlock()
-	if cols, ok := trs.allColumns[id]; ok {
-		return cols
-	}
 	fields := trs.recordSet.FieldsWithID(id)
 	cols := make([]*ColumnInfo, 0, len(fields))
 	for _, v := range fields {
 		cols = append(cols, convertColumnInfo(v))
 	}
-	trs.mu.Lock()
-	trs.allColumns[id] = cols
-	trs.mu.Unlock()
 	return cols
 }
 

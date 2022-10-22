@@ -207,6 +207,8 @@ type RecordSet interface {
 	// Close closes the underlying iterator, call Next after Close will
 	// restart the iteration.
 	Close() error
+
+	CloseWithID(id uint64) error
 }
 
 // MultiQueryNoDelayResult is an interface for one no-delay result for one statement in multi-queries.

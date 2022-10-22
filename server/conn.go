@@ -2051,7 +2051,9 @@ func (cc *clientConn) handleStmt(ctx context.Context, stmt ast.StmtNode, warns [
 	// The session tracker detachment from global tracker is solved in the `rs.Close` in most cases.
 	// If the rs is nil, the detachment will be done in the `handleNoDelay`.
 	if rs != nil {
-		defer terror.Call(rs.Close)
+		defer func() {
+			_ = rs.CloseWithID(cc.connectionID)
+		}()
 	}
 	if err != nil {
 		return true, err

@@ -35,6 +35,10 @@ func (r *SimpleRecordSet) Fields() []*ast.ResultField {
 	return r.ResultFields
 }
 
+func (r *SimpleRecordSet) CloseWithID(id uint64) error {
+	return r.Close()
+}
+
 func (r *SimpleRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
 }

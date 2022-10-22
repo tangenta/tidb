@@ -88,13 +88,17 @@ type processinfoSetter interface {
 
 // recordSet wraps an executor, implements sqlexec.RecordSet interface
 type recordSet struct {
-	fields     []*ast.ResultField
-	allFields  map[uint64][]*ast.ResultField
-	executor   Executor
-	stmt       *ExecStmt
-	lastErr    error
-	txnStartTS uint64
-	mu         sync.Mutex
+	fields      []*ast.ResultField
+	allFields   map[uint64][]*ast.ResultField
+	executor    Executor
+	stmt        *ExecStmt
+	lastErr     error
+	txnStartTS  uint64
+	mu          sync.Mutex
+	pivotConnID uint64
+	batchCnt    int
+	cond        *sync.Cond
+	closed      int
 }
 
 func (a *recordSet) Fields() []*ast.ResultField {
@@ -238,6 +242,32 @@ func (a *recordSet) Close() error {
 	err := a.executor.Close()
 	a.stmt.CloseRecordSet(a.txnStartTS, a.lastErr)
 	return err
+}
+
+func (a *recordSet) CloseWithID(id uint64) error {
+	if pge, ok := a.executor.(*PointGetExecutor); ok && len(pge.resultFieldTypes) > 0 {
+		if a.pivotConnID == id {
+			for {
+				a.mu.Lock()
+				if a.closed+1 == a.batchCnt {
+					a.mu.Unlock()
+					return a.Close()
+				}
+				a.mu.Unlock()
+				a.cond.L.Lock()
+				a.cond.Wait()
+				a.cond.L.Unlock()
+			}
+		} else {
+			a.mu.Lock()
+			a.closed++
+			a.mu.Unlock()
+			a.cond.Signal()
+			return nil
+		}
+	} else {
+		return a.Close()
+	}
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned
@@ -395,9 +425,12 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	}
 
 	return &recordSet{
-		executor:   pointExecutor,
-		stmt:       a,
-		txnStartTS: startTs,
+		executor:    pointExecutor,
+		stmt:        a,
+		txnStartTS:  startTs,
+		pivotConnID: a.Ctx.GetSessionVars().ConnectionID,
+		batchCnt:    len(a.Plans),
+		cond:        sync.NewCond(&sync.Mutex{}),
 	}, nil
 }
 
@@ -614,9 +647,12 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	}
 
 	return &recordSet{
-		executor:   e,
-		stmt:       a,
-		txnStartTS: txnStartTS,
+		executor:    e,
+		stmt:        a,
+		txnStartTS:  txnStartTS,
+		pivotConnID: sctx.GetSessionVars().ConnectionID,
+		batchCnt:    len(a.Plans),
+		cond:        sync.NewCond(&sync.Mutex{}),
 	}, nil
 }
 
@@ -727,6 +763,10 @@ func (c *chunkRowRecordSet) Fields() []*ast.ResultField {
 
 func (c *chunkRowRecordSet) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
+}
+
+func (c *chunkRowRecordSet) CloseWithID(id uint64) error {
+	return c.Close()
 }
 
 func (c *chunkRowRecordSet) CheckIDExist(id uint64) bool {

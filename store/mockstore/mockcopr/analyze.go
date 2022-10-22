@@ -251,6 +251,10 @@ func (e *analyzeColumnsExec) FieldsWithID(id uint64) []*ast.ResultField {
 	return nil
 }
 
+func (e *analyzeColumnsExec) CloseWithID(id uint64) error {
+	return e.Close()
+}
+
 func (e *analyzeColumnsExec) CheckIDExist(id uint64) bool {
 	return false
 }
