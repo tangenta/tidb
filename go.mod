@@ -246,3 +246,5 @@ replace (
 )
 
 replace github.com/tikv/client-go/v2 => github.com/iosmanthus/client-go/v2 v2.0.0-alpha.0.20221023040345-ea2c10a36aee
+
+replace github.com/pingcap/kvproto => github.com/iosmanthus/kvproto v0.0.0-20221022162151-c6ae944e127c
