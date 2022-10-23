@@ -529,8 +529,8 @@ github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/C
 github.com/inconshreveable/mousetrap v1.0.0 h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NHg9XEKhtSvM=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
 github.com/influxdata/influxdb v0.0.0-20170331210902-15e594fc09f1/go.mod h1:qZna6X/4elxqT3yI9iZYdZrWWdeFOOprn86kgg4+IzY=
-github.com/iosmanthus/client-go/v2 v2.0.0-alpha.0.20221023035758-12eb45e3c6fd h1:wW0ZrXEpa8fQOcVEGPipvU+rYCL8wzu2hua/mxI1ZoQ=
-github.com/iosmanthus/client-go/v2 v2.0.0-alpha.0.20221023035758-12eb45e3c6fd/go.mod h1:Ukdq0DosvCouUzwu1MZCUZPzjDFE3s7xIjfpGsINvek=
+github.com/iosmanthus/client-go/v2 v2.0.0-alpha.0.20221023040345-ea2c10a36aee h1:TLe8KppKi7YUqdRBNxiUTn+O9Nyls7QtboOzX67NWcc=
+github.com/iosmanthus/client-go/v2 v2.0.0-alpha.0.20221023040345-ea2c10a36aee/go.mod h1:Ukdq0DosvCouUzwu1MZCUZPzjDFE3s7xIjfpGsINvek=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
 github.com/iris-contrib/go.uuid v2.0.0+incompatible/go.mod h1:iz2lgM/1UnEf1kP0L/+fafWORmlnuysV2EMP8MW+qe0=
 github.com/iris-contrib/i18n v0.0.0-20171121225848-987a633949d0/go.mod h1:pMCz62A0xJL6I+umB2YTlFRwWXaDFA0jy+5HzGiJjqI=
