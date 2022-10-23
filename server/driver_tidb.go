@@ -226,14 +226,14 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 const (
-	poolSize   = 4
-	taskChSize = 1000
-	batchSize  = 16
-	timeout    = 200 * time.Millisecond
+	poolSize   = 16
+	taskChSize = 400
+	batchSize  = 64
+	timeout    = 14 * time.Millisecond
 )
 
 func init() {
-	txnsnapshot.DefaultBatchGetSubBatchSize = 4
+	txnsnapshot.DefaultBatchGetSubBatchSize = 8
 }
 
 var (
