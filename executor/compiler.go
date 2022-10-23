@@ -128,9 +128,13 @@ func (c *Compiler) CompileStmts(ctx context.Context, stmtNodes []ast.StmtNode, i
 	})
 
 	if preparedObj != nil {
-		CountStmtNode(preparedObj.PreparedAst.Stmt, sessVars.InRestrictedSQL)
+		for i := 0; i < len(stmtNodes); i++ {
+			CountStmtNode(preparedObj.PreparedAst.Stmt, sessVars.InRestrictedSQL)
+		}
 	} else {
-		CountStmtNode(stmtNodes[0], sessVars.InRestrictedSQL)
+		for _, n := range stmtNodes {
+			CountStmtNode(n, sessVars.InRestrictedSQL)
+		}
 	}
 	var firstPlan plannercore.Plan
 	for _, p := range finalPlans {
