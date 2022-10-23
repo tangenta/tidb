@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -230,6 +231,10 @@ const (
 	batchSize  = 16
 	timeout    = 200 * time.Millisecond
 )
+
+func init() {
+	txnsnapshot.DefaultBatchGetSubBatchSize = 4
+}
 
 var (
 	batchExec     *batchExecutor
