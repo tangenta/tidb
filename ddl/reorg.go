@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/ddl/ingest"
+	ddlutil "github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -603,7 +604,9 @@ func getReorgInfo(ctx *JobContext, d *ddlCtx, rh *reorgHandler, job *model.Job,
 
 		info.first = true
 		if d.lease > 0 { // Only delay when it's not in test.
+			finish := ddlutil.InjectSpan(job.ID, "waitAsyncCommit")
 			delayForAsyncCommit()
+			finish()
 		}
 		ver, err := getValidCurrentVersion(d.store)
 		if err != nil {

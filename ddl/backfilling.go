@@ -317,6 +317,11 @@ func (w *backfillWorker) run(d *ddlCtx, bf backfiller, job *model.Job) {
 				zap.Stringer("type", w.tp), zap.Int("workerID", w.id))
 			return
 		}
+		var finish func()
+		if w.id == 0 {
+			finish = ddlutil.InjectSpan(job.ID, fmt.Sprintf("worker_%d handle task", w.id))
+		}
+
 		curTaskID = task.id
 		d.setDDLLabelForTopSQL(job)
 
@@ -341,6 +346,9 @@ func (w *backfillWorker) run(d *ddlCtx, bf backfiller, job *model.Job) {
 		// Change the batch size dynamically.
 		w.batchCnt = int(variable.GetDDLReorgBatchSize())
 		result := w.handleBackfillTask(d, task, bf)
+		if finish != nil {
+			finish()
+		}
 		w.resultCh <- result
 	}
 }
@@ -426,6 +434,7 @@ func drainTasks(taskCh chan *reorgBackfillTask) int {
 // there are taskCnt running workers.
 func (dc *ddlCtx) sendTasksAndWait(scheduler *backfillScheduler, totalAddedCount *int64,
 	batchTasks []*reorgBackfillTask) error {
+	defer ddlutil.InjectSpan(scheduler.reorgInfo.ID, "sendTasksAndWait")()
 	reorgInfo := scheduler.reorgInfo
 	for _, task := range batchTasks {
 		scheduler.taskCh <- task
@@ -760,6 +769,7 @@ func (b *backfillScheduler) Close() {
 // Finally, update the concurrent processing of the total number of rows, and store the completed handle value.
 func (dc *ddlCtx) writePhysicalTableRecord(sessPool *sessionPool, t table.PhysicalTable, bfWorkerType backfillWorkerType, reorgInfo *reorgInfo) error {
 	job := reorgInfo.Job
+	defer ddlutil.InjectSpan(job.ID, "writePhysicalTableRecord")()
 	totalAddedCount := job.GetRowCount()
 
 	startKey, endKey := reorgInfo.StartKey, reorgInfo.EndKey
