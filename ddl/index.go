@@ -822,6 +822,7 @@ func doReorgWorkForCreateIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Jo
 			if !done {
 				return false, ver, nil
 			}
+			runtime.GC()
 			err = bc.FinishImport(indexInfo.ID, indexInfo.Unique, tbl)
 			if err != nil {
 				if kv.ErrKeyExists.Equal(err) {
