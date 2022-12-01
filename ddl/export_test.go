@@ -36,7 +36,7 @@ func FetchRowsFromCop4Test(copCtx *copContext, startKey, endKey kv.Key, startTS 
 		startKey: startKey,
 		endKey:   endKey,
 	}
-	pool := newCopReqSenderPool(context.Background(), copCtx, startTS)
+	pool := newCopReqSenderPool(context.Background(), copCtx, startTS, 1)
 	pool.adjustSize(1)
 	pool.tasksCh <- task
 	idxRec, _, _, done, err := pool.fetchRowColValsFromCop(*task)

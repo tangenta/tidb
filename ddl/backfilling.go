@@ -323,6 +323,11 @@ func (w *backfillWorker) run(d *ddlCtx, bf backfiller, job *model.Job) {
 				zap.Stringer("type", w.tp), zap.Int("workerID", w.id))
 			return
 		}
+
+		var finish func()
+		if w.id == 0 {
+			finish = ddlutil.InjectSpan(job.ID, fmt.Sprintf("handleBackfillTask-w%d", w.id))
+		}
 		curTaskID = task.id
 		d.setDDLLabelForTopSQL(job)
 
@@ -347,6 +352,9 @@ func (w *backfillWorker) run(d *ddlCtx, bf backfiller, job *model.Job) {
 		// Change the batch size dynamically.
 		w.batchCnt = int(variable.GetDDLReorgBatchSize())
 		result := w.handleBackfillTask(d, task, bf)
+		if finish != nil {
+			finish()
+		}
 		w.resultCh <- result
 		if result.err != nil {
 			logutil.BgLogger().Info("[ddl] backfill worker exit on error",
@@ -437,6 +445,7 @@ func drainTasks(taskCh chan *reorgBackfillTask) int {
 // there are taskCnt running workers.
 func (dc *ddlCtx) sendTasksAndWait(scheduler *backfillScheduler, totalAddedCount *int64,
 	batchTasks []*reorgBackfillTask) error {
+	defer ddlutil.InjectSpan(scheduler.reorgInfo.ID, "sendTasksAndWait")()
 	reorgInfo := scheduler.reorgInfo
 	for _, task := range batchTasks {
 		if scheduler.copReqSenderPool != nil {
@@ -754,7 +763,7 @@ func (b *backfillScheduler) initCopReqSenderPool() {
 		logutil.BgLogger().Warn("[ddl-ingest] cannot init cop request sender", zap.Error(err))
 		return
 	}
-	b.copReqSenderPool = newCopReqSenderPool(b.ctx, copCtx, ver.Ver)
+	b.copReqSenderPool = newCopReqSenderPool(b.ctx, copCtx, ver.Ver, b.reorgInfo.ID)
 }
 
 func (b *backfillScheduler) canSkipError(err error) bool {
