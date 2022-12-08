@@ -17,6 +17,7 @@ package ddl
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -146,6 +147,11 @@ func (w *mergeIndexWorker) BackfillDataInTxn(taskRange reorgBackfillTask) (taskC
 				return err
 			}
 			taskCtx.addedCount++
+			logutil.BgLogger().Info("merge tmp index record",
+				zap.Int("workerID", w.id),
+				zap.String("originKey", hex.EncodeToString(w.originIdxKeys[i])),
+				zap.String("vals", hex.EncodeToString(idxRecord.vals)),
+				zap.Duration("takeTime", time.Since(oprStartTime)))
 		}
 		return nil
 	})

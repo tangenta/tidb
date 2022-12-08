@@ -331,3 +331,161 @@ func TestCreateUniqueIndexKeyExist(t *testing.T) {
 	tk.MustExec("admin check table t")
 	tk.MustQuery("select * from t order by a, b").Check(testkit.Rows("0 9", "1 7", "2 7", "5 7", "8 8", "10 10"))
 }
+
+func TestAddIndexMergeIndexInsertBDeleteM(t *testing.T) {
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("use test")
+	tk.MustExec(`CREATE TABLE t (a DATE NULL DEFAULT '1619-01-18', b BOOL NULL DEFAULT '0') CHARACTER SET 'utf8mb4' COLLATE 'utf8mb4_bin';`)
+	tk.MustExec(`INSERT INTO t SET a = '5184-06-08';`)
+	tk.MustExec(`INSERT INTO t SET b = '1';`)
+	tk.MustExec(`INSERT INTO t SET a = '9478-04-22', b = '0';`)
+	tk.MustExec(`INSERT INTO t SET a = '4114-12-06';`)
+	tk.MustExec(`INSERT INTO t SET a = '9614-07-25', b = '0';`)
+	tk.MustExec(`UPDATE t SET a = '9308-12-26';`)
+	tk.MustExec(`INSERT INTO t SET a = '8316-01-31', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '2385-11-08';`)
+	tk.MustExec(`UPDATE t SET a = '1758-04-06', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET b = '1', a = '4419-08-04';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '6148-09-23';`)
+	tk.MustExec(`INSERT INTO t SET b = '1', a = '1467-06-22';`)
+	tk.MustExec(`UPDATE t SET b = '1', a = '8059-05-15' WHERE a = '6148-09-23';`)
+	tk.MustExec(`INSERT INTO t SET a = '8120-04-04';`)
+	tk.MustExec(`INSERT INTO t SET b = '0';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '6964-04-28';`)
+	tk.MustExec(`UPDATE t SET a = '6261-09-01', b = '0';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '7089-01-08';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '3479-03-14';`)
+	tk.MustExec(`UPDATE t SET a = '1366-05-15';`)
+	tk.MustExec(`UPDATE t SET a = '4638-12-27' WHERE a = '1366-05-15';`)
+	tk.MustExec(`UPDATE t SET a = '9905-02-17', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET b = '1';`)
+	tk.MustExec(`INSERT INTO t SET a = '9656-09-20', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET a = '6132-12-02';`)
+	tk.MustExec(`INSERT INTO t SET b = '0', a = '3892-02-14';`)
+	tk.MustExec(`UPDATE t SET a = '3120-12-27';`)
+	tk.MustExec(`INSERT INTO t SET a = '9557-12-05';`)
+	tk.MustExec(`INSERT INTO t SET b = '0';`)
+	tk.MustExec(`INSERT INTO t SET a = '1512-12-28', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET b = '1';`)
+	tk.MustExec(`INSERT INTO t SET b = '0';`)
+	tk.MustExec(`INSERT INTO t SET a = '2969-05-09', b = '1';`)
+	tk.MustExec(`INSERT INTO t SET a = '1360-11-26', b = '0';`)
+	tk.MustExec(`INSERT INTO t SET a = '8320-10-11', b = '0';`)
+
+	dmlForB := []string{
+		"INSERT INTO t SET b = '1', a = '7864-05-21';",
+		"INSERT INTO t SET a = '4592-06-12', b = '0';",
+		"INSERT INTO t SET a = '8120-01-15', b = '1';",
+		"INSERT INTO t SET b = '1';",
+		"INSERT INTO t SET b = '1';",
+		"INSERT INTO t SET a = '6946-08-18';",
+		"INSERT INTO t SET a = '4433-03-20', b = '1';",
+		"UPDATE t SET a = '4671-09-18', b = '1';",
+		"UPDATE t SET a = '9432-05-10', b = '1';",
+		"INSERT INTO t SET b = '1', a = '9363-05-20';",
+		"INSERT INTO t SET a = '4653-09-17', b = '1';",
+		"UPDATE t SET a = '8695-05-29';",
+		"INSERT INTO t SET a = '8327-03-12', b = '1';",
+		"INSERT INTO t SET b = '1', a = '9897-03-03';",
+		"INSERT INTO t SET a = '4237-09-28', b = '1';",
+		"INSERT INTO t SET a = '9172-09-03', b = '1';",
+		"INSERT INTO t SET b = '0';",
+		"INSERT INTO t SET b = '0', a = '5577-06-03';",
+		"INSERT INTO t SET b = '0', a = '6379-11-05';",
+		"INSERT INTO t SET a = '3694-11-10';",
+		"UPDATE t SET a = '1791-11-29' WHERE a = '8695-05-29';",
+		"INSERT INTO t SET a = '3900-09-30', b = '0';",
+		"INSERT INTO t SET b = '0';",
+		"INSERT INTO t SET a = '5980-03-31', b = '1';",
+		"INSERT INTO t SET b = '0', a = '7552-01-16';",
+		"UPDATE t SET a = '7912-03-15';",
+	}
+
+	dmlForM := []string{
+		"INSERT INTO t SET a = '4822-08-10';",
+		"INSERT INTO t SET b = '0', a = '1964-01-16';",
+		"INSERT INTO t SET b = '0', a = '2580-11-03';",
+		"INSERT INTO t SET a = '5154-01-31';",
+		"INSERT INTO t SET a = '6063-02-15', b = '0';",
+		"INSERT INTO t SET b = '1', a = '4496-05-07';",
+		"INSERT INTO t SET b = '0', a = '7006-04-12';",
+		"INSERT INTO t SET b = '1', a = '9959-04-22';",
+		"INSERT INTO t SET a = '6277-12-02';",
+		"INSERT INTO t SET b = '1', a = '6731-09-30';",
+		"INSERT INTO t SET b = '0', a = '3606-11-02';",
+		"UPDATE t SET b = '1', a = '5916-09-10';",
+		"INSERT INTO t SET a = '9250-10-13', b = '1';",
+		"UPDATE t SET b = '1', a = '9938-09-20';",
+		"INSERT INTO t SET b = '0';",
+		"INSERT INTO t SET b = '0', a = '9858-02-20';",
+		"INSERT INTO t SET b = '1', a = '9397-03-20';",
+		"INSERT INTO t SET b = '1', a = '7712-12-13';",
+		"INSERT INTO t SET b = '1', a = '8873-10-18';",
+		"INSERT INTO t SET b = '0', a = '4167-01-08';",
+		"INSERT INTO t SET b = '0';",
+		"INSERT INTO t SET b = '0', a = '4177-08-06';",
+		"INSERT INTO t SET b = '1', a = '2553-04-26';",
+		"INSERT INTO t SET a = '5208-01-09';",
+		"INSERT INTO t SET a = '8003-12-01', b = '1';",
+		"INSERT INTO t SET a = '8654-08-30', b = '0';",
+		"UPDATE t SET b = '0', a = '8646-01-28' WHERE a = '2553-04-26';",
+	}
+
+	// Force onCreateIndex use the txn-merge process.
+	ingest.LitInitialized = false
+	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
+	tk.MustExec("set @@global.tidb_enable_mutation_checker = 1;")
+	tk.MustExec("set @@global.tidb_txn_assertion_level = 'STRICT';")
+
+	var checkErrs []error
+	var runDMLB bool
+	var runDMLM bool
+	originHook := dom.DDL().GetHook()
+	callback := &ddl.TestDDLCallback{
+		Do: dom,
+	}
+	onJobUpdatedBefore := func(job *model.Job) {
+		if job.Type != model.ActionAddIndex || job.SchemaState != model.StateWriteReorganization {
+			return
+		}
+		if !runDMLB {
+			runDMLB = true
+			for _, sql := range dmlForB {
+				_, err := tk2.Exec(sql)
+				if err != nil {
+					checkErrs = append(checkErrs, err)
+				}
+			}
+		}
+		idx := findIdxInfo(dom, "test", "t", "idx")
+		if idx == nil {
+			return
+		}
+		if !runDMLM {
+			if idx.BackfillState != model.BackfillStateReadyToMerge {
+				return
+			}
+			runDMLM = true
+			for _, sql := range dmlForM {
+				_, err := tk2.Exec(sql)
+				if err != nil {
+					checkErrs = append(checkErrs, err)
+				}
+			}
+		}
+	}
+	callback.OnJobUpdatedExported.Store(&onJobUpdatedBefore)
+	dom.DDL().SetHook(callback)
+	tk.MustExec("alter table t add index idx(b);")
+	dom.DDL().SetHook(originHook)
+	require.True(t, runDMLB)
+	require.True(t, runDMLM)
+	for _, err := range checkErrs {
+		require.NoError(t, err)
+	}
+	tk.MustExec("admin check table t;")
+	tk.MustExec("UPDATE t SET a = '8862-06-21', b = '0';")
+}
