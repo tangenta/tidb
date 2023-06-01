@@ -15,6 +15,9 @@
 package ingest_test
 
 import (
+	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -22,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/ddl/ingest"
+	"github.com/pingcap/tidb/ddl/internal/callback"
 	"github.com/pingcap/tidb/ddl/testutil"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/errno"
@@ -30,8 +34,10 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/tests/realtikvtest"
+	"github.com/pingcap/tidb/util/logutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func injectMockBackendMgr(t *testing.T, store kv.Storage) (restore func()) {
@@ -247,4 +253,53 @@ func TestAddIndexIngestClientError(t *testing.T) {
 	tk.MustExec("CREATE TABLE t1 (f1 json);")
 	tk.MustExec(`insert into t1(f1) values (cast("null" as json));`)
 	tk.MustGetErrCode("create index i1 on t1((cast(f1 as unsigned array)));", errno.ErrInvalidJSONValueForFuncIndex)
+}
+
+func TestAddIndexIngestRecoverPartition(t *testing.T) {
+	store, dom1, dom2 := testkit.CreateMockStoreAnd2Domain(t)
+	defer injectMockBackendMgr(t, store)()
+	originHook := dom1.DDL().GetHook()
+	defer dom1.DDL().SetHook(originHook)
+	originHook2 := dom2.DDL().GetHook()
+	defer dom2.DDL().SetHook(originHook2)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test;")
+	tk.MustExec("create table t (a int primary key, b int) partition by hash(a) partitions 4;")
+	tk.MustExec("insert into t values (2, 3), (3, 3), (5, 5);")
+	tk2 := testkit.NewTestKit(t, store)
+
+	err := dom2.DDL().OwnerManager().ResignOwner(context.Background())
+	require.NoError(t, err)
+	count := 2 // The second partition.
+	fn := func(job *model.Job) {
+		if !t.Failed() && job.Type == model.ActionAddIndex && job.SchemaState == model.StateWriteReorganization {
+			sql := fmt.Sprintf("select start_key, end_key, physical_id, reorg_meta from mysql.tidb_ddl_reorg where job_id = %d", job.ID)
+			rs := tk2.MustQuery(sql).Rows()
+			if len(rs) == 0 {
+				return
+			}
+			startStr, endStr := rs[0][0].(string), rs[0][1].(string)
+			start, end := hex.EncodeToString([]byte(startStr)), hex.EncodeToString([]byte(endStr))
+			pid := rs[0][2].(string)
+			rgMetaStr := rs[0][3].(string)
+			var reorgMeta ingest.JobReorgMeta
+			err = json.Unmarshal([]byte(rgMetaStr), &reorgMeta)
+			assert.NoError(t, err)
+			cp := reorgMeta.Checkpoint
+			logutil.BgLogger().Info("reorg meta",
+				zap.String("start", start), zap.String("end", end), zap.String("pid", pid),
+				zap.String("cpStart", hex.EncodeToString(cp.StartKey)),
+				zap.String("cpEnd", hex.EncodeToString(cp.EndKey)), zap.Int64("cpPid", cp.PhysicalID))
+			count--
+			if count == 0 {
+				// During adding index, the TiDB owner is changed.
+				dom1.DDL().OwnerManager().Cancel()
+			}
+		}
+	}
+	hook := &callback.TestDDLCallback{Do: dom1}
+	hook.OnJobUpdatedExported.Store(&fn)
+	dom1.DDL().SetHook(hook)
+	dom2.DDL().SetHook(hook)
+	tk.MustExec("alter table t add index idx(b);")
 }

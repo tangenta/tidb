@@ -349,6 +349,10 @@ func overwriteReorgInfoFromGlobalCheckpoint(w *worker, sess *sess.Session, job *
 	if err != nil {
 		return errors.Trace(err)
 	}
+	logutil.BgLogger().Info("[ddl-ingest] try to overwrite reorg info from global checkpoint",
+		zap.String("reorgStart", hex.EncodeToString(reorgInfo.StartKey)), zap.String("start", hex.EncodeToString(start)),
+		zap.String("reorgEnd", hex.EncodeToString(reorgInfo.EndKey)), zap.String("end", hex.EncodeToString(end)),
+		zap.Int64("reorgPID", reorgInfo.PhysicalTableID), zap.Int64("pid", pid))
 	if len(start) > 0 && len(end) > 0 && pid > 0 {
 		reorgInfo.StartKey = start
 		reorgInfo.EndKey = end

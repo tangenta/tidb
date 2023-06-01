@@ -2157,6 +2157,13 @@ func (do *Domain) UpdateTableStatsLoop(ctx, initStatsCtx sessionctx.Context) err
 		do.wg.Run(do.loadStatsWorker, "loadStatsWorker")
 	}
 	owner := do.newOwnerManager(handle.StatsPrompt, handle.StatsOwnerKey)
+	do.wg.Run(func() {
+		select {
+		case <-do.exit:
+			owner.Cancel()
+			return
+		}
+	}, "exit")
 	if do.indexUsageSyncLease > 0 {
 		do.wg.Run(func() {
 			do.syncIndexUsageWorker(owner)
@@ -2186,7 +2193,7 @@ func (do *Domain) newOwnerManager(prompt, ownerKey string) owner.Manager {
 	id := do.ddl.OwnerManager().ID()
 	var statsOwner owner.Manager
 	if do.etcdClient == nil {
-		statsOwner = owner.NewMockManager(context.Background(), id)
+		statsOwner = owner.NewMockManager(context.Background(), id, ownerKey)
 	} else {
 		statsOwner = owner.NewOwnerManager(context.Background(), do.etcdClient, prompt, id, ownerKey)
 	}

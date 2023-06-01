@@ -63,8 +63,7 @@ func CreateMockStore(t testing.TB, opts ...mockstore.MockTiKVStoreOption) kv.Sto
 	return store
 }
 
-// CreateMockStoreAndDomain return a new mock kv.Storage and *domain.Domain.
-func CreateMockStoreAndDomain(t testing.TB, opts ...mockstore.MockTiKVStoreOption) (kv.Storage, *domain.Domain) {
+func CreateMockStoreAnd2Domain(t testing.TB, opts ...mockstore.MockTiKVStoreOption) (kv.Storage, *domain.Domain, *domain.Domain) {
 	store, err := mockstore.NewMockStore(opts...)
 
 	require.NoError(t, err)
@@ -72,17 +71,34 @@ func CreateMockStoreAndDomain(t testing.TB, opts ...mockstore.MockTiKVStoreOptio
 	dom2 := bootstrap(t, store, 500*time.Millisecond)
 	// ywq todo should let dom2 not ddl owner
 	sm := MockSessionManager{}
-	// sm2 := MockSessionManager{}
+	sm2 := MockSessionManager{}
 	// ywq todo consider sm
 	dom1.InfoSyncer().SetSessionManager(&sm)
-	dom2.InfoSyncer().SetSessionManager(&sm)
+	dom2.InfoSyncer().SetSessionManager(&sm2)
 	t.Cleanup(func() {
 		view.Stop()
 		err := store.Close()
 		require.NoError(t, err)
 		gctuner.GlobalMemoryLimitTuner.Stop()
 	})
-	return schematracker.UnwrapStorage(store), dom1
+	return schematracker.UnwrapStorage(store), dom1, dom2
+}
+
+// CreateMockStoreAndDomain return a new mock kv.Storage and *domain.Domain.
+func CreateMockStoreAndDomain(t testing.TB, opts ...mockstore.MockTiKVStoreOption) (kv.Storage, *domain.Domain) {
+	store, err := mockstore.NewMockStore(opts...)
+
+	require.NoError(t, err)
+	dom := bootstrap(t, store, 500*time.Millisecond)
+	sm := MockSessionManager{}
+	dom.InfoSyncer().SetSessionManager(&sm)
+	t.Cleanup(func() {
+		view.Stop()
+		err := store.Close()
+		require.NoError(t, err)
+		gctuner.GlobalMemoryLimitTuner.Stop()
+	})
+	return schematracker.UnwrapStorage(store), dom
 }
 
 func bootstrap(t testing.TB, store kv.Storage, lease time.Duration) *domain.Domain {
