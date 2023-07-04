@@ -9,11 +9,8 @@ import (
 	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
-
 	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	berrors "github.com/pingcap/tidb/br/pkg/errors"
@@ -226,7 +223,7 @@ func ReadPartialFileDirectly(ctx context.Context, storage ExternalStorage, name 
 		Bucket: aws.String(st.options.Bucket),
 		Key:    aws.String(st.options.Prefix + name),
 	}
-	logutil.BgLogger().Info("ReadPartialFileDirectly", zap.Any("key", input.Key))
+	//logutil.BgLogger().Info("ReadPartialFileDirectly", zap.Any("key", input.Key))
 	input.Range = aws.String(fmt.Sprintf("bytes=%d-%d", start, end-1))
 	result, err := st.svc.GetObjectWithContext(ctx, input)
 	if err != nil {

@@ -201,7 +201,6 @@ type MergePropIter struct {
 	endKey         []byte
 	statFilePaths  []string
 	statFileReader []*statFileReader
-	exStorage      storage.ExternalStorage
 	propHeap       propHeap
 	currProp       *prop
 

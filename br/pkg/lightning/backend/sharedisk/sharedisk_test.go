@@ -24,11 +24,9 @@ import (
 	"testing"
 
 	kv2 "github.com/pingcap/tidb/br/pkg/lightning/backend/kv"
-	"github.com/pingcap/tidb/br/pkg/lightning/backend/local"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/br/pkg/membuf"
 	storage2 "github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tidb/keyspace"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -44,12 +42,7 @@ func TestWriter(t *testing.T) {
 	storage, err := storage2.New(context.Background(), backend, &storage2.ExternalStorageOptions{})
 	require.NoError(t, err)
 
-	eg := &Engine{rc: &RangePropertiesCollector{}}
-	eg.rc.propSizeIdxDistance = 2048
-	eg.rc.propKeysIdxDistance = 256
-	writer := &Writer{ctx: context.Background(), engine: eg, memtableSizeLimit: 8 * 1024, keyAdapter: &local.NoopKeyAdapter{}}
-	writer.tikvCodec = keyspace.CodecV1
-	writer.exStorage = storage
+	writer := NewWriter(context.Background(), storage, "test", 0, func(int, int) {})
 	writer.filenamePrefix = "test"
 	writeBufferSize = 1024
 

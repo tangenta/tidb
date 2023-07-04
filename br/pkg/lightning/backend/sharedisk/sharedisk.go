@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/pingcap/tidb/br/pkg/lightning/backend"
 	"github.com/pingcap/tidb/br/pkg/lightning/backend/encode"
 	"github.com/pingcap/tidb/br/pkg/lightning/backend/kv"
@@ -128,11 +127,11 @@ type Engine struct {
 const WriteBatchSize = 8 * 1024
 
 func NewWriter(ctx context.Context, externalStorage storage.ExternalStorage,
-	jobID int64, engineUUID uuid.UUID, writerID int, onClose func(int, int)) *Writer {
+	prefix string, writerID int, onClose func(int, int)) *Writer {
 	// TODO(tangenta): make it configurable.
 	engine := NewEngine(2048, 256)
 	pool := membuf.NewPool()
-	filePrefix := filepath.Join(strconv.Itoa(int(jobID)), engineUUID.String(), strconv.Itoa(writerID))
+	filePrefix := filepath.Join(prefix, strconv.Itoa(writerID))
 	return &Writer{
 		ctx:               ctx,
 		engine:            engine,
@@ -190,7 +189,7 @@ type DataFileReader struct {
 }
 
 func (dr *DataFileReader) getMoreDataFromStorage() (bool, error) {
-	logutil.BgLogger().Info("getMoreDataFromStorage")
+	//logutil.BgLogger().Info("getMoreDataFromStorage")
 
 	fileStartOffset := dr.currFileOffset + dr.currBufferOffset
 	fileEndOffset := dr.currFileOffset + dr.currBufferOffset + uint64(len(dr.readBuffer))
@@ -283,7 +282,7 @@ type statFileReader struct {
 }
 
 func (sr *statFileReader) getMoreDataFromStorage() (bool, error) {
-	logutil.BgLogger().Info("getMoreDataFromStorage")
+	//logutil.BgLogger().Info("getMoreDataFromStorage")
 
 	fileStartOffset := sr.currFileOffset + sr.currBufferOffset
 	fileEndOffset := sr.currFileOffset + sr.currBufferOffset + uint64(len(sr.readBuffer))

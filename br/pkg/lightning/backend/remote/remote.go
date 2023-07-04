@@ -311,7 +311,8 @@ func (remote *Backend) LocalWriter(ctx context.Context, cfg *backend.LocalWriter
 	onClose := func(writerID, currentSeq int) {
 		remote.saveWriterSeq(writerID, currentSeq)
 	}
-	return sharedisk.NewWriter(ctx, remote.externalStorage, remote.jobID, engineUUID, remote.allocWriterID(), onClose), nil
+	prefix := filepath.Join(strconv.Itoa(int(remote.jobID)), engineUUID.String())
+	return sharedisk.NewWriter(ctx, remote.externalStorage, prefix, remote.allocWriterID(), onClose), nil
 }
 
 func (remote *Backend) allocWriterID() int {
@@ -332,7 +333,7 @@ func (remote *Backend) saveWriterSeq(writerID int, currentSeq int) {
 
 // GetRangeSplitter returns a RangeSplitter that can be used to split the range into multiple subtasks.
 func (remote *Backend) GetRangeSplitter(ctx context.Context, instanceCnt int) (*sharedisk.RangeSplitter, error) {
-	statsFiles, err := remote.getAllStatsFileNames(ctx)
+	dataFiles, statsFiles, err := remote.getAllFileNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -345,23 +346,26 @@ func (remote *Backend) GetRangeSplitter(ctx context.Context, instanceCnt int) (*
 	}
 	// TODO(tangenta): determine the max size and max ways.
 	maxKeys := uint64(len(statsFiles) * sharedisk.WriteBatchSize / instanceCnt)
-	rs := sharedisk.NewRangeSplitter(math.MaxUint64, maxKeys, math.MaxUint64, mergePropIter)
+	rs := sharedisk.NewRangeSplitter(math.MaxUint64, maxKeys, math.MaxUint64, mergePropIter, dataFiles)
 	return rs, nil
 }
 
-func (remote *Backend) getAllStatsFileNames(ctx context.Context) ([]string, error) {
+func (remote *Backend) getAllFileNames(ctx context.Context) ([]string, []string, error) {
+	var data []string
 	var stats []string
 	jobIDStr := strconv.Itoa(int(remote.jobID))
 	err := remote.externalStorage.WalkDir(ctx, &storage.WalkOption{SubDir: jobIDStr}, func(path string, size int64) error {
 		if strings.Contains(path, "_stat") {
 			stats = append(stats, path)
+		} else {
+			data = append(data, path)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return stats, nil
+	return data, stats, nil
 }
 
 func getRegionSplitSizeKeys(ctx context.Context, cli pd.Client, tls *common.TLS) (
@@ -1627,7 +1631,7 @@ func (remote *Backend) writeToTiKV(ctx context.Context, j *regionJob) error {
 	}
 
 	takeTime := time.Since(begin)
-	log.FromContext(ctx).Debug("write to kv", zap.Reflect("region", j.region), zap.Uint64("leader", leaderID),
+	log.FromContext(ctx).Info("write to kv", zap.Reflect("region", j.region), zap.Uint64("leader", leaderID),
 		zap.Reflect("meta", meta), zap.Reflect("return metas", leaderPeerMetas),
 		zap.Int64("kv_pairs", totalCount), zap.Int64("total_bytes", totalSize),
 		zap.Int64("buf_size", bytesBuf.TotalSize()),
