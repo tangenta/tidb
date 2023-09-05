@@ -182,7 +182,7 @@ type Config struct {
 	TokenLimit       uint   `toml:"token-limit" json:"token-limit"`
 	TempDir          string `toml:"temp-dir" json:"temp-dir"`
 	TempStoragePath  string `toml:"tmp-storage-path" json:"tmp-storage-path"`
-	// TempStorageQuota describe the temporary storage Quota during query exector when TiDBEnableTmpStorageOnOOM is enabled
+	// TempStorageQuota describe the temporary storage Quota during query executor when TiDBEnableTmpStorageOnOOM is enabled
 	// If the quota exceed the capacity of the TempStoragePath, the tidb-server would exit with fatal error
 	TempStorageQuota           int64                   `toml:"tmp-storage-quota" json:"tmp-storage-quota"` // Bytes
 	TxnLocalLatches            tikvcfg.TxnLocalLatches `toml:"-" json:"-"`

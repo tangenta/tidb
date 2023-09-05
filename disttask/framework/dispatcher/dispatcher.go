@@ -46,7 +46,7 @@ var (
 	// DefaultDispatchConcurrency is the default concurrency for handling task.
 	DefaultDispatchConcurrency = 4
 	checkTaskFinishedInterval  = 500 * time.Millisecond
-	checkTaskRunningInterval   = 300 * time.Millisecond
+	checkTaskRunningInterval   = 500 * time.Millisecond
 	nonRetrySQLTime            = 1
 	retrySQLTimes              = variable.DefTiDBDDLErrorCountLimit
 	retrySQLInterval           = 500 * time.Millisecond

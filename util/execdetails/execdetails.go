@@ -1067,7 +1067,7 @@ func (*RuntimeStatsWithConcurrencyInfo) Tp() int {
 
 // SetConcurrencyInfo sets the concurrency informations.
 // We must clear the concurrencyInfo first when we call the SetConcurrencyInfo.
-// When the num <= 0, it means the exector operator is not executed parallel.
+// When the num <= 0, it means the executor operator is not executed parallel.
 func (e *RuntimeStatsWithConcurrencyInfo) SetConcurrencyInfo(infos ...*ConcurrencyInfo) {
 	e.Lock()
 	defer e.Unlock()

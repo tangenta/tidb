@@ -134,7 +134,9 @@ func (dm *Manager) dispatchTaskLoop() {
 	for {
 		select {
 		case <-dm.ctx.Done():
-			logutil.BgLogger().Info("dispatch task loop exits", zap.Error(dm.ctx.Err()), zap.Int64("interval", int64(checkTaskRunningInterval)/1000000))
+			logutil.BgLogger().Info("dispatch task loop exits",
+				zap.Error(dm.ctx.Err()),
+				zap.Duration("interval", checkTaskRunningInterval))
 			return
 		case <-ticker.C:
 			cnt := dm.getRunningTaskCnt()
