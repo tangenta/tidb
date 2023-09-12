@@ -16,15 +16,10 @@ package scheduler
 
 import (
 	"context"
-
-	"github.com/pingcap/tidb/disttask/framework/scheduler/execute"
 )
 
 type taskTypeOptions struct {
 	PoolSize int32
-	// Summary is the summary of all tasks of the task type.
-	// TODO: better have a summary per task/subtask.
-	Summary *execute.Summary
 }
 
 // TaskTypeOption is the option of TaskType.
@@ -63,9 +58,4 @@ func getSchedulerFactory(taskType string) schedulerFactoryFn {
 func ClearSchedulers() {
 	taskTypes = make(map[string]taskTypeOptions)
 	taskSchedulerFactories = make(map[string]schedulerFactoryFn)
-}
-
-// WithSummary is the option of Scheduler to set the summary.
-var WithSummary TaskTypeOption = func(opts *taskTypeOptions) {
-	opts.Summary = execute.NewSummary()
 }

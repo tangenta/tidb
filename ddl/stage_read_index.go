@@ -40,7 +40,7 @@ type readIndexToLocalStage struct {
 	jc    *JobContext
 
 	bc      ingest.BackendCtx
-	summary *execute.Summary
+	summary *execute.SubtaskSummary
 }
 
 func newReadIndexToLocalStage(
@@ -50,7 +50,6 @@ func newReadIndexToLocalStage(
 	ptbl table.PhysicalTable,
 	jc *JobContext,
 	bc ingest.BackendCtx,
-	summary *execute.Summary,
 ) *readIndexToLocalStage {
 	return &readIndexToLocalStage{
 		d:       d,
@@ -59,7 +58,7 @@ func newReadIndexToLocalStage(
 		ptbl:    ptbl,
 		jc:      jc,
 		bc:      bc,
-		summary: summary,
+		summary: &execute.SubtaskSummary{},
 	}
 }
 
@@ -141,7 +140,9 @@ func (r *readIndexToLocalStage) SplitSubtask(ctx context.Context, subtask *proto
 		return nil, err
 	}
 
-	r.summary.UpdateRowCount(subtask.ID, totalRowCount.Load())
+	r.summary.Store(subtask.ID, &execute.SummaryDetails{
+		RowCount: totalRowCount.Load(),
+	})
 	return nil, nil
 }
 
@@ -172,4 +173,8 @@ func (r *readIndexToLocalStage) Rollback(_ context.Context) error {
 		zap.String("category", "ddl"), zap.Int64("jobID", r.job.ID))
 	ingest.LitBackCtxMgr.Unregister(r.job.ID)
 	return nil
+}
+
+func (r *readIndexToLocalStage) Summary() *execute.SubtaskSummary {
+	return r.summary
 }

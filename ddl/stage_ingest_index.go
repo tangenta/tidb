@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/ddl/ingest"
 	"github.com/pingcap/tidb/disttask/framework/proto"
+	"github.com/pingcap/tidb/disttask/framework/scheduler/execute"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/util/logutil"
@@ -81,5 +82,9 @@ func (i *ingestIndexStage) Rollback(_ context.Context) error {
 	logutil.BgLogger().Info("ingest index stage rollback backfill add index task",
 		zap.String("category", "ddl"), zap.Int64("jobID", i.jobID))
 	ingest.LitBackCtxMgr.Unregister(i.jobID)
+	return nil
+}
+
+func (i *ingestIndexStage) Summary() *execute.SubtaskSummary {
 	return nil
 }

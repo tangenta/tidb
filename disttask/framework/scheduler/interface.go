@@ -55,8 +55,7 @@ type Scheduler interface {
 // each task type should implement this interface.
 type Extension interface {
 	// GetSubtaskExecutor returns the subtask executor for the subtask.
-	// Note: summary is the summary manager of all subtask of the same type now.
-	GetSubtaskExecutor(ctx context.Context, task *proto.Task, summary *execute.Summary) (execute.SubtaskExecutor, error)
+	GetSubtaskExecutor(ctx context.Context, task *proto.Task) (execute.SubtaskExecutor, error)
 	GetMiniTaskExecutor(minimalTask proto.MinimalTask, tp string, step int64) (execute.MiniTaskExecutor, error)
 }
 
@@ -89,6 +88,11 @@ func (*EmptySubtaskExecutor) OnFinished(_ context.Context, metaBytes []byte) ([]
 
 // Rollback implements the SubtaskExecutor interface.
 func (*EmptySubtaskExecutor) Rollback(context.Context) error {
+	return nil
+}
+
+// Summary implements the SubtaskExecutor interface.
+func (*EmptySubtaskExecutor) Summary() *execute.SubtaskSummary {
 	return nil
 }
 

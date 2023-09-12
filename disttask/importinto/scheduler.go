@@ -219,6 +219,10 @@ func (s *importStepExecutor) Rollback(context.Context) error {
 	return nil
 }
 
+func (*importStepExecutor) Summary() *execute.SubtaskSummary {
+	return nil
+}
+
 type postStepExecutor struct {
 	scheduler.EmptySubtaskExecutor
 	taskID   int64
@@ -259,7 +263,7 @@ func (s *importScheduler) Run(ctx context.Context, task *proto.Task) error {
 	return s.BaseScheduler.Run(subCtx, task)
 }
 
-func (*importScheduler) GetSubtaskExecutor(_ context.Context, task *proto.Task, _ *execute.Summary) (execute.SubtaskExecutor, error) {
+func (*importScheduler) GetSubtaskExecutor(_ context.Context, task *proto.Task) (execute.SubtaskExecutor, error) {
 	taskMeta := TaskMeta{}
 	if err := json.Unmarshal(task.Meta, &taskMeta); err != nil {
 		return nil, err

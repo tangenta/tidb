@@ -118,14 +118,7 @@ func (s *BaseScheduler) run(ctx context.Context, task *proto.Task) error {
 	s.resetError()
 	logutil.Logger(s.logCtx).Info("scheduler run a step", zap.Any("step", task.Step), zap.Any("concurrency", task.Concurrency))
 
-	summary, cleanup, err := runSummaryCollectLoop(ctx, task, s.taskTable)
-	if err != nil {
-		s.onError(err)
-		return s.getError()
-	}
-	defer cleanup()
-
-	executor, err := s.GetSubtaskExecutor(ctx, task, summary)
+	executor, err := s.GetSubtaskExecutor(ctx, task)
 	if err != nil {
 		s.onError(err)
 		return s.getError()
@@ -142,6 +135,7 @@ func (s *BaseScheduler) run(ctx context.Context, task *proto.Task) error {
 	var wg sync.WaitGroup
 	cancelCtx, checkCancel := context.WithCancel(ctx)
 	s.startCancelCheck(cancelCtx, &wg, runCancel)
+	s.runSummaryCollectLoop(cancelCtx, &wg, task, executor)
 
 	defer func() {
 		err := executor.Cleanup(runCtx)
@@ -370,7 +364,7 @@ func (s *BaseScheduler) Rollback(ctx context.Context, task *proto.Task) error {
 		}
 	}
 
-	executor, err := s.GetSubtaskExecutor(ctx, task, nil)
+	executor, err := s.GetSubtaskExecutor(ctx, task)
 	if err != nil {
 		s.onError(err)
 		return s.getError()
@@ -399,26 +393,48 @@ func (s *BaseScheduler) Rollback(ctx context.Context, task *proto.Task) error {
 	return s.getError()
 }
 
-func runSummaryCollectLoop(
+func (s *BaseScheduler) runSummaryCollectLoop(
 	ctx context.Context,
+	eg *sync.WaitGroup,
 	task *proto.Task,
-	taskTable TaskTable,
-) (summary *execute.Summary, cleanup func(), err error) {
-	taskMgr, ok := taskTable.(*storage.TaskManager)
+	executor execute.SubtaskExecutor,
+) {
+	summary := executor.Summary()
+	if summary == nil {
+		return
+	}
+	taskMgr, ok := s.taskTable.(*storage.TaskManager)
 	if !ok {
-		return nil, func() {}, nil
+		return
 	}
-	opt, ok := taskTypes[task.Type]
-	if !ok {
-		return nil, func() {}, errors.Errorf("scheduler option for type %s not found", task.Type)
-	}
-	if opt.Summary != nil {
-		go opt.Summary.UpdateRowCountLoop(ctx, taskMgr)
-		return opt.Summary, func() {
-			opt.Summary.PersistRowCount(ctx, taskMgr)
-		}, nil
-	}
-	return nil, func() {}, nil
+	eg.Add(1)
+	go func() {
+		defer eg.Done()
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				persistRowCount(ctx, taskMgr, summary)
+				return
+			case <-ticker.C:
+				persistRowCount(ctx, taskMgr, summary)
+			}
+		}
+	}()
+}
+
+func persistRowCount(ctx context.Context, taskMgr *storage.TaskManager, s *execute.SubtaskSummary) {
+	s.Range(func(key, value any) bool {
+		subtaskID := key.(int64)
+		details := key.(*execute.SummaryDetails)
+		err := taskMgr.UpdateSubtaskRowCount(subtaskID, details.RowCount)
+		if err != nil {
+			logutil.Logger(ctx).Warn("update subtask row count failed", zap.Error(err))
+		}
+		s.Delete(key)
+		return true
+	})
 }
 
 func (s *BaseScheduler) registerCancelFunc(cancel context.CancelFunc) {

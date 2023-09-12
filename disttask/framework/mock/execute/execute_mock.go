@@ -7,6 +7,7 @@ package execute
 import (
 	context "context"
 	reflect "reflect"
+	sync "sync"
 
 	proto "github.com/pingcap/tidb/disttask/framework/proto"
 	gomock "go.uber.org/mock/gomock"
@@ -105,6 +106,20 @@ func (m *MockSubtaskExecutor) SplitSubtask(arg0 context.Context, arg1 *proto.Sub
 func (mr *MockSubtaskExecutorMockRecorder) SplitSubtask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitSubtask", reflect.TypeOf((*MockSubtaskExecutor)(nil).SplitSubtask), arg0, arg1)
+}
+
+// Summary mocks base method.
+func (m *MockSubtaskExecutor) Summary() *sync.Map {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Summary")
+	ret0, _ := ret[0].(*sync.Map)
+	return ret0
+}
+
+// Summary indicates an expected call of Summary.
+func (mr *MockSubtaskExecutorMockRecorder) Summary() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Summary", reflect.TypeOf((*MockSubtaskExecutor)(nil).Summary))
 }
 
 // MockMiniTaskExecutor is a mock of MiniTaskExecutor interface.

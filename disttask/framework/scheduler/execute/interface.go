@@ -16,6 +16,7 @@ package execute
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/tidb/disttask/framework/proto"
 )
@@ -34,6 +35,8 @@ type SubtaskExecutor interface {
 	OnFinished(ctx context.Context, subtask []byte) ([]byte, error)
 	// Rollback is used to roll back all subtasks.
 	Rollback(context.Context) error
+	// Summary is used to get the current summary of the subtask execution.
+	Summary() *SubtaskSummary
 }
 
 // MiniTaskExecutor defines the interface of a subtask executor.
@@ -41,4 +44,10 @@ type SubtaskExecutor interface {
 // TODO: Rename to minimal task executor.
 type MiniTaskExecutor interface {
 	Run(ctx context.Context) error
+}
+
+type SubtaskSummary = sync.Map // subtaskID => SummaryDetails
+
+type SummaryDetails struct {
+	RowCount int64
 }

@@ -129,6 +129,10 @@ func (t *testScheduler) OnFinished(_ context.Context, meta []byte) ([]byte, erro
 	return meta, nil
 }
 
+func (t *testScheduler) Summary() *execute.SubtaskSummary {
+	return nil
+}
+
 // Note: the subtask must be Reentrant.
 type testSubtaskExecutor struct {
 	m *sync.Map
@@ -186,7 +190,7 @@ func (e *testSubtaskExecutor5) Run(_ context.Context) error {
 
 func RegisterTaskMeta(t *testing.T, ctrl *gomock.Controller, m *sync.Map, dispatcherHandle dispatcher.Extension) {
 	mockExtension := mock.NewMockExtension(ctrl)
-	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
+	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
 	mockExtension.EXPECT().GetMiniTaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(minimalTask proto.MinimalTask, tp string, step int64) (execute.MiniTaskExecutor, error) {
 			switch step {
@@ -224,7 +228,7 @@ func registerTaskMetaInner(t *testing.T, mockExtension scheduler.Extension, disp
 
 func RegisterTaskMetaForExample2(t *testing.T, ctrl *gomock.Controller, m *sync.Map, dispatcherHandle dispatcher.Extension) {
 	mockExtension := mock.NewMockExtension(ctrl)
-	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
+	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
 	mockExtension.EXPECT().GetMiniTaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(minimalTask proto.MinimalTask, tp string, step int64) (execute.MiniTaskExecutor, error) {
 			switch step {
@@ -260,7 +264,7 @@ func RegisterTaskMetaForExample2Inner(t *testing.T, mockExtension scheduler.Exte
 
 func RegisterTaskMetaForExample3(t *testing.T, ctrl *gomock.Controller, m *sync.Map, dispatcherHandle dispatcher.Extension) {
 	mockExtension := mock.NewMockExtension(ctrl)
-	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
+	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any()).Return(&testScheduler{}, nil).AnyTimes()
 	mockExtension.EXPECT().GetMiniTaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(minimalTask proto.MinimalTask, tp string, step int64) (execute.MiniTaskExecutor, error) {
 			switch step {

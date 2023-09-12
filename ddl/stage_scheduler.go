@@ -46,7 +46,7 @@ type BackfillSubTaskMeta struct {
 
 // NewBackfillSchedulerHandle creates a new backfill scheduler.
 func NewBackfillSchedulerHandle(ctx context.Context, taskMeta []byte, d *ddl,
-	stepForImport bool, summary *execute.Summary) (execute.SubtaskExecutor, error) {
+	stepForImport bool) (execute.SubtaskExecutor, error) {
 	bgm := &BackfillGlobalMeta{}
 	err := json.Unmarshal(taskMeta, bgm)
 	if err != nil {
@@ -74,7 +74,7 @@ func NewBackfillSchedulerHandle(ctx context.Context, taskMeta []byte, d *ddl,
 		jc := d.jobContext(jobMeta.ID, jobMeta.ReorgMeta)
 		d.setDDLLabelForTopSQL(jobMeta.ID, jobMeta.Query)
 		d.setDDLSourceForDiagnosis(jobMeta.ID, jobMeta.Type)
-		return newReadIndexToLocalStage(d, &bgm.Job, indexInfo, tbl.(table.PhysicalTable), jc, bc, summary), nil
+		return newReadIndexToLocalStage(d, &bgm.Job, indexInfo, tbl.(table.PhysicalTable), jc, bc), nil
 	}
 	return newIngestIndexStage(jobMeta.ID, indexInfo, tbl.(table.PhysicalTable), bc), nil
 }
@@ -96,12 +96,12 @@ func newBackfillDistScheduler(ctx context.Context, id string, taskID int64, task
 	return s
 }
 
-func (s *backfillDistScheduler) GetSubtaskExecutor(ctx context.Context, task *proto.Task, summary *execute.Summary) (execute.SubtaskExecutor, error) {
+func (s *backfillDistScheduler) GetSubtaskExecutor(ctx context.Context, task *proto.Task) (execute.SubtaskExecutor, error) {
 	switch task.Step {
 	case proto.StepInit:
-		return NewBackfillSchedulerHandle(ctx, task.Meta, s.d, false, summary)
+		return NewBackfillSchedulerHandle(ctx, task.Meta, s.d, false)
 	case proto.StepOne:
-		return NewBackfillSchedulerHandle(ctx, task.Meta, s.d, true, nil)
+		return NewBackfillSchedulerHandle(ctx, task.Meta, s.d, true)
 	default:
 		return nil, errors.Errorf("unknown backfill step %d for task %d", task.Step, task.ID)
 	}

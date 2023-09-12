@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/disttask/framework/dispatcher"
 	"github.com/pingcap/tidb/disttask/framework/mock"
 	"github.com/pingcap/tidb/disttask/framework/proto"
+	"github.com/pingcap/tidb/disttask/framework/scheduler/execute"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/stretchr/testify/require"
@@ -106,6 +107,10 @@ func (t *rollbackScheduler) OnFinished(_ context.Context, meta []byte) ([]byte, 
 	return meta, nil
 }
 
+func (t *rollbackScheduler) Summary() *execute.SubtaskSummary {
+	return nil
+}
+
 type rollbackSubtaskExecutor struct {
 	m *sync.Map
 }
@@ -117,7 +122,7 @@ func (e *rollbackSubtaskExecutor) Run(_ context.Context) error {
 
 func registerRollbackTaskMeta(t *testing.T, ctrl *gomock.Controller, m *sync.Map) {
 	mockExtension := mock.NewMockExtension(ctrl)
-	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(&rollbackScheduler{m: m}, nil).AnyTimes()
+	mockExtension.EXPECT().GetSubtaskExecutor(gomock.Any(), gomock.Any()).Return(&rollbackScheduler{m: m}, nil).AnyTimes()
 	mockExtension.EXPECT().GetMiniTaskExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(&rollbackSubtaskExecutor{m: m}, nil).AnyTimes()
 	registerTaskMetaInner(t, mockExtension, &rollbackDispatcherExt{})
 	rollbackCnt.Store(0)
