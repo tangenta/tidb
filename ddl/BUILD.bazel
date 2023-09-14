@@ -67,6 +67,7 @@ go_library(
         "//br/pkg/lightning/config",
         "//br/pkg/storage",
         "//config",
+        "//ddl/copr",
         "//ddl/ingest",
         "//ddl/internal/session",
         "//ddl/label",
@@ -234,6 +235,7 @@ go_test(
     deps = [
         "//autoid_service",
         "//config",
+        "//ddl/copr",
         "//ddl/ingest",
         "//ddl/internal/session",
         "//ddl/placement",

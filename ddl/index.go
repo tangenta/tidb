@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/ddl/copr"
 	"github.com/pingcap/tidb/ddl/ingest"
 	sess "github.com/pingcap/tidb/ddl/internal/session"
 	"github.com/pingcap/tidb/disttask/framework/handle"
@@ -1671,27 +1672,30 @@ func writeChunkToLocal(
 	ctx context.Context,
 	writer ingest.Writer,
 	index table.Index,
-	copCtx *CopContext,
+	copCtx copr.CopContext,
 	vars *variable.SessionVars,
 	copChunk *chunk.Chunk,
 ) (int, kv.Handle, error) {
 	sCtx, writeBufs := vars.StmtCtx, vars.GetWriteStmtBufs()
 	iter := chunk.NewIterator4Chunk(copChunk)
-	idxDataBuf := make([]types.Datum, len(copCtx.idxColOutputOffsets))
-	handleDataBuf := make([]types.Datum, len(copCtx.handleOutputOffsets))
+	c := copCtx.GetBase()
+	idxID := index.Meta().ID
+	idxColOutputOffsets := copCtx.IndexColumnOutputOffsets(idxID)
+	idxDataBuf := make([]types.Datum, len(idxColOutputOffsets))
+	handleDataBuf := make([]types.Datum, len(c.HandleOutputOffsets))
 	count := 0
 	var lastHandle kv.Handle
 	unlock := writer.LockForWrite()
 	defer unlock()
 	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
 		idxDataBuf, handleDataBuf = idxDataBuf[:0], handleDataBuf[:0]
-		idxDataBuf = extractDatumByOffsets(row, copCtx.idxColOutputOffsets, copCtx.expColInfos, idxDataBuf)
-		handleDataBuf := extractDatumByOffsets(row, copCtx.handleOutputOffsets, copCtx.expColInfos, handleDataBuf)
-		handle, err := buildHandle(handleDataBuf, copCtx.tblInfo, copCtx.pkInfo, sCtx)
+		idxDataBuf = extractDatumByOffsets(row, idxColOutputOffsets, c.ExprColumnInfos, idxDataBuf)
+		handleDataBuf := extractDatumByOffsets(row, c.HandleOutputOffsets, c.ExprColumnInfos, handleDataBuf)
+		handle, err := buildHandle(handleDataBuf, c.TableInfo, c.PrimaryKeyInfo, sCtx)
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
-		rsData := getRestoreData(copCtx.tblInfo, copCtx.idxInfo, copCtx.pkInfo, handleDataBuf)
+		rsData := getRestoreData(c.TableInfo, copCtx.IndexInfo(idxID), c.PrimaryKeyInfo, handleDataBuf)
 		err = writeOneKVToLocal(ctx, writer, index, sCtx, writeBufs, idxDataBuf, rsData, handle)
 		if err != nil {
 			return 0, nil, errors.Trace(err)

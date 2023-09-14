@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/ddl/copr"
 	"github.com/pingcap/tidb/ddl/ingest"
 	sess "github.com/pingcap/tidb/ddl/internal/session"
 	"github.com/pingcap/tidb/kv"
@@ -440,7 +441,8 @@ func (b *ingestBackfillScheduler) createCopReqSenderPool() (*copReqSenderPool, e
 		logutil.Logger(b.ctx).Warn("cannot init cop request sender", zap.Error(err))
 		return nil, err
 	}
-	copCtx, err := NewCopContext(b.tbl.Meta(), indexInfo, sessCtx)
+	reqSrc := getDDLRequestSource(model.ActionAddIndex)
+	copCtx, err := copr.NewCopContextSingleIndex(b.tbl.Meta(), indexInfo, sessCtx, reqSrc)
 	if err != nil {
 		logutil.Logger(b.ctx).Warn("cannot init cop request sender", zap.Error(err))
 		return nil, err

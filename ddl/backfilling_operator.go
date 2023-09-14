@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/backend/external"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/ddl/copr"
 	"github.com/pingcap/tidb/ddl/ingest"
 	"github.com/pingcap/tidb/ddl/internal/session"
 	"github.com/pingcap/tidb/disttask/operator"
@@ -122,14 +123,15 @@ func NewAddIndexIngestPipeline(
 	metricCounter prometheus.Counter,
 ) (*operator.AsyncPipeline, error) {
 	index := tables.NewIndex(tbl.GetPhysicalID(), tbl.Meta(), idxInfo)
-	copCtx, err := NewCopContext(tbl.Meta(), idxInfo, sessCtx)
+	reqSrc := getDDLRequestSource(model.ActionAddIndex)
+	copCtx, err := copr.NewCopContextSingleIndex(tbl.Meta(), idxInfo, sessCtx, reqSrc)
 	if err != nil {
 		return nil, err
 	}
 	poolSize := copReadChunkPoolSize()
 	srcChkPool := make(chan *chunk.Chunk, poolSize)
 	for i := 0; i < poolSize; i++ {
-		srcChkPool <- chunk.NewChunkWithCapacity(copCtx.fieldTps, copReadBatchSize())
+		srcChkPool <- chunk.NewChunkWithCapacity(copCtx.GetBase().FieldTypes, copReadBatchSize())
 	}
 	readerCnt, writerCnt := expectedIngestWorkerCnt()
 
@@ -163,14 +165,15 @@ func NewWriteIndexToExternalStoragePipeline(
 	onClose external.OnCloseFunc,
 ) (*operator.AsyncPipeline, error) {
 	index := tables.NewIndex(tbl.GetPhysicalID(), tbl.Meta(), idxInfo)
-	copCtx, err := NewCopContext(tbl.Meta(), idxInfo, sessCtx)
+	reqSrc := getDDLRequestSource(model.ActionAddIndex)
+	copCtx, err := copr.NewCopContextSingleIndex(tbl.Meta(), idxInfo, sessCtx, reqSrc)
 	if err != nil {
 		return nil, err
 	}
 	poolSize := copReadChunkPoolSize()
 	srcChkPool := make(chan *chunk.Chunk, poolSize)
 	for i := 0; i < poolSize; i++ {
-		srcChkPool <- chunk.NewChunkWithCapacity(copCtx.fieldTps, copReadBatchSize())
+		srcChkPool <- chunk.NewChunkWithCapacity(copCtx.GetBase().FieldTypes, copReadBatchSize())
 	}
 	readerCnt := int(variable.GetDDLReorgWorkerCounter())
 	writerCnt := 1
@@ -345,7 +348,7 @@ type TableScanOperator struct {
 func NewTableScanOperator(
 	ctx *OperatorCtx,
 	sessPool opSessPool,
-	copCtx *CopContext,
+	copCtx copr.CopContext,
 	srcChkPool chan *chunk.Chunk,
 	concurrency int,
 ) *TableScanOperator {
@@ -369,7 +372,7 @@ func NewTableScanOperator(
 
 type tableScanWorker struct {
 	ctx        *OperatorCtx
-	copCtx     *CopContext
+	copCtx     copr.CopContext
 	sessPool   opSessPool
 	se         *session.Session
 	srcChkPool chan *chunk.Chunk
@@ -409,14 +412,14 @@ func (w *tableScanWorker) scanRecords(task TableScanTask, sender func(IndexRecor
 		failpoint.Inject("scanRecordExec", func(_ failpoint.Value) {
 			OperatorCallBackForTest()
 		})
-		rs, err := w.copCtx.buildTableScan(w.ctx, startTS, task.Start, task.End)
+		rs, err := buildTableScan(w.ctx, w.copCtx, startTS, task.Start, task.End)
 		if err != nil {
 			return err
 		}
 		var done bool
 		for !done {
 			srcChk := w.getChunk()
-			done, err = w.copCtx.fetchTableScanResult(w.ctx, rs, srcChk)
+			done, err = fetchTableScanResult(w.ctx, w.copCtx, rs, srcChk)
 			if err != nil {
 				w.recycleChunk(srcChk)
 				terror.Call(rs.Close)
@@ -436,7 +439,7 @@ func (w *tableScanWorker) getChunk() *chunk.Chunk {
 	chk := <-w.srcChkPool
 	newCap := copReadBatchSize()
 	if chk.Capacity() != newCap {
-		chk = chunk.NewChunkWithCapacity(w.copCtx.fieldTps, newCap)
+		chk = chunk.NewChunkWithCapacity(w.copCtx.GetBase().FieldTypes, newCap)
 	}
 	chk.Reset()
 	return chk
@@ -454,7 +457,7 @@ type WriteExternalStoreOperator struct {
 // NewWriteExternalStoreOperator creates a new WriteExternalStoreOperator.
 func NewWriteExternalStoreOperator(
 	ctx *OperatorCtx,
-	copCtx *CopContext,
+	copCtx copr.CopContext,
 	sessPool opSessPool,
 	jobID int64,
 	subtaskID int64,
@@ -512,7 +515,7 @@ type IndexIngestOperator struct {
 // NewIndexIngestOperator creates a new IndexIngestOperator.
 func NewIndexIngestOperator(
 	ctx *OperatorCtx,
-	copCtx *CopContext,
+	copCtx copr.CopContext,
 	sessPool opSessPool,
 	tbl table.PhysicalTable,
 	index table.Index,
@@ -554,7 +557,7 @@ type indexIngestWorker struct {
 	tbl   table.PhysicalTable
 	index table.Index
 
-	copCtx   *CopContext
+	copCtx   copr.CopContext
 	sessPool opSessPool
 	se       *session.Session
 

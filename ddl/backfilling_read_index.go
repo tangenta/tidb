@@ -95,7 +95,6 @@ func (r *readIndexExecutor) RunSubtask(ctx context.Context, subtask *proto.Subta
 
 	r.subtaskSummary.Store(subtask.ID, &readIndexSummary{})
 
-	d := r.d
 	sm := &BackfillSubTaskMeta{}
 	err := json.Unmarshal(subtask.Meta, sm)
 	if err != nil {
@@ -111,7 +110,7 @@ func (r *readIndexExecutor) RunSubtask(ctx context.Context, subtask *proto.Subta
 	}
 
 	sessCtx, err := newSessCtx(
-		d.store, r.job.ReorgMeta.SQLMode, r.job.ReorgMeta.Location, r.job.ReorgMeta.ResourceGroupName)
+		r.d.store, r.job.ReorgMeta.SQLMode, r.job.ReorgMeta.Location, r.job.ReorgMeta.ResourceGroupName)
 	if err != nil {
 		return err
 	}
@@ -122,9 +121,9 @@ func (r *readIndexExecutor) RunSubtask(ctx context.Context, subtask *proto.Subta
 
 	var pipe *operator.AsyncPipeline
 	if len(r.cloudStorageURI) > 0 {
-		pipe, err = r.buildExternalStorePipeline(opCtx, d, subtask.ID, sessCtx, tbl, startKey, endKey, totalRowCount)
+		pipe, err = r.buildExternalStorePipeline(opCtx, subtask.ID, sessCtx, tbl, startKey, endKey, totalRowCount)
 	} else {
-		pipe, err = r.buildLocalStorePipeline(opCtx, d, sessCtx, tbl, startKey, endKey, totalRowCount)
+		pipe, err = r.buildLocalStorePipeline(opCtx, sessCtx, tbl, startKey, endKey, totalRowCount)
 	}
 	if err != nil {
 		return err
@@ -222,12 +221,12 @@ func (r *readIndexExecutor) getTableStartEndKey(sm *BackfillSubTaskMeta) (
 
 func (r *readIndexExecutor) buildLocalStorePipeline(
 	opCtx *OperatorCtx,
-	d *ddl,
 	sessCtx sessionctx.Context,
 	tbl table.PhysicalTable,
 	start, end kv.Key,
 	totalRowCount *atomic.Int64,
 ) (*operator.AsyncPipeline, error) {
+	d := r.d
 	ei, err := r.bc.Register(r.job.ID, r.index.ID, r.job.SchemaName, r.job.TableName)
 	if err != nil {
 		logutil.Logger(opCtx).Warn("cannot register new engine", zap.Error(err),
@@ -242,13 +241,13 @@ func (r *readIndexExecutor) buildLocalStorePipeline(
 
 func (r *readIndexExecutor) buildExternalStorePipeline(
 	opCtx *OperatorCtx,
-	d *ddl,
 	subtaskID int64,
 	sessCtx sessionctx.Context,
 	tbl table.PhysicalTable,
 	start, end kv.Key,
 	totalRowCount *atomic.Int64,
 ) (*operator.AsyncPipeline, error) {
+	d := r.d
 	onClose := func(summary *external.WriterSummary) {
 		sum, _ := r.subtaskSummary.Load(subtaskID)
 		s := sum.(*readIndexSummary)
