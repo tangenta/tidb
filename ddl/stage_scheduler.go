@@ -32,7 +32,7 @@ import (
 // BackfillGlobalMeta is the global task meta for backfilling index.
 type BackfillGlobalMeta struct {
 	Job        model.Job `json:"job"`
-	EleID      int64     `json:"ele_id"`
+	EleIDs     []int64   `json:"ele_ids"`
 	EleTypeKey []byte    `json:"ele_type_key"`
 
 	CloudStorageURI string `json:"cloud_storage_uri"`
@@ -66,11 +66,15 @@ func NewBackfillSubtaskExecutor(_ context.Context, taskMeta []byte, d *ddl,
 	if err != nil {
 		return nil, err
 	}
-	indexInfo := model.FindIndexInfoByID(tbl.Meta().Indices, bgm.EleID)
-	if indexInfo == nil {
-		logutil.BgLogger().Warn("index info not found", zap.String("category", "ddl-ingest"),
-			zap.Int64("table ID", tbl.Meta().ID), zap.Int64("index ID", bgm.EleID))
-		return nil, errors.New("index info not found")
+	indexInfos := make([]*model.IndexInfo, 0, len(bgm.EleIDs))
+	for _, eid := range bgm.EleIDs {
+		indexInfo := model.FindIndexInfoByID(tbl.Meta().Indices, eid)
+		if indexInfo == nil {
+			logutil.BgLogger().Warn("index info not found", zap.String("category", "ddl-ingest"),
+				zap.Int64("table ID", tbl.Meta().ID), zap.Int64("index ID", eid))
+			return nil, errors.New("index info not found")
+		}
+		indexInfos = append(indexInfos, indexInfo)
 	}
 
 	switch stage {
@@ -79,12 +83,12 @@ func NewBackfillSubtaskExecutor(_ context.Context, taskMeta []byte, d *ddl,
 		d.setDDLLabelForTopSQL(jobMeta.ID, jobMeta.Query)
 		d.setDDLSourceForDiagnosis(jobMeta.ID, jobMeta.Type)
 		return newReadIndexExecutor(
-			d, &bgm.Job, indexInfo, tbl.(table.PhysicalTable), jc, bc, summary, bgm.CloudStorageURI), nil
+			d, &bgm.Job, indexInfos, tbl.(table.PhysicalTable), jc, bc, summary, bgm.CloudStorageURI), nil
 	case proto.StepOne:
 		if len(bgm.CloudStorageURI) > 0 {
-			return newCloudImportExecutor(jobMeta.ID, indexInfo, tbl.(table.PhysicalTable), bc, bgm.CloudStorageURI)
+			return newCloudImportExecutor(jobMeta.ID, indexInfos[0], tbl.(table.PhysicalTable), bc, bgm.CloudStorageURI)
 		}
-		return newImportFromLocalStepExecutor(jobMeta.ID, indexInfo, tbl.(table.PhysicalTable), bc), nil
+		return newImportFromLocalStepExecutor(jobMeta.ID, indexInfos, tbl.(table.PhysicalTable), bc), nil
 	default:
 		return nil, errors.Errorf("unknown step %d for job %d", stage, jobMeta.ID)
 	}
@@ -130,7 +134,7 @@ func (s *backfillDistScheduler) Init(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	idx := model.FindIndexInfoByID(tbl.Meta().Indices, bgm.EleID)
+	idx := model.FindIndexInfoByID(tbl.Meta().Indices, bgm.EleIDs)
 	if idx == nil {
 		return errors.Trace(errors.New("index info not found"))
 	}

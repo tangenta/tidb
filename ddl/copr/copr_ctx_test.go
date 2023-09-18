@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
@@ -27,9 +28,11 @@ import (
 
 func TestNewCopContextSingleIndex(t *testing.T) {
 	var mockColInfos []*model.ColumnInfo
-	for i := 0; i < 5; i++ {
+	colCnt := 6
+	for i := 0; i < colCnt; i++ {
 		mockColInfos = append(mockColInfos, &model.ColumnInfo{
 			ID:        int64(i),
+			Offset:    i,
 			Name:      model.NewCIStr(fmt.Sprintf("c%d", i)),
 			FieldType: *types.NewFieldType(1),
 			State:     model.StatePublic,
@@ -43,36 +46,79 @@ func TestNewCopContextSingleIndex(t *testing.T) {
 		}
 		return nil
 	}
-	var mockIdxInfos []*model.IndexInfo
-	for i, testIdxColNames := range [][]string{
-		{"c1"},
-		{"c1", "c3"},
-		{"c5", "c1"},
-	} {
+	const (
+		pkTypeRowID        = 0
+		pkTypePKHandle     = 1
+		pkTypeCommonHandle = 2
+	)
+
+	testCases := []struct {
+		pkType       int
+		cols         []string
+		expectedCols []string
+	}{
+		{pkTypeRowID, []string{"c1"}, []string{"c1", "_tidb_rowid"}},
+		{pkTypeRowID, []string{"c1", "c3"}, []string{"c1", "c3", "_tidb_rowid"}},
+		{pkTypePKHandle, []string{"c1"}, []string{"c0", "c1"}},
+		{pkTypeCommonHandle, []string{"c4", "c1"}, []string{"c1", "c2", "c4"}},
+	}
+
+	for i, tt := range testCases {
 		var idxCols []*model.IndexColumn
-		for _, cn := range testIdxColNames {
+		for _, cn := range tt.cols {
 			idxCols = append(idxCols, &model.IndexColumn{
 				Name:   model.NewCIStr(cn),
 				Offset: findColByName(cn).Offset,
 			})
 		}
-		mockIdxInfos = append(mockIdxInfos, &model.IndexInfo{
+		mockIdxInfo := &model.IndexInfo{
 			ID:      int64(i),
 			Name:    model.NewCIStr(fmt.Sprintf("i%d", i)),
 			Columns: idxCols,
 			State:   model.StatePublic,
-		})
+		}
+		mockTableInfo := &model.TableInfo{
+			Name:           model.NewCIStr("t"),
+			Columns:        mockColInfos,
+			Indices:        []*model.IndexInfo{mockIdxInfo},
+			PKIsHandle:     tt.pkType == pkTypePKHandle,
+			IsCommonHandle: tt.pkType == pkTypeCommonHandle,
+		}
+		if mockTableInfo.PKIsHandle {
+			mockTableInfo.Columns[0].SetFlag(mysql.PriKeyFlag)
+		}
+		if mockTableInfo.IsCommonHandle {
+			mockTableInfo.Indices = append(mockTableInfo.Indices, &model.IndexInfo{
+				Columns: []*model.IndexColumn{
+					{
+						Name:   model.NewCIStr("c2"),
+						Offset: 2,
+					},
+					{
+						Name:   model.NewCIStr("c4"),
+						Offset: 4,
+					},
+				},
+				State:   model.StatePublic,
+				Primary: true,
+			})
+		}
+
+		copCtx, err := NewCopContextSingleIndex(mockTableInfo, mockIdxInfo, mock.NewContext(), "")
+		require.NoError(t, err)
+		base := copCtx.GetBase()
+		require.Equal(t, "t", base.TableInfo.Name.L)
+		if tt.pkType != pkTypeCommonHandle {
+			require.Nil(t, base.PrimaryKeyInfo)
+		}
+		expectedLen := len(tt.expectedCols)
+		require.Equal(t, expectedLen, len(base.ColumnInfos))
+		require.Equal(t, expectedLen, len(base.FieldTypes))
+		require.Equal(t, expectedLen, len(base.ExprColumnInfos))
+		for i, col := range base.ColumnInfos {
+			require.Equal(t, tt.expectedCols[i], col.Name.L)
+		}
 	}
-	mockTableInfo := &model.TableInfo{
-		Name:       model.NewCIStr("t"),
-		Columns:    mockColInfos,
-		Indices:    mockIdxInfos,
-		PKIsHandle: false,
-	}
-	copCtx, err := NewCopContextSingleIndex(mockTableInfo, mockIdxInfos[0], mock.NewContext(), "")
-	require.NoError(t, err)
-	base := copCtx.GetBase()
-	require.Equal(t, "t", base.TableInfo.Name.L)
 }
 
 func TestResolveIndicesForHandle(t *testing.T) {

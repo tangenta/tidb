@@ -1615,8 +1615,8 @@ type addIndexIngestWorker struct {
 	sessCtx       sessionctx.Context
 
 	tbl              table.PhysicalTable
-	index            table.Index
-	writer           ingest.Writer
+	indexes          []table.Index
+	writers          []ingest.Writer
 	copReqSenderPool *copReqSenderPool
 	checkpointMgr    *ingest.CheckpointManager
 
@@ -1625,15 +1625,33 @@ type addIndexIngestWorker struct {
 	distribute bool
 }
 
-func newAddIndexIngestWorker(ctx context.Context, t table.PhysicalTable, d *ddlCtx, ei ingest.Engine,
-	resultCh chan *backfillResult, jobID int64, schemaName string, indexID int64, writerID int,
-	copReqSenderPool *copReqSenderPool, sessCtx sessionctx.Context,
-	checkpointMgr *ingest.CheckpointManager, distribute bool) (*addIndexIngestWorker, error) {
-	indexInfo := model.FindIndexInfoByID(t.Meta().Indices, indexID)
-	index := tables.NewIndex(t.GetPhysicalID(), t.Meta(), indexInfo)
-	lw, err := ei.CreateWriter(writerID)
-	if err != nil {
-		return nil, err
+func newAddIndexIngestWorker(
+	ctx context.Context,
+	t table.PhysicalTable,
+	d *ddlCtx,
+	engines []ingest.Engine,
+	resultCh chan *backfillResult,
+	jobID int64,
+	schemaName string,
+	indexIDs []int64,
+	writerID int,
+	copReqSenderPool *copReqSenderPool,
+	sessCtx sessionctx.Context,
+	checkpointMgr *ingest.CheckpointManager,
+	distribute bool,
+) (*addIndexIngestWorker, error) {
+
+	indexes := make([]table.Index, 0, len(indexIDs))
+	writers := make([]ingest.Writer, 0, len(indexIDs))
+	for i, indexID := range indexIDs {
+		indexInfo := model.FindIndexInfoByID(t.Meta().Indices, indexID)
+		index := tables.NewIndex(t.GetPhysicalID(), t.Meta(), indexInfo)
+		lw, err := engines[i].CreateWriter(writerID)
+		if err != nil {
+			return nil, err
+		}
+		indexes = append(indexes, index)
+		writers = append(writers, lw)
 	}
 
 	return &addIndexIngestWorker{
@@ -1643,8 +1661,8 @@ func newAddIndexIngestWorker(ctx context.Context, t table.PhysicalTable, d *ddlC
 		metricCounter: metrics.BackfillTotalCounter.WithLabelValues(
 			metrics.GenerateReorgLabel("add_idx_rate", schemaName, t.Meta().Name.O)),
 		tbl:              t,
-		index:            index,
-		writer:           lw,
+		indexes:          indexes,
+		writers:          writers,
 		copReqSenderPool: copReqSenderPool,
 		resultCh:         resultCh,
 		jobID:            jobID,
@@ -1658,7 +1676,8 @@ func (w *addIndexIngestWorker) WriteLocal(rs *IndexRecordChunk) (count int, next
 	oprStartTime := time.Now()
 	copCtx := w.copReqSenderPool.copCtx
 	vars := w.sessCtx.GetSessionVars()
-	cnt, lastHandle, err := writeChunkToLocal(w.ctx, w.writer, w.index, copCtx, vars, rs.Chunk)
+	cnt, lastHandle, err := writeChunkToLocal(
+		w.ctx, w.writers, w.indexes, copCtx, vars, rs.Chunk)
 	if err != nil || cnt == 0 {
 		return 0, nil, err
 	}
@@ -1670,8 +1689,8 @@ func (w *addIndexIngestWorker) WriteLocal(rs *IndexRecordChunk) (count int, next
 
 func writeChunkToLocal(
 	ctx context.Context,
-	writer ingest.Writer,
-	index table.Index,
+	writers []ingest.Writer,
+	indexes []table.Index,
 	copCtx copr.CopContext,
 	vars *variable.SessionVars,
 	copChunk *chunk.Chunk,
@@ -1679,31 +1698,50 @@ func writeChunkToLocal(
 	sCtx, writeBufs := vars.StmtCtx, vars.GetWriteStmtBufs()
 	iter := chunk.NewIterator4Chunk(copChunk)
 	c := copCtx.GetBase()
-	idxID := index.Meta().ID
-	idxColOutputOffsets := copCtx.IndexColumnOutputOffsets(idxID)
-	idxDataBuf := make([]types.Datum, len(idxColOutputOffsets))
+
+	maxIdxColCnt := maxIndexColumnCount(indexes)
+	idxDataBuf := make([]types.Datum, maxIdxColCnt)
 	handleDataBuf := make([]types.Datum, len(c.HandleOutputOffsets))
 	count := 0
 	var lastHandle kv.Handle
-	unlock := writer.LockForWrite()
-	defer unlock()
+
+	for _, w := range writers {
+		unlock := w.LockForWrite()
+		defer unlock()
+	}
 	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-		idxDataBuf, handleDataBuf = idxDataBuf[:0], handleDataBuf[:0]
-		idxDataBuf = extractDatumByOffsets(row, idxColOutputOffsets, c.ExprColumnInfos, idxDataBuf)
+		handleDataBuf = handleDataBuf[:0]
 		handleDataBuf := extractDatumByOffsets(row, c.HandleOutputOffsets, c.ExprColumnInfos, handleDataBuf)
 		handle, err := buildHandle(handleDataBuf, c.TableInfo, c.PrimaryKeyInfo, sCtx)
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
-		rsData := getRestoreData(c.TableInfo, copCtx.IndexInfo(idxID), c.PrimaryKeyInfo, handleDataBuf)
-		err = writeOneKVToLocal(ctx, writer, index, sCtx, writeBufs, idxDataBuf, rsData, handle)
-		if err != nil {
-			return 0, nil, errors.Trace(err)
+		for i, index := range indexes {
+			idxID := index.Meta().ID
+			idxDataBuf = idxDataBuf[:0]
+			idxDataBuf = extractDatumByOffsets(
+				row, copCtx.IndexColumnOutputOffsets(idxID), c.ExprColumnInfos, idxDataBuf)
+			rsData := getRestoreData(c.TableInfo, copCtx.IndexInfo(idxID), c.PrimaryKeyInfo, handleDataBuf)
+			err = writeOneKVToLocal(ctx, writers[i], index, sCtx, writeBufs, idxDataBuf, rsData, handle)
+			if err != nil {
+				return 0, nil, errors.Trace(err)
+			}
 		}
 		count++
 		lastHandle = handle
 	}
 	return count, lastHandle, nil
+}
+
+func maxIndexColumnCount(indexes []table.Index) int {
+	maxCnt := 0
+	for _, idx := range indexes {
+		colCnt := len(idx.Meta().Columns)
+		if colCnt > maxCnt {
+			maxCnt = colCnt
+		}
+	}
+	return maxCnt
 }
 
 func writeOneKVToLocal(
@@ -1900,10 +1938,14 @@ func (w *worker) executeDistGlobalTask(reorgInfo *reorgInfo) error {
 
 	taskType := BackfillTaskType
 	taskKey := fmt.Sprintf("ddl/%s/%d", taskType, reorgInfo.Job.ID)
+	elemIDs := make([]int64, 0, len(reorgInfo.elements))
+	for _, elem := range reorgInfo.elements {
+		elemIDs = append(elemIDs, elem.ID)
+	}
 
 	taskMeta := &BackfillGlobalMeta{
 		Job:             *reorgInfo.Job.Clone(),
-		EleID:           reorgInfo.currElement.ID,
+		EleIDs:          elemIDs,
 		EleTypeKey:      reorgInfo.currElement.TypeKey,
 		CloudStorageURI: variable.CloudStorageURI.Load(),
 	}

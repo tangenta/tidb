@@ -134,6 +134,18 @@ func NewCopContextBase(
 	}, nil
 }
 
+func NewCopContext(
+	tblInfo *model.TableInfo,
+	allIdxInfo []*model.IndexInfo,
+	sessCtx sessionctx.Context,
+	requestSource string,
+) (CopContext, error) {
+	if len(allIdxInfo) == 1 {
+		return NewCopContextSingleIndex(tblInfo, allIdxInfo[0], sessCtx, requestSource)
+	}
+	return NewCopContextMultiIndex(tblInfo, allIdxInfo, sessCtx, requestSource)
+}
+
 func NewCopContextSingleIndex(
 	tblInfo *model.TableInfo,
 	idxInfo *model.IndexInfo,

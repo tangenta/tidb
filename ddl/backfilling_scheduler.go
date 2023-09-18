@@ -400,19 +400,27 @@ func (b *ingestBackfillScheduler) createWorker() workerpool.Worker[IndexRecordCh
 		return nil
 	}
 	bcCtx := b.backendCtx
-	ei, err := bcCtx.Register(job.ID, b.reorgInfo.currElement.ID, job.SchemaName, job.TableName)
-	if err != nil {
-		// Return an error only if it is the first worker.
-		if b.writerMaxID == 0 {
-			b.poolErr <- err
+	indexIDs := make([]int64, 0, len(reorgInfo.elements))
+	engines := make([]ingest.Engine, 0, len(reorgInfo.elements))
+	for _, elem := range reorgInfo.elements {
+		ei, err := bcCtx.Register(job.ID, elem.ID, job.SchemaName, job.TableName)
+		if err != nil {
+			// Return an error only if it is the first worker.
+			if b.writerMaxID == 0 {
+				b.poolErr <- err
+				return nil
+			}
+			logutil.Logger(b.ctx).Warn("cannot create new writer", zap.Error(err),
+				zap.Int64("job ID", reorgInfo.ID), zap.Int64("index ID", b.reorgInfo.currElement.ID))
 			return nil
 		}
-		logutil.Logger(b.ctx).Warn("cannot create new writer", zap.Error(err),
-			zap.Int64("job ID", reorgInfo.ID), zap.Int64("index ID", b.reorgInfo.currElement.ID))
-		return nil
+		indexIDs = append(indexIDs, elem.ID)
+		engines = append(engines, ei)
 	}
-	worker, err := newAddIndexIngestWorker(b.ctx, b.tbl, reorgInfo.d, ei, b.resultCh, job.ID,
-		reorgInfo.SchemaName, b.reorgInfo.currElement.ID, b.writerMaxID,
+
+	worker, err := newAddIndexIngestWorker(
+		b.ctx, b.tbl, reorgInfo.d, engines, b.resultCh, job.ID,
+		reorgInfo.SchemaName, indexIDs, b.writerMaxID,
 		b.copReqSenderPool, sessCtx, b.checkpointMgr, b.distribute)
 	if err != nil {
 		// Return an error only if it is the first worker.

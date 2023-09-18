@@ -38,11 +38,11 @@ import (
 )
 
 type readIndexExecutor struct {
-	d     *ddl
-	job   *model.Job
-	index *model.IndexInfo
-	ptbl  table.PhysicalTable
-	jc    *JobContext
+	d       *ddl
+	job     *model.Job
+	indexes []*model.IndexInfo
+	ptbl    table.PhysicalTable
+	jc      *JobContext
 
 	cloudStorageURI string
 
@@ -64,7 +64,7 @@ type readIndexSummary struct {
 func newReadIndexExecutor(
 	d *ddl,
 	job *model.Job,
-	index *model.IndexInfo,
+	indexes []*model.IndexInfo,
 	ptbl table.PhysicalTable,
 	jc *JobContext,
 	bc ingest.BackendCtx,
@@ -74,7 +74,7 @@ func newReadIndexExecutor(
 	return &readIndexExecutor{
 		d:               d,
 		job:             job,
-		index:           index,
+		indexes:         indexes,
 		ptbl:            ptbl,
 		jc:              jc,
 		bc:              bc,
@@ -227,16 +227,20 @@ func (r *readIndexExecutor) buildLocalStorePipeline(
 	totalRowCount *atomic.Int64,
 ) (*operator.AsyncPipeline, error) {
 	d := r.d
-	ei, err := r.bc.Register(r.job.ID, r.index.ID, r.job.SchemaName, r.job.TableName)
-	if err != nil {
-		logutil.Logger(opCtx).Warn("cannot register new engine", zap.Error(err),
-			zap.Int64("job ID", r.job.ID), zap.Int64("index ID", r.index.ID))
-		return nil, err
+	engines := make([]ingest.Engine, 0, len(r.indexes))
+	for _, index := range r.indexes {
+		ei, err := r.bc.Register(r.job.ID, index.ID, r.job.SchemaName, r.job.TableName)
+		if err != nil {
+			logutil.Logger(opCtx).Warn("cannot register new engine", zap.Error(err),
+				zap.Int64("job ID", r.job.ID), zap.Int64("index ID", index.ID))
+			return nil, err
+		}
+		engines = append(engines, ei)
 	}
 	counter := metrics.BackfillTotalCounter.WithLabelValues(
 		metrics.GenerateReorgLabel("add_idx_rate", r.job.SchemaName, tbl.Meta().Name.O))
 	return NewAddIndexIngestPipeline(
-		opCtx, d.store, d.sessPool, r.bc, ei, sessCtx, tbl, r.index, start, end, totalRowCount, counter)
+		opCtx, d.store, d.sessPool, r.bc, engines, sessCtx, tbl, r.indexes, start, end, totalRowCount, counter)
 }
 
 func (r *readIndexExecutor) buildExternalStorePipeline(
@@ -269,5 +273,5 @@ func (r *readIndexExecutor) buildExternalStorePipeline(
 	}
 	return NewWriteIndexToExternalStoragePipeline(
 		opCtx, d.store, r.cloudStorageURI, r.d.sessPool, sessCtx, r.job.ID, subtaskID,
-		tbl, r.index, start, end, totalRowCount, onClose)
+		tbl, r.indexes, start, end, totalRowCount, onClose)
 }
