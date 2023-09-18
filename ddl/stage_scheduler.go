@@ -130,15 +130,7 @@ func (s *backfillDistScheduler) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	job := &bgm.Job
-	_, tbl, err := d.getTableByTxn(d.store, job.SchemaID, job.TableID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	idx := model.FindIndexInfoByID(tbl.Meta().Indices, bgm.EleIDs)
-	if idx == nil {
-		return errors.Trace(errors.New("index info not found"))
-	}
-	bc, err := ingest.LitBackCtxMgr.Register(ctx, idx.Unique, job.ID, d.etcdCli, job.ReorgMeta.ResourceGroupName)
+	bc, err := ingest.LitBackCtxMgr.Register(ctx, job.ID, d.etcdCli, job.ReorgMeta.ResourceGroupName)
 	if err != nil {
 		return errors.Trace(err)
 	}
