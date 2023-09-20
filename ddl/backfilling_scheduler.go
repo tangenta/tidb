@@ -437,7 +437,7 @@ func (b *ingestBackfillScheduler) createWorker() workerpool.Worker[IndexRecordCh
 
 func (b *ingestBackfillScheduler) createCopReqSenderPool() (*copReqSenderPool, error) {
 	ri := b.reorgInfo
-	indexInfos := make([]*model.IndexInfo, 0, len(ri.elements))
+	allIndexInfos := make([]*model.IndexInfo, 0, len(ri.elements))
 	for _, elem := range ri.elements {
 		indexInfo := model.FindIndexInfoByID(b.tbl.Meta().Indices, elem.ID)
 		if indexInfo == nil {
@@ -445,6 +445,7 @@ func (b *ingestBackfillScheduler) createCopReqSenderPool() (*copReqSenderPool, e
 				zap.Int64("table ID", b.tbl.Meta().ID), zap.Int64("index ID", elem.ID))
 			return nil, errors.New("cannot find index info")
 		}
+		allIndexInfos = append(allIndexInfos, indexInfo)
 	}
 	sessCtx, err := newSessCtx(ri.d.store, ri.ReorgMeta.SQLMode, ri.ReorgMeta.Location, ri.ReorgMeta.ResourceGroupName)
 	if err != nil {
@@ -452,7 +453,7 @@ func (b *ingestBackfillScheduler) createCopReqSenderPool() (*copReqSenderPool, e
 		return nil, err
 	}
 	reqSrc := getDDLRequestSource(model.ActionAddIndex)
-	copCtx, err := copr.NewCopContext(b.tbl.Meta(), indexInfos, sessCtx, reqSrc)
+	copCtx, err := copr.NewCopContext(b.tbl.Meta(), allIndexInfos, sessCtx, reqSrc)
 	if err != nil {
 		logutil.Logger(b.ctx).Warn("cannot init cop request sender", zap.Error(err))
 		return nil, err

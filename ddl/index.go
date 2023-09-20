@@ -1270,6 +1270,7 @@ func checkDropIndex(d *ddlCtx, t *meta.Meta, job *model.Job) (*model.TableInfo, 
 		if err := checkIndexNeededInForeignKeyInOwner(d, t, job, job.SchemaName, tblInfo, indexInfo); err != nil {
 			return nil, nil, false, errors.Trace(err)
 		}
+		indexInfos = append(indexInfos, indexInfo)
 	}
 	return tblInfo, indexInfos, false, nil
 }
@@ -1623,7 +1624,9 @@ func (w *addIndexTxnWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords [
 			// non-unique key need not to check, just overwrite it,
 			// because in most case, backfilling indices is not exists.
 			w.batchCheckKeys = append(w.batchCheckKeys, nil)
+			w.batchCheckValues = append(w.batchCheckValues, nil)
 			w.distinctCheckFlags = append(w.distinctCheckFlags, false)
+			w.recordIdx = append(w.recordIdx, 0)
 			continue
 		}
 		// skip by default.
@@ -1652,6 +1655,10 @@ func (w *addIndexTxnWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords [
 		}
 	}
 
+	if len(uniqueBatchKeys) == 0 {
+		return nil
+	}
+
 	batchVals, err := txn.BatchGet(context.Background(), uniqueBatchKeys)
 	if err != nil {
 		return errors.Trace(err)
@@ -1661,6 +1668,9 @@ func (w *addIndexTxnWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords [
 	// 2. unique-key/primary-key is duplicate and the handle is not equal, return duplicate error.
 	// 3. non-unique-key is duplicate, skip it.
 	for i, key := range w.batchCheckKeys {
+		if len(key) == 0 {
+			continue
+		}
 		idx := w.indexes[i%len(w.indexes)]
 		val, found := batchVals[string(key)]
 		if found {

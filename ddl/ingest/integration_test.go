@@ -284,6 +284,6 @@ func TestAddIndexIngestMultiSchemaChange(t *testing.T) {
 
 	tk.MustExec("create table t (a int, b int);")
 	tk.MustExec("insert into t values(1, 1), (2, 2);")
-	tk.MustExec("alter table t add index idx(a);")
+	tk.MustExec("alter table t add index idx(a), add index idx_2(b);")
 	tk.MustExec("admin check table t;")
 }
