@@ -206,7 +206,7 @@ func (b *txnBackfillScheduler) adjustWorkerSize() error {
 		case typeAddIndexWorker:
 			backfillCtx := newBackfillCtx(reorgInfo.d, i, sessCtx, job.SchemaName, b.tbl, jc, "add_idx_rate", false)
 			idxWorker, err := newAddIndexTxnWorker(b.decodeColMap, b.tbl, backfillCtx,
-				job.ID, reorgInfo.currElement.ID, reorgInfo.currElement.TypeKey)
+				job.ID, reorgInfo.elements, reorgInfo.currElement.TypeKey)
 			if err != nil {
 				return err
 			}
@@ -214,7 +214,7 @@ func (b *txnBackfillScheduler) adjustWorkerSize() error {
 			worker = idxWorker
 		case typeAddIndexMergeTmpWorker:
 			backfillCtx := newBackfillCtx(reorgInfo.d, i, sessCtx, job.SchemaName, b.tbl, jc, "merge_tmp_idx_rate", false)
-			tmpIdxWorker := newMergeTempIndexWorker(backfillCtx, b.tbl, reorgInfo.currElement.ID)
+			tmpIdxWorker := newMergeTempIndexWorker(backfillCtx, b.tbl, reorgInfo.elements)
 			runner = newBackfillWorker(jc.ddlJobCtx, tmpIdxWorker)
 			worker = tmpIdxWorker
 		case typeUpdateColumnWorker:
@@ -355,8 +355,7 @@ func (b *ingestBackfillScheduler) close(force bool) {
 	}
 	if !force {
 		jobID := b.reorgInfo.ID
-		indexID := b.reorgInfo.currElement.ID
-		b.backendCtx.ResetWorkers(jobID, indexID)
+		b.backendCtx.ResetWorkers(jobID)
 	}
 	b.closed = true
 }
@@ -411,7 +410,7 @@ func (b *ingestBackfillScheduler) createWorker() workerpool.Worker[IndexRecordCh
 				return nil
 			}
 			logutil.Logger(b.ctx).Warn("cannot create new writer", zap.Error(err),
-				zap.Int64("job ID", reorgInfo.ID), zap.Int64("index ID", b.reorgInfo.currElement.ID))
+				zap.Int64("job ID", reorgInfo.ID), zap.Int64("index ID", elem.ID))
 			return nil
 		}
 		indexIDs = append(indexIDs, elem.ID)
@@ -429,7 +428,7 @@ func (b *ingestBackfillScheduler) createWorker() workerpool.Worker[IndexRecordCh
 			return nil
 		}
 		logutil.Logger(b.ctx).Warn("cannot create new writer", zap.Error(err),
-			zap.Int64("job ID", reorgInfo.ID), zap.Int64("index ID", b.reorgInfo.currElement.ID))
+			zap.Int64("job ID", reorgInfo.ID), zap.Int64s("index IDs", indexIDs))
 		return nil
 	}
 	b.writerMaxID++
@@ -437,20 +436,23 @@ func (b *ingestBackfillScheduler) createWorker() workerpool.Worker[IndexRecordCh
 }
 
 func (b *ingestBackfillScheduler) createCopReqSenderPool() (*copReqSenderPool, error) {
-	indexInfo := model.FindIndexInfoByID(b.tbl.Meta().Indices, b.reorgInfo.currElement.ID)
-	if indexInfo == nil {
-		logutil.Logger(b.ctx).Warn("cannot init cop request sender",
-			zap.Int64("table ID", b.tbl.Meta().ID), zap.Int64("index ID", b.reorgInfo.currElement.ID))
-		return nil, errors.New("cannot find index info")
-	}
 	ri := b.reorgInfo
+	indexInfos := make([]*model.IndexInfo, 0, len(ri.elements))
+	for _, elem := range ri.elements {
+		indexInfo := model.FindIndexInfoByID(b.tbl.Meta().Indices, elem.ID)
+		if indexInfo == nil {
+			logutil.Logger(b.ctx).Warn("cannot init cop request sender",
+				zap.Int64("table ID", b.tbl.Meta().ID), zap.Int64("index ID", elem.ID))
+			return nil, errors.New("cannot find index info")
+		}
+	}
 	sessCtx, err := newSessCtx(ri.d.store, ri.ReorgMeta.SQLMode, ri.ReorgMeta.Location, ri.ReorgMeta.ResourceGroupName)
 	if err != nil {
 		logutil.Logger(b.ctx).Warn("cannot init cop request sender", zap.Error(err))
 		return nil, err
 	}
 	reqSrc := getDDLRequestSource(model.ActionAddIndex)
-	copCtx, err := copr.NewCopContextSingleIndex(b.tbl.Meta(), indexInfo, sessCtx, reqSrc)
+	copCtx, err := copr.NewCopContext(b.tbl.Meta(), indexInfos, sessCtx, reqSrc)
 	if err != nil {
 		logutil.Logger(b.ctx).Warn("cannot init cop request sender", zap.Error(err))
 		return nil, err

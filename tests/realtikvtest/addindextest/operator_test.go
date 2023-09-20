@@ -133,7 +133,7 @@ func TestBackfillOperators(t *testing.T) {
 
 		src := newTestSource(chunkResults...)
 		ingestOp := ddl.NewIndexIngestOperator(
-			opCtx, copCtx, sessPool, pTbl, index, mockEngine, srcChkPool, 3)
+			opCtx, copCtx, sessPool, pTbl, []table.Index{index}, []ingest.Engine{mockEngine}, srcChkPool, 3)
 		sink := newTestSink[ddl.IndexWriteResult]()
 
 		operator.Compose[ddl.IndexRecordChunk](src, ingestOp)
@@ -178,10 +178,10 @@ func TestBackfillOperatorPipeline(t *testing.T) {
 		opCtx, store,
 		sessPool,
 		mockBackendCtx,
-		mockEngine,
+		[]ingest.Engine{mockEngine},
 		tk.Session(),
 		tbl.(table.PhysicalTable),
-		idxInfo,
+		[]*model.IndexInfo{idxInfo},
 		startKey,
 		endKey,
 		totalRowCount,
@@ -251,10 +251,10 @@ func TestBackfillOperatorPipelineException(t *testing.T) {
 			opCtx, store,
 			sessPool,
 			mockBackendCtx,
-			mockEngine,
+			[]ingest.Engine{mockEngine},
 			tk.Session(),
 			tbl.(table.PhysicalTable),
-			idxInfo,
+			[]*model.IndexInfo{idxInfo},
 			startKey,
 			endKey,
 			&atomic.Int64{},
