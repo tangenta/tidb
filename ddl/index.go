@@ -581,8 +581,8 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 		}
 		if indexInfo == nil {
 			if len(hiddenCols) > 0 {
-				for _, hiddenCol := range hiddenCols {
-					InitAndAddColumnToTable(tblInfo, hiddenCol[i])
+				for _, hiddenCol := range hiddenCols[i] {
+					InitAndAddColumnToTable(tblInfo, hiddenCol)
 				}
 			}
 			if err = checkAddColumnTooManyColumns(len(tblInfo.Columns)); err != nil {
@@ -625,6 +625,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 			}
 			logutil.BgLogger().Info("run add index job", zap.String("category", "ddl"), zap.String("job", job.String()), zap.Reflect("indexInfo", indexInfo))
 		}
+		allIndexInfos = append(allIndexInfos, indexInfo)
 	}
 
 	originalState := allIndexInfos[0].State
