@@ -299,13 +299,15 @@ func generateNonPartitionPlan(
 		return nil, err
 	}
 
-	regionBatch := 100
-	if !useCloud {
-		// Make subtask large enough to reduce the overhead of local/global flush.
-		quota := variable.DDLDiskQuota.Load()
-		regionBatch = int(int64(quota) / int64(config.SplitRegionSize))
+	var regionBatch int
+	avgTasksPerInstance := len(recordRegionMetas) / instanceCnt
+	if useCloud {
+		regionBatch = min(100, avgTasksPerInstance)
+	} else {
+		avgTasksPerDisk := int(int64(variable.DDLDiskQuota.Load()) / int64(config.SplitRegionSize))
+		regionBatch = min(avgTasksPerDisk, avgTasksPerInstance)
 	}
-	regionBatch = min(regionBatch, len(recordRegionMetas)/instanceCnt)
+	regionBatch = max(regionBatch, 1)
 
 	subTaskMetas := make([][]byte, 0, 4)
 	sort.Slice(recordRegionMetas, func(i, j int) bool {
