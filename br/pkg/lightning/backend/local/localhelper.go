@@ -184,7 +184,7 @@ func (local *Backend) SplitAndScatterRegionByRanges(
 		}
 
 		log.FromContext(ctx).Info("paginate scan region finished", logutil.Key("minKey", minKey), logutil.Key("maxKey", maxKey),
-			zap.Int("regions", len(regions)))
+			zap.Int("regions", len(regions)), zap.Bool("needSplit", needSplit))
 
 		if !needSplit {
 			scatterRegions = append(scatterRegions, regions...)
@@ -527,20 +527,40 @@ func (local *Backend) checkRegionScatteredOrReScatter(ctx context.Context, regio
 			"failed to get region operator, error type: %s, error message: %s",
 			respErr.GetType().String(), respErr.GetMessage())
 	}
-	// If the current operator of the region is not 'scatter-region', we could assume
-	// that 'scatter-operator' has finished.
-	if string(resp.GetDesc()) != "scatter-region" {
-		return true, nil
-	}
-	switch resp.GetStatus() {
-	case pdpb.OperatorStatus_RUNNING:
-		return false, nil
-	case pdpb.OperatorStatus_SUCCESS:
-		return true, nil
+
+	log.FromContext(ctx).Info("get pd operator",
+		zap.Uint64("id", regionInfo.Region.GetId()),
+		zap.String("desc", string(resp.GetDesc())),
+		zap.Stringer("status", resp.GetStatus()))
+	desc := string(resp.GetDesc())
+	switch desc {
+	case "labeler-split-region":
+		// labeler-split-region operator is genereated from PauseSchedulersByKeyRange().
+		switch resp.GetStatus() {
+		case pdpb.OperatorStatus_RUNNING:
+			return false, nil
+		case pdpb.OperatorStatus_SUCCESS:
+			return true, nil
+		default:
+			log.FromContext(ctx).Debug("scatter-region operator status is abnormal, will scatter region again",
+				logutil.Region(regionInfo.Region), zap.Stringer("status", resp.GetStatus()))
+			return false, local.ScatterRegion(ctx, regionInfo)
+		}
+	case "scatter-region":
+		switch resp.GetStatus() {
+		case pdpb.OperatorStatus_RUNNING:
+			return false, nil
+		case pdpb.OperatorStatus_SUCCESS:
+			return true, nil
+		default:
+			log.FromContext(ctx).Debug("scatter-region operator status is abnormal, will scatter region again",
+				logutil.Region(regionInfo.Region), zap.Stringer("status", resp.GetStatus()))
+			return false, local.ScatterRegion(ctx, regionInfo)
+		}
 	default:
-		log.FromContext(ctx).Debug("scatter-region operator status is abnormal, will scatter region again",
-			logutil.Region(regionInfo.Region), zap.Stringer("status", resp.GetStatus()))
-		return false, local.ScatterRegion(ctx, regionInfo)
+		// If the current operator of the region is not 'scatter-region', we could assume
+		// that 'scatter-operator' has finished.
+		return true, nil
 	}
 }
 

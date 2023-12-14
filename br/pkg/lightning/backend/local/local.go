@@ -1293,6 +1293,7 @@ func (local *Backend) generateJobForRange(
 
 	startKey := codec.EncodeBytes([]byte{}, pairStart)
 	endKey := codec.EncodeBytes([]byte{}, nextKey(pairEnd))
+	// time.Sleep(20 * time.Millisecond)
 	regions, err := split.PaginateScanRegion(ctx, local.splitCli, startKey, endKey, scanRegionLimit)
 	if err != nil {
 		log.FromContext(ctx).Error("scan region failed",
@@ -1304,7 +1305,7 @@ func (local *Backend) generateJobForRange(
 
 	jobs := make([]*regionJob, 0, len(regions))
 	for _, region := range regions {
-		log.FromContext(ctx).Debug("get region",
+		log.FromContext(ctx).Info("get region",
 			zap.Binary("startKey", startKey),
 			zap.Binary("endKey", endKey),
 			zap.Uint64("id", region.Region.GetId()),
