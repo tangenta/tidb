@@ -18,12 +18,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/pkg/testkit"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/stretchr/testify/require"
 )
 
@@ -693,4 +695,31 @@ func TestSavepointWithBinlog(t *testing.T) {
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 1"))
 	tk.MustExec("commit")
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 1"))
+}
+func TestColumnNotMatchError(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.Session().GetSessionVars().BinlogClient = binloginfo.MockPumpsClient(&testkit.MockPumpClient{})
+	tk.MustExec("set @@global.tidb_enable_metadata_lock=0")
+	tk.MustExec("use test")
+	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("use test")
+	tk.MustExec("create table t(id int primary key, a int)")
+	tk.MustExec("insert into t values(1, 2)")
+
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/onAddColumnStateWriteReorg", func() {
+		tk.MustExec("begin;")
+	})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		tk2.MustExec("alter table t add column wait_notify int")
+		wg.Done()
+	}()
+	wg.Wait()
+	// this statement will fail because:
+	// - schema in the plan includes the non-public column -> data contains non-public column
+	// - table.Cols() does not contain the non-public column
+	tk.MustExec("delete from t where id=1")
+	tk.MustExec("commit")
 }

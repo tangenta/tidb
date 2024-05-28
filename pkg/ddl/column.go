@@ -172,6 +172,7 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 	case model.StateWriteReorganization:
 		// reorganization -> public
 		// Adjust table column offset.
+		failpoint.InjectCall("onAddColumnStateWriteReorg")
 		offset, err := LocateOffsetToMove(columnInfo.Offset, pos, tblInfo)
 		if err != nil {
 			return ver, errors.Trace(err)
