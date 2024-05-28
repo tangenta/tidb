@@ -272,6 +272,7 @@ func onDropColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error) 
 		}
 	case model.StateWriteOnly:
 		// write only -> delete only
+		failpoint.InjectCall("onDropColumnStateWriteOnly")
 		colInfo.State = model.StateDeleteOnly
 		tblInfo.MoveColumnInfo(colInfo.Offset, len(tblInfo.Columns)-1)
 		if len(idxInfos) > 0 {
