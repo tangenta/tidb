@@ -139,15 +139,6 @@ func (*MockBackendCtx) Flush(mode FlushMode) (flushed, imported bool, err error)
 	return false, false, nil
 }
 
-// Done implements BackendCtx.Done interface.
-func (*MockBackendCtx) Done() bool {
-	return false
-}
-
-// SetDone implements BackendCtx.SetDone interface.
-func (*MockBackendCtx) SetDone() {
-}
-
 // AttachCheckpointManager attaches a checkpoint manager to the backend context.
 func (m *MockBackendCtx) AttachCheckpointManager(mgr *CheckpointManager) {
 	m.checkpointMgr = mgr
