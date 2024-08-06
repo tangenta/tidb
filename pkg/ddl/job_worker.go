@@ -571,6 +571,7 @@ func (w *worker) transitOneJobStep(d *ddlCtx, job *model.Job) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	failpoint.InjectCall("afterJobTxnCommit", job)
 	w.registerSync(job)
 
 	// If error is non-retryable, we can ignore the sleep.

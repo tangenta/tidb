@@ -986,6 +986,7 @@ func (alloc *allocator) alloc4Unsigned(ctx context.Context, n uint64, increment,
 		}
 
 		ctx = kv.WithInternalSourceType(ctx, kv.InternalTxnMeta)
+		failpoint.InjectCall("duringAlloc4Unsigned")
 		err := kv.RunInNewTxn(ctx, alloc.store, true, func(ctx context.Context, txn kv.Transaction) error {
 			defer tracing.StartRegion(ctx, "alloc.alloc4Unsigned").End()
 			if allocatorStats != nil {
