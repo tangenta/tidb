@@ -177,9 +177,8 @@ func TestAddIndexIngestCancel(t *testing.T) {
 	tk.MustGetErrCode("alter table t add index idx(b);", errno.ErrCancelledDDLJob)
 	require.True(t, cancelled)
 	testfailpoint.Disable(t, "github.com/pingcap/tidb/pkg/ddl/onJobRunBefore")
-	ok, err := ingest.LitBackCtxMgr.CheckMoreTasksAvailable()
+	err := ingest.DiskUsage.PreCheckUsage()
 	require.NoError(t, err)
-	require.True(t, ok)
 }
 
 func TestIngestPartitionRowCount(t *testing.T) {
@@ -233,9 +232,8 @@ func TestAddIndexCancelOnNoneState(t *testing.T) {
 		}
 	})
 	tk.MustGetErrCode("alter table t add index idx1(c1)", errno.ErrCancelledDDLJob)
-	available, err := ingest.LitBackCtxMgr.CheckMoreTasksAvailable()
+	err := ingest.DiskUsage.PreCheckUsage()
 	require.NoError(t, err)
-	require.True(t, available)
 }
 
 func TestAddIndexIngestTimezone(t *testing.T) {

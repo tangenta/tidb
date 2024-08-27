@@ -42,8 +42,8 @@ var (
 	LitBackCtxMgr BackendCtxMgr
 	// LitMemRoot is used to track the memory usage of the lightning backfill process.
 	LitMemRoot MemRoot
-	// litDiskRoot is used to track the disk usage of the lightning backfill process.
-	litDiskRoot DiskRoot
+	// DiskUsage is used to track the disk usage of the lightning backfill process.
+	DiskUsage DiskRoot
 	// litRLimit is the max open file number of the lightning backfill process.
 	litRLimit uint64
 	// LitInitialized is the flag indicates whether the lightning backfill process is initialized.
@@ -80,7 +80,7 @@ func InitGlobalLightningEnv(path string) (ok bool) {
 	LitInitialized = true
 	logutil.DDLIngestLogger().Info(LitInfoEnvInitSucc,
 		zap.Uint64("memory limitation", memTotal),
-		zap.String("disk usage info", litDiskRoot.UsageInfo()),
+		zap.String("disk usage info", DiskUsage.UsageInfo()),
 		zap.Uint64("max open file number", litRLimit),
 		zap.Bool("lightning is initialized", LitInitialized))
 	return true

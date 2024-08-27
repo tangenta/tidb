@@ -182,17 +182,3 @@ func tryAggressiveMemory(ctx context.Context, memRoot MemRoot, cfg *local.Backen
 		zap.Int("worker concurrency", cfg.WorkerConcurrency))
 	return true
 }
-
-// defaultImportantVariables is used in obtainImportantVariables to retrieve the system
-// variables from downstream which may affect KV encode result. The values record the default
-// values if missing.
-var defaultImportantVariables = map[string]string{
-	"max_allowed_packet":      "67108864", // 64MB
-	"div_precision_increment": "4",
-	"time_zone":               "SYSTEM",
-	"lc_time_names":           "en_US",
-	"default_week_format":     "0",
-	"block_encryption_mode":   "aes-128-ecb",
-	"group_concat_max_len":    "1024",
-	"tidb_row_format_version": "1",
-}

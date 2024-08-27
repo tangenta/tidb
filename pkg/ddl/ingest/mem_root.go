@@ -16,7 +16,6 @@ package ingest
 
 import (
 	"sync"
-	"unsafe"
 )
 
 // MemRoot is used to track the memory usage for the lightning backfill process.
@@ -36,21 +35,6 @@ type MemRoot interface {
 	CurrentUsage() int64
 	CurrentUsageWithTag(tag string) int64
 	RefreshConsumption()
-}
-
-var (
-	// structSizeBackendCtx is the size of litBackendCtx.
-	structSizeBackendCtx int64
-	// structSizeEngineInfo is the size of engineInfo.
-	structSizeEngineInfo int64
-	// structSizeWriterCtx is the size of writerContext.
-	structSizeWriterCtx int64
-)
-
-func init() {
-	structSizeBackendCtx = int64(unsafe.Sizeof(litBackendCtx{}))
-	structSizeEngineInfo = int64(unsafe.Sizeof(engineInfo{}))
-	structSizeWriterCtx = int64(unsafe.Sizeof(writerContext{}))
 }
 
 // memRootImpl is an implementation of MemRoot.

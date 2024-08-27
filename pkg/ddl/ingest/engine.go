@@ -138,11 +138,6 @@ type writerContext struct {
 // CreateWriter creates a new writerContext.
 func (ei *engineInfo) CreateWriter(id int, writerCfg *backend.LocalWriterConfig) (Writer, error) {
 	ei.memRoot.RefreshConsumption()
-	ok := ei.memRoot.CheckConsume(structSizeWriterCtx)
-	if !ok {
-		return nil, genWriterAllocMemFailedErr(ei.ctx, ei.memRoot, ei.jobID, ei.indexID)
-	}
-
 	wCtx, err := ei.newWriterContext(id, writerCfg)
 	if err != nil {
 		logutil.Logger(ei.ctx).Error(LitErrCreateContextFail, zap.Error(err),
@@ -150,11 +145,9 @@ func (ei *engineInfo) CreateWriter(id int, writerCfg *backend.LocalWriterConfig)
 			zap.Int("worker ID", id))
 		return nil, err
 	}
-
-	ei.memRoot.Consume(structSizeWriterCtx)
 	logutil.Logger(ei.ctx).Info(LitInfoCreateWrite, zap.Int64("job ID", ei.jobID),
 		zap.Int64("index ID", ei.indexID), zap.Int("worker ID", id),
-		zap.Int64("allocate memory", structSizeWriterCtx+writerCfg.Local.MemCacheSize),
+		zap.Int64("allocate memory", writerCfg.Local.MemCacheSize),
 		zap.Int64("current memory usage", ei.memRoot.CurrentUsage()),
 		zap.Int64("max memory quota", ei.memRoot.MaxMemoryQuota()))
 	return wCtx, err

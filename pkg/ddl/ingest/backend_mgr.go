@@ -38,8 +38,6 @@ import (
 
 // BackendCtxMgr is used to manage the BackendCtx.
 type BackendCtxMgr interface {
-	// CheckMoreTasksAvailable checks if it can run more ingest backfill tasks.
-	CheckMoreTasksAvailable() (bool, error)
 	// Register uses jobID to identify the BackendCtx. If there's already a
 	// BackendCtx with the same jobID, it will be returned. Otherwise, a new
 	// BackendCtx will be created and returned.
@@ -87,22 +85,13 @@ func NewLitBackendCtxMgr(path string, memQuota uint64) BackendCtxMgr {
 	mgr.memRoot = NewMemRootImpl(int64(memQuota), mgr)
 	mgr.diskRoot = NewDiskRootImpl(path, mgr)
 	LitMemRoot = mgr.memRoot
-	litDiskRoot = mgr.diskRoot
-	litDiskRoot.UpdateUsage()
-	err := litDiskRoot.StartupCheck()
+	DiskUsage = mgr.diskRoot
+	DiskUsage.UpdateUsage()
+	err := DiskUsage.StartupCheck()
 	if err != nil {
 		ddllogutil.DDLIngestLogger().Warn("ingest backfill may not be available", zap.Error(err))
 	}
 	return mgr
-}
-
-// CheckMoreTasksAvailable implements BackendCtxMgr.CheckMoreTaskAvailable interface.
-func (m *litBackendCtxMgr) CheckMoreTasksAvailable() (bool, error) {
-	if err := m.diskRoot.PreCheckUsage(); err != nil {
-		ddllogutil.DDLIngestLogger().Info("ingest backfill is not available", zap.Error(err))
-		return false, err
-	}
-	return true, nil
 }
 
 // ResignOwnerForTest is only used for test.
@@ -124,10 +113,6 @@ func (m *litBackendCtxMgr) Register(
 	}
 
 	m.memRoot.RefreshConsumption()
-	ok := m.memRoot.CheckConsume(structSizeBackendCtx)
-	if !ok {
-		return nil, genBackendAllocMemFailedErr(ctx, m.memRoot, jobID)
-	}
 	sortPath := m.EncodeJobSortPath(jobID)
 	err := os.MkdirAll(sortPath, 0700)
 	if err != nil {
@@ -142,9 +127,6 @@ func (m *litBackendCtxMgr) Register(
 	failpoint.Inject("beforeCreateLocalBackend", func() {
 		ResignOwnerForTest.Store(true)
 	})
-	// lock backends because createLocalBackend will let lightning create the sort
-	// folder, which may cause cleanupSortPath wrongly delete the sort folder if only
-	// checking the existence of the entry in backends.
 	m.backends.mu.Lock()
 	bd, err := createLocalBackend(ctx, cfg, pdSvcDiscovery)
 	if err != nil {
@@ -153,9 +135,8 @@ func (m *litBackendCtxMgr) Register(
 		return nil, err
 	}
 
-	bcCtx := newBackendContext(ctx, jobID, bd, cfg, defaultImportantVariables, m.memRoot, m.diskRoot, etcdClient)
+	bcCtx := newBackendContext(ctx, jobID, bd, cfg, m.memRoot, m.diskRoot, etcdClient)
 	m.backends.m[jobID] = bcCtx
-	m.memRoot.Consume(structSizeBackendCtx)
 	m.backends.mu.Unlock()
 
 	logutil.Logger(ctx).Info(LitInfoCreateBackend, zap.Int64("job ID", jobID),
@@ -201,7 +182,6 @@ func newBackendContext(
 	jobID int64,
 	be *local.Backend,
 	cfg *local.BackendConfig,
-	vars map[string]string,
 	memRoot MemRoot,
 	diskRoot DiskRoot,
 	etcdClient *clientv3.Client,
@@ -214,7 +194,6 @@ func newBackendContext(
 		backend:        be,
 		ctx:            ctx,
 		cfg:            cfg,
-		sysVars:        vars,
 		updateInterval: checkpointUpdateInterval,
 		etcdClient:     etcdClient,
 	}
@@ -239,7 +218,6 @@ func (m *litBackendCtxMgr) Unregister(jobID int64) {
 	}
 	_ = bc.FinishAndUnregisterEngines(OptCloseEngines)
 	bc.backend.Close()
-	m.memRoot.Release(structSizeBackendCtx)
 	m.memRoot.ReleaseWithTag(encodeBackendTag(jobID))
 	logutil.Logger(bc.ctx).Info(LitInfoCloseBackend, zap.Int64("job ID", jobID),
 		zap.Int64("current memory usage", m.memRoot.CurrentUsage()),
