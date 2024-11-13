@@ -118,3 +118,6 @@ func ConfigSortPath() string {
 
 // GenLightningDataDirForTest is only used for test.
 var GenLightningDataDirForTest = genLightningDataDir
+
+// RecordStartTSForTest is only used for test.
+var RecordStartTSForTest func(uint64)

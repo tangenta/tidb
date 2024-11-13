@@ -42,6 +42,7 @@ go_library(
         "index_cop.go",
         "index_merge_tmp.go",
         "job_table.go",
+        "index_presplit.go",
         "mock.go",
         "multi_schema_change.go",
         "options.go",

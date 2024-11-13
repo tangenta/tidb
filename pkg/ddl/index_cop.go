@@ -179,11 +179,15 @@ func wrapInBeginRollback(se *sess.Session, f func(startTS uint64) error) error {
 		return errors.Trace(err)
 	}
 	defer se.Rollback()
-	var startTS uint64
-	sessVars := se.GetSessionVars()
-	sessVars.TxnCtxMu.Lock()
-	startTS = sessVars.TxnCtx.StartTS
-	sessVars.TxnCtxMu.Unlock()
+
+	txn, err := se.Txn()
+	if err != nil {
+		return err
+	}
+	startTS := txn.StartTS()
+	if ingest.RecordStartTSForTest != nil {
+		ingest.RecordStartTSForTest(startTS)
+	}
 	return f(startTS)
 }
 
