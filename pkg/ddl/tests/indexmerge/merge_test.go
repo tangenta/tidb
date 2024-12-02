@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func TestAddIndexMergeProcess(t *testing.T) {
 	tk.MustExec("create table t (c1 int primary key, c2 int, c3 int)")
 	tk.MustExec("insert into t values (1, 2, 3), (4, 5, 6);")
 	// Force onCreateIndex use the txn-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 
 	var checkErr error
@@ -71,6 +72,10 @@ func TestAddIndexMergeProcess(t *testing.T) {
 	tk.MustExec("admin check table t;")
 	tk.MustQuery("select * from t use index (idx);").Check(testkit.Rows("1 2 3", "4 5 6", "7 8 9"))
 	tk.MustQuery("select * from t ignore index (idx);").Check(testkit.Rows("1 2 3", "4 5 6", "7 8 9"))
+	res := tk.MustQuery("admin show ddl jobs 1;").Rows()
+	comments := res[0][12].(string)
+	require.Contains(t, comments, "txn-merge")
+	require.Contains(t, comments, "mock err")
 }
 
 func TestAddPrimaryKeyMergeProcess(t *testing.T) {
@@ -82,7 +87,7 @@ func TestAddPrimaryKeyMergeProcess(t *testing.T) {
 	tk.MustExec("create table t (c1 int, c2 int, c3 int)")
 	tk.MustExec("insert into t values (1, 2, 3), (4, 5, 6);")
 	// Force onCreateIndex use the backfill-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 
 	var checkErr error
@@ -124,7 +129,7 @@ func TestAddIndexMergeVersionIndexValue(t *testing.T) {
 	tk.MustExec("create table t (c1 int);")
 	tk.MustExec("insert into t values (1);")
 	// Force onCreateIndex use the txn-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 
 	var checkErr error
@@ -173,7 +178,7 @@ func TestAddIndexMergeIndexUntouchedValue(t *testing.T) {
 		key k_1(k));`)
 	tk.MustExec("insert into t values (1, 1, 'a', 'a')")
 	// Force onCreateIndex use the txn-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 
 	var checkErrs []error
@@ -299,7 +304,7 @@ func TestAddIndexMergeIndexUpdateOnDeleteOnly(t *testing.T) {
 	}
 
 	// Force onCreateIndex use the txn-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 	tk.MustExec("set @@global.tidb_enable_mutation_checker = 1;")
 	tk.MustExec("set @@global.tidb_txn_assertion_level = 'STRICT';")
@@ -427,7 +432,7 @@ func TestAddIndexMergeConflictWithPessimistic(t *testing.T) {
 	defer func() { ddl.CheckBackfillJobFinishInterval = interval }()
 
 	// Force onCreateIndex use the txn-merge process.
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock err")
 	tk.MustExec("set @@global.tidb_ddl_enable_fast_reorg = 1;")
 	tk.MustExec("set @@global.tidb_enable_metadata_lock = 0;")
 

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/ddl/copr"
 	"github.com/pingcap/tidb/pkg/ddl/ingest"
 	distsqlctx "github.com/pingcap/tidb/pkg/distsql/context"
@@ -62,12 +63,6 @@ func TestDoneTaskKeeper(t *testing.T) {
 }
 
 func TestPickBackfillType(t *testing.T) {
-	originMgr := ingest.LitBackCtxMgr
-	originInit := ingest.LitInitialized
-	defer func() {
-		ingest.LitBackCtxMgr = originMgr
-		ingest.LitInitialized = originInit
-	}()
 	mockMgr := ingest.NewMockBackendCtxMgr(
 		func() sessionctx.Context {
 			return nil
@@ -85,13 +80,13 @@ func TestPickBackfillType(t *testing.T) {
 	require.Equal(t, tp, model.ReorgTypeTxn)
 
 	mockJob.ReorgMeta.ReorgTp = model.ReorgTypeNone
-	ingest.LitInitialized = false
+	ingest.LitInitError = errors.Errorf("mock error")
 	tp, err = pickBackfillType(mockJob)
 	require.NoError(t, err)
 	require.Equal(t, tp, model.ReorgTypeTxnMerge)
 
 	mockJob.ReorgMeta.ReorgTp = model.ReorgTypeNone
-	ingest.LitInitialized = true
+	ingest.LitInitError = nil
 	tp, err = pickBackfillType(mockJob)
 	require.NoError(t, err)
 	require.Equal(t, tp, model.ReorgTypeLitMerge)

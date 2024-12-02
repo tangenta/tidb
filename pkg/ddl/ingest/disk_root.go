@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/ddl/ingest"
 	"github.com/pingcap/tidb/pkg/ddl/logutil"
 	lcom "github.com/pingcap/tidb/pkg/lightning/common"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
@@ -94,6 +95,7 @@ func (d *diskRootImpl) ShouldImport() bool {
 		return false
 	}
 	if float64(d.used) >= float64(d.capacity)*capacityThreshold {
+		ingest.LitRuntimeError.Store(errors.Errorf("low available disk space"))
 		logutil.DDLIngestLogger().Warn("available disk space is less than 10%, "+
 			"this may degrade the performance, "+
 			"please make sure the disk available space is larger than @@tidb_ddl_disk_quota before adding index",

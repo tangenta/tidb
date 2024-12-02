@@ -1274,7 +1274,7 @@ func pickBackfillType(job *model.Job) (model.ReorgType, error) {
 		job.ReorgMeta.ReorgTp = model.ReorgTypeTxn
 		return model.ReorgTypeTxn, nil
 	}
-	if ingest.LitInitialized {
+	if ingest.LitInitError == nil {
 		if job.ReorgMeta.UseCloudStorage {
 			job.ReorgMeta.ReorgTp = model.ReorgTypeLitMerge
 			return model.ReorgTypeLitMerge, nil
@@ -1289,9 +1289,9 @@ func pickBackfillType(job *model.Job) (model.ReorgType, error) {
 		}
 	}
 	// The lightning environment is unavailable, but we can still use the txn-merge backfill.
-	logutil.DDLLogger().Info("fallback to txn-merge backfill process",
-		zap.Bool("lightning env initialized", ingest.LitInitialized))
+	logutil.DDLLogger().Info("fallback to txn-merge backfill process", zap.Error(ingest.LitInitError))
 	job.ReorgMeta.ReorgTp = model.ReorgTypeTxnMerge
+	job.ReorgMeta.ErrMsg = ingest.LitInitError.Error()
 	return model.ReorgTypeTxnMerge, nil
 }
 

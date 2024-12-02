@@ -30,9 +30,9 @@ import (
 	sess "github.com/pingcap/tidb/pkg/ddl/session"
 	"github.com/pingcap/tidb/pkg/lightning/log"
 	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tidb/pkg/util/size"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
@@ -44,45 +44,37 @@ var (
 	LitMemRoot MemRoot
 	// litDiskRoot is used to track the disk usage of the lightning backfill process.
 	litDiskRoot DiskRoot
-	// litRLimit is the max open file number of the lightning backfill process.
-	litRLimit uint64
-	// LitInitialized is the flag indicates whether the lightning backfill process is initialized.
-	LitInitialized bool
+	// LitInitError is the error during initialization of lightning backfill environment.
+	LitInitError error
+	// LitRuntimeError is the error during runtime of lightning backfill process.
+	LitRuntimeError atomic.Error
 )
-
-const defaultMemoryQuota = 2 * size.GB
 
 // InitGlobalLightningEnv initialize Lightning backfill environment.
 func InitGlobalLightningEnv(path string) (ok bool) {
 	log.SetAppLogger(logutil.DDLIngestLogger())
 	globalCfg := config.GetGlobalConfig()
 	if globalCfg.Store != config.StoreTypeTiKV {
-		logutil.DDLIngestLogger().Warn(LitWarnEnvInitFail,
-			zap.String("storage limitation", "only support TiKV storage"),
-			zap.Stringer("current storage", globalCfg.Store),
-			zap.Bool("lightning is initialized", LitInitialized))
+		LitInitError = errors.Errorf("ingest is only supported for TiKV storage, current is %s", globalCfg.Store)
+		logutil.DDLIngestLogger().Warn(LitWarnEnvInitFail, zap.Error(LitInitError))
 		return false
 	}
 	memTotal, err := memory.MemTotal()
 	if err != nil {
+		LitInitError = errors.Errorf("failed to get total memory, %s", err.Error())
 		logutil.DDLIngestLogger().Warn("get total memory fail", zap.Error(err))
-		memTotal = defaultMemoryQuota
-	} else {
-		memTotal = memTotal / 2
+		return false
 	}
+	memTotal = memTotal / 2
 	failpoint.Inject("setMemTotalInMB", func(val failpoint.Value) {
 		//nolint: forcetypeassert
 		i := val.(int)
 		memTotal = uint64(i) * size.MB
 	})
 	LitBackCtxMgr = NewLitBackendCtxMgr(path, memTotal)
-	litRLimit = util.GenRLimit("ddl-ingest")
-	LitInitialized = true
 	logutil.DDLIngestLogger().Info(LitInfoEnvInitSucc,
 		zap.Uint64("memory limitation", memTotal),
-		zap.String("disk usage info", litDiskRoot.UsageInfo()),
-		zap.Uint64("max open file number", litRLimit),
-		zap.Bool("lightning is initialized", LitInitialized))
+		zap.String("disk usage info", litDiskRoot.UsageInfo()))
 	return true
 }
 

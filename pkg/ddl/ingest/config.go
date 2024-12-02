@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lightning "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/size"
 	kvutil "github.com/tikv/client-go/v2/util"
@@ -65,7 +66,7 @@ func genConfig(
 		MemTableSize:                lightning.DefaultEngineMemCacheSize,
 		LocalWriterMemCacheSize:     lightning.DefaultLocalWriterMemCacheSize,
 		ShouldCheckTiKV:             true,
-		MaxOpenFiles:                int(litRLimit),
+		MaxOpenFiles:                int(util.GenRLimit("ddl-ingest")),
 		PausePDSchedulerScope:       lightning.PausePDSchedulerScopeTable,
 		TaskType:                    kvutil.ExplicitTypeDDL,
 		DisableAutomaticCompactions: true,

@@ -312,6 +312,9 @@ func showCommentsFromJob(job *model.Job) string {
 			}
 		case model.ReorgTypeTxnMerge:
 			labels = append(labels, model.ReorgTypeTxnMerge.String())
+			if len(m.ErrMsg) > 0 {
+				labels = append(labels, fmt.Sprintf("error=%s", m.ErrMsg))
+			}
 		}
 	}
 	if job.MayNeedReorg() {

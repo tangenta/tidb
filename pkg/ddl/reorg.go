@@ -28,7 +28,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/pkg/ddl/ingest"
 	"github.com/pingcap/tidb/pkg/ddl/logutil"
 	sess "github.com/pingcap/tidb/pkg/ddl/session"
 	"github.com/pingcap/tidb/pkg/distsql"
@@ -596,17 +595,14 @@ func (r *reorgInfo) NewJobContext() *ReorgContext {
 }
 
 func (r *reorgInfo) String() string {
-	var isEnabled bool
-	if ingest.LitInitialized {
-		_, isEnabled = ingest.LitBackCtxMgr.Load(r.Job.ID)
-	}
+	fastReorg := r.Job.ReorgMeta != nil && r.Job.ReorgMeta.IsFastReorg
 	return "CurrElementType:" + string(r.currElement.TypeKey) + "," +
 		"CurrElementID:" + strconv.FormatInt(r.currElement.ID, 10) + "," +
 		"StartKey:" + hex.EncodeToString(r.StartKey) + "," +
 		"EndKey:" + hex.EncodeToString(r.EndKey) + "," +
 		"First:" + strconv.FormatBool(r.first) + "," +
 		"PhysicalTableID:" + strconv.FormatInt(r.PhysicalTableID, 10) + "," +
-		"Ingest mode:" + strconv.FormatBool(isEnabled)
+		"Ingest mode:" + strconv.FormatBool(fastReorg)
 }
 
 func constructOneRowTableScanPB(

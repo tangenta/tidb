@@ -27,17 +27,14 @@ import (
 func InjectMockBackendMgr(t *testing.T, store kv.Storage) (restore func()) {
 	tk := testkit.NewTestKit(t, store)
 	oldLitBackendMgr := ingest.LitBackCtxMgr
-	oldInitialized := ingest.LitInitialized
 
 	ingest.LitBackCtxMgr = ingest.NewMockBackendCtxMgr(func() sessionctx.Context {
 		tk.MustExec("rollback;")
 		tk.MustExec("begin;")
 		return tk.Session()
 	})
-	ingest.LitInitialized = true
 
 	return func() {
 		ingest.LitBackCtxMgr = oldLitBackendMgr
-		ingest.LitInitialized = oldInitialized
 	}
 }
