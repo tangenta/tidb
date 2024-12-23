@@ -19,6 +19,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1258,6 +1259,7 @@ func (w *Writer) AppendRows(ctx context.Context, columnNames []string, rows enco
 	}
 
 	for i := range kvs {
+		log.FromContext(ctx).Info("AppendOneRow", zap.String("key", hex.EncodeToString(kvs[i].Key)))
 		kvs[i].Key = w.tikvCodec.EncodeKey(kvs[i].Key)
 	}
 

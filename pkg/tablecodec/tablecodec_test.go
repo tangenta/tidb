@@ -16,6 +16,7 @@ package tablecodec
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"testing"
@@ -34,6 +35,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 )
+
+func TestExample(t *testing.T) {
+	byteEncoded, err := hex.DecodeString("7480000000000000FF725F698000000000FF0000010380000000FF0000000200000000FB80000000000186A00008")
+	require.NoError(t, err)
+	_, v2, err := codec.DecodeBytes(byteEncoded, nil)
+	require.NoError(t, err)
+	t.Log(fmt.Sprintf("%s", hex.EncodeToString(v2)))
+}
 
 // TestTableCodec  tests some functions in package tablecodec
 // TODO: add more tests.

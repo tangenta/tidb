@@ -166,10 +166,13 @@ func (bc *litBackendCtx) TryFlush(ctx context.Context, taskID int, count int) er
 	if !shouldFlush {
 		return nil
 	}
+	logutil.Logger(ctx).Info("TryFlush")
 	if !bc.flushing.CompareAndSwap(false, true) {
+		logutil.Logger(ctx).Info("TryFlush is flushing, exit")
 		return nil
 	}
 	defer bc.flushing.Store(false)
+	logutil.Logger(ctx).Info("TryFlush start to flush engines")
 	err := bc.flushEngines(ctx)
 	if err != nil {
 		return err
@@ -216,6 +219,7 @@ func (bc *litBackendCtx) Flush(ctx context.Context) error {
 		}
 	})
 
+	logutil.Logger(ctx).Info("Flush")
 	err = bc.unsafeImportAndResetAllEngines(ctx)
 	if err != nil {
 		return err
