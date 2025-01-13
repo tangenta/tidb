@@ -4942,6 +4942,13 @@ func initJobReorgMetaFromVariables(job *model.Job, sctx sessionctx.Context) erro
 		m.IsDistReorg = variable.EnableDistTask.Load()
 		m.IsFastReorg = variable.EnableFastReorg.Load()
 		m.TargetScope = variable.ServiceScope.Load()
+		if sv, ok := sctx.GetSessionVars().GetSystemVar(variable.TiDBMaxDistTaskNodes); ok {
+			maxNodeCnt := variable.TidbOptInt(sv, 0)
+			if maxNodeCnt == -1 {
+				maxNodeCnt = 3
+			}
+			m.MaxNodeCount = maxNodeCnt
+		}
 		if hasSysDB(job) {
 			if m.IsDistReorg {
 				logutil.DDLLogger().Info("cannot use distributed task execution on system DB",
