@@ -773,6 +773,7 @@ func (dc *ddlCtx) addIndexWithLocalIngest(
 		bcCtx,
 		engines,
 		job.ID,
+		0,
 		t,
 		indexInfos,
 		reorgInfo.StartKey,

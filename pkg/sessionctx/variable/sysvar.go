@@ -1497,6 +1497,14 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return BoolToOnOff(EnableDistTask.Load()), nil
 	}},
+	{Scope: ScopeGlobal, Name: TiDBEnableGlobalSortUseLocalStore, Value: BoolToOnOff(DefTiDBEnableGlobalSortUseLocalStore), Type: TypeBool, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
+		if EnableGlobalSortLocalStore.Load() != TiDBOptOn(val) {
+			EnableGlobalSortLocalStore.Store(TiDBOptOn(val))
+		}
+		return nil
+	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+		return BoolToOnOff(EnableGlobalSortLocalStore.Load()), nil
+	}},
 	{Scope: ScopeGlobal, Name: TiDBEnableFastCreateTable, Value: BoolToOnOff(DefTiDBEnableFastCreateTable), Type: TypeBool, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
 		if EnableFastCreateTable.Load() != TiDBOptOn(val) {
 			EnableFastCreateTable.Store(TiDBOptOn(val))
