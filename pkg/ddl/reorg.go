@@ -84,6 +84,8 @@ type reorgCtx struct {
 	}
 
 	references atomicutil.Int32
+
+	getOwnerTS int64
 }
 
 // reorgFnResult records the DDL owner TS before executing reorg function, in order to help
@@ -358,6 +360,7 @@ func (w *worker) runReorgJob(
 		}
 	}
 
+	beOwnerTS := w.ddlCtx.reorgCtx.getOwnerTS()
 	rc := w.getReorgCtx(job.ID)
 	if rc == nil {
 		// This job is cancelling, we should return ErrCancelledDDLJob directly.
@@ -373,12 +376,16 @@ func (w *worker) runReorgJob(
 			return dbterror.ErrCancelledDDLJob
 		}
 
-		beOwnerTS := w.ddlCtx.reorgCtx.getOwnerTS()
-		rc = w.newReorgCtx(reorgInfo.Job.ID, reorgInfo.Job.GetRowCount())
+		rc = w.newReorgCtx(reorgInfo.Job.ID, reorgInfo.Job.GetRowCount(), beOwnerTS)
 		w.wg.Run(func() {
 			err := reorgFn()
 			rc.doneCh <- reorgFnResult{ownerTS: beOwnerTS, err: err}
 		})
+	} else if rc.getOwnerTS != beOwnerTS {
+		logutil.DDLLogger().Warn("runReorgJob from old owner is still running, wait for it to quit",
+			zap.Int64("prevTS", rc.getOwnerTS),
+			zap.Int64("curTS", beOwnerTS))
+		return dbterror.ErrWaitReorgTimeout
 	}
 
 	updateProcessTicker := time.NewTicker(5 * time.Second)

@@ -46,14 +46,14 @@ import (
 
 // DDLForTest exports for testing.
 type DDLForTest interface {
-	NewReorgCtx(jobID int64, rowCount int64) *reorgCtx
+	NewReorgCtx(jobID int64, rowCount int64, getOwnerTS int64) *reorgCtx
 	GetReorgCtx(jobID int64) *reorgCtx
 	RemoveReorgCtx(id int64)
 }
 
 // NewReorgCtx exports for testing.
-func (d *ddl) NewReorgCtx(jobID int64, rowCount int64) *reorgCtx {
-	return d.newReorgCtx(jobID, rowCount)
+func (d *ddl) NewReorgCtx(jobID int64, rowCount int64, getOwnerTS int64) *reorgCtx {
+	return d.newReorgCtx(jobID, rowCount, getOwnerTS)
 }
 
 // GetReorgCtx exports for testing.

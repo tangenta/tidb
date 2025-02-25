@@ -527,7 +527,7 @@ func (dc *ddlCtx) getReorgCtx(jobID int64) *reorgCtx {
 	return dc.reorgCtx.reorgCtxMap[jobID]
 }
 
-func (dc *ddlCtx) newReorgCtx(jobID int64, rowCount int64) *reorgCtx {
+func (dc *ddlCtx) newReorgCtx(jobID int64, rowCount int64, getOwnerTS int64) *reorgCtx {
 	dc.reorgCtx.Lock()
 	defer dc.reorgCtx.Unlock()
 	existedRC, ok := dc.reorgCtx.reorgCtxMap[jobID]
@@ -542,6 +542,7 @@ func (dc *ddlCtx) newReorgCtx(jobID int64, rowCount int64) *reorgCtx {
 	rc.mu.warnings = make(map[errors.ErrorID]*terror.Error)
 	rc.mu.warningsCount = make(map[errors.ErrorID]int64)
 	rc.references.Add(1)
+	rc.getOwnerTS = getOwnerTS
 	dc.reorgCtx.reorgCtxMap[jobID] = rc
 	return rc
 }
