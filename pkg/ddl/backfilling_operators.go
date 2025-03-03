@@ -188,7 +188,7 @@ func NewAddIndexIngestPipeline(
 		reorgMeta.GetBatchSize(), rm, backendCtx)
 	ingestOp := NewIndexIngestOperator(ctx, copCtx, backendCtx, sessPool,
 		tbl, indexes, engines, srcChkPool, writerCnt, reorgMeta, rowCntListener)
-	sinkOp := newIndexWriteResultSink(ctx, backendCtx, tbl, indexes, rowCntListener, jobID, subtaskID, nil, nil, nil, nil, nil)
+	sinkOp := newIndexWriteResultSink(ctx, backendCtx, tbl, indexes, rowCntListener, jobID, subtaskID, nil, nil, nil, nil)
 
 	operator.Compose[TableScanTask](srcOp, scanOp)
 	operator.Compose[IndexRecordChunk](scanOp, ingestOp)
@@ -279,7 +279,7 @@ func NewWriteIndexToExternalStoragePipeline(
 		onClose, memSizePerIndex, reorgMeta,
 	)
 	sinkOp := newIndexWriteResultSink(ctx, nil, tbl, indexes, rowCntListener,
-		jobID, subtaskID, destStore, extStore, readSummaryMap, onClose, resource)
+		jobID, subtaskID, destStore, extStore, readSummaryMap, resource)
 
 	operator.Compose[TableScanTask](srcOp, scanOp)
 	operator.Compose[IndexRecordChunk](scanOp, writeOp)
@@ -956,7 +956,6 @@ type indexWriteResultSink struct {
 	resource       *proto.StepResource
 	extStore       storage.ExternalStorage
 	readSummaryMap *sync.Map
-	onClose        external.OnCloseFunc
 }
 
 func newIndexWriteResultSink(
@@ -969,7 +968,6 @@ func newIndexWriteResultSink(
 	localStore storage.ExternalStorage,
 	extStore storage.ExternalStorage,
 	readSummaryMap *sync.Map,
-	onClose external.OnCloseFunc,
 	resoure *proto.StepResource,
 ) *indexWriteResultSink {
 	return &indexWriteResultSink{
@@ -985,7 +983,6 @@ func newIndexWriteResultSink(
 		resource:       resoure,
 		extStore:       extStore,
 		readSummaryMap: readSummaryMap,
-		onClose:        onClose,
 	}
 }
 
@@ -1036,6 +1033,16 @@ func (s *indexWriteResultSink) flush() error {
 			s.readSummaryMap.Store(s.subtaskID, &readIndexSummary{
 				metaGroups: make([]*external.SortedKVMeta, len(s.indexes)),
 			})
+
+			afterMerged := &external.SortedKVMeta{}
+			afterMergedMu := sync.Mutex{}
+			mergeSortOnClose := func(summary *external.WriterSummary) {
+				afterMergedMu.Lock()
+				afterMerged.MergeSummary(summary)
+				afterMergedMu.Unlock()
+			}
+
+			// TODO: merge all data files
 			for _, metaGroup := range curSum.metaGroups {
 				err := external.MergeOverlappingFiles(
 					s.ctx,
@@ -1044,7 +1051,7 @@ func (s *indexWriteResultSink) flush() error {
 					partSize,
 					prefix,
 					external.DefaultBlockSize,
-					s.onClose,
+					mergeSortOnClose,
 					4,
 					false,
 				)
