@@ -19,9 +19,7 @@ import (
 	goerrors "errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
-	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -500,7 +498,7 @@ func TestAddIndexDistCleanUpBlock(t *testing.T) {
 }
 
 func TestMultiSchemaChangeTwoIndexes(t *testing.T) {
-	store := testkit.CreateMockStore(t)
+	store := realtikvtest.CreateMockStoreAndSetup(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test;")
 	tk.MustExec("create table t (id int, b int, c int, primary key(id) clustered);")
@@ -509,6 +507,7 @@ func TestMultiSchemaChangeTwoIndexes(t *testing.T) {
 	tk1 := testkit.NewTestKit(t, store)
 	tk1.MustExec("use test;")
 
+	var hexKey string
 	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionBeforeScanV2", func(idxInfo []*model.IndexInfo) {
 		if idxInfo[0].Name.L == "b" {
 			_, err := tk1.Exec("delete from t where id = 1;")
@@ -517,6 +516,8 @@ func TestMultiSchemaChangeTwoIndexes(t *testing.T) {
 			assert.NoError(t, err)
 			_, err = tk1.Exec("delete from t where id = 2;")
 			assert.NoError(t, err)
+			rows := tk1.MustQuery("select tidb_encode_index_key('test', 't', 'b', 1, null);").Rows()
+			hexKey = rows[0][0].(string)
 		}
 	})
 	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/BeforeBackfillMerge", func(info *model.IndexInfo) {
@@ -534,45 +535,8 @@ func TestMultiSchemaChangeTwoIndexes(t *testing.T) {
 
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/ddl/skipReorgWorkForTempIndex", "return(false)")
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	dumpChan := make(chan struct{})
-	defer func() {
-		close(dumpChan)
-		wg.Wait()
-	}()
-	go DebugDumpOnTimeout(&wg, dumpChan, 20*time.Second)
-	tk.MustExec("alter table t add unique index k(b), add index k1(c);")
+	tk.MustExec("alter table t add unique index b(b), add index c(c);")
 	tk.MustExec("admin check table t;")
-}
 
-// DebugDumpOnTimeout will dump stack traces and possible blockers after given timeout.
-// wg is the WaitGroup to mark as done when finished (to avoid runaway goroutines)
-// c is the channel that will signal or close to cancel the timeout.
-func DebugDumpOnTimeout(wg *sync.WaitGroup, c chan struct{}, d time.Duration) {
-	select {
-	case <-time.After(d):
-		log.Print("Injected timeout, dumping all goroutines:")
-		_ = pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces led to possible block:")
-		_ = pprof.Lookup("block").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces holding mutexes:")
-		_ = pprof.Lookup("mutex").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces led to creation of new OS threads:")
-		_ = pprof.Lookup("threadcreate").WriteTo(os.Stdout, 2)
-		log.Print("Waiting 2 seconds and to see if things changed...")
-		time.Sleep(2 * time.Second)
-		log.Print("Injected timeout, dumping all goroutines:")
-		_ = pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces led to possible block:")
-		_ = pprof.Lookup("block").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces holding mutexes:")
-		_ = pprof.Lookup("mutex").WriteTo(os.Stdout, 2)
-		log.Print("dumping all stack traces led to creation of new OS threads:")
-		_ = pprof.Lookup("threadcreate").WriteTo(os.Stdout, 2)
-		panic("Injected timeout")
-	case <-c:
-		// Test finished
-	}
-	wg.Done()
+	tk.MustQuery(fmt.Sprintf("select tidb_mvcc_info('%s')", hexKey)).Check(testkit.Rows("?"))
 }
