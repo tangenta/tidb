@@ -1,12 +1,15 @@
 module github.com/pingcap/tidb
 
-go 1.23.9
+go 1.23.4
+
+toolchain go1.24.0
 
 require (
 	cloud.google.com/go/kms v1.15.7
 	cloud.google.com/go/storage v1.38.0
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.14.0
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
+	git.pingcap.net/pingkai/tidbx-server/tidbx v0.0.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.12.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/BurntSushi/toml v1.5.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
@@ -109,7 +112,7 @@ require (
 	github.com/spkg/bom v1.0.0
 	github.com/stathat/consistent v1.0.0
 	github.com/stretchr/testify v1.10.0
-	github.com/tdakkota/asciicheck v0.4.1
+	github.com/tdakkota/asciicheck v0.2.0
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2
 	github.com/tikv/client-go/v2 v2.0.8-0.20250421022114-157f083989fa
 	github.com/tikv/pd/client v0.0.0-20250421073700-f86063f60638
@@ -134,14 +137,14 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
-	golang.org/x/net v0.40.0
-	golang.org/x/oauth2 v0.29.0
-	golang.org/x/sync v0.14.0
-	golang.org/x/sys v0.33.0
-	golang.org/x/term v0.32.0
-	golang.org/x/text v0.25.0
-	golang.org/x/time v0.11.0
-	golang.org/x/tools v0.33.0
+	golang.org/x/net v0.30.0
+	golang.org/x/oauth2 v0.23.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.31.0
+	golang.org/x/term v0.25.0
+	golang.org/x/text v0.19.0
+	golang.org/x/time v0.7.0
+	golang.org/x/tools v0.26.0
 	google.golang.org/api v0.169.0
 	google.golang.org/grpc v1.63.2
 	gopkg.in/yaml.v2 v2.4.0
@@ -166,7 +169,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -337,3 +340,7 @@ replace (
 	sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 	sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 )
+
+replace github.com/tikv/client-go/v2 => ../client-go
+
+replace git.pingcap.net/pingkai/tidbx-server/tidbx => ../tidbx

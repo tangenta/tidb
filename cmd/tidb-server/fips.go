@@ -14,6 +14,6 @@
 
 //go:build boringcrypto
 
-package main
+package tidb_server
 
 import _ "crypto/tls/fipsonly"

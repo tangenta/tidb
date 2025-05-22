@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package tidb_server
 
 import (
 	"context"
@@ -194,7 +194,7 @@ var (
 	help                        *bool
 )
 
-func initFlagSet() *flag.FlagSet {
+func initFlagSet(args []string) *flag.FlagSet {
 	fset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	version = flagBoolean(fset, nmVersion, false, "print version information and exit")
 	configPath = fset.String(nmConfig, "", "config file path")
@@ -251,7 +251,7 @@ func initFlagSet() *flag.FlagSet {
 	session.RegisterMockUpgradeFlag(fset)
 	// Ignore errors; CommandLine is set for ExitOnError.
 	// nolint:errcheck
-	fset.Parse(os.Args[1:])
+	fset.Parse(args)
 	if *help {
 		fset.Usage()
 		os.Exit(0)
@@ -259,8 +259,10 @@ func initFlagSet() *flag.FlagSet {
 	return fset
 }
 
-func main() {
-	fset := initFlagSet()
+var ExistSignalHandleFunc = func(singal os.Signal) {}
+
+func RunTiDBServer(args []string) {
+	fset := initFlagSet(args)
 	if args := fset.Args(); len(args) != 0 {
 		if args[0] == "collect-log" && len(args) > 1 {
 			output := "-"
@@ -329,14 +331,25 @@ func main() {
 	svr := createServer(storage, dom)
 
 	exited := make(chan struct{})
-	signal.SetupSignalHandler(func() {
-		svr.Close()
-		resourcemanager.InstanceResourceManager.Stop()
-		cleanup(svr, storage, dom)
-		cpuprofile.StopCPUProfiler()
-		executor.Stop()
-		close(exited)
-	})
+	if !versioninfo.TiDBXMode {
+		signal.SetupSignalHandler(func(_ os.Signal) {
+			svr.Close()
+			resourcemanager.InstanceResourceManager.Stop()
+			cleanup(svr, storage, dom)
+			cpuprofile.StopCPUProfiler()
+			executor.Stop()
+			close(exited)
+		})
+	} else {
+		ExistSignalHandleFunc = func(singal os.Signal) {
+			svr.Close()
+			resourcemanager.InstanceResourceManager.Stop()
+			cleanup(svr, storage, dom)
+			cpuprofile.StopCPUProfiler()
+			executor.Stop()
+			close(exited)
+		}
+	}
 	topsql.SetupTopSQL(svr)
 	terror.MustNil(svr.Run(dom))
 	<-exited

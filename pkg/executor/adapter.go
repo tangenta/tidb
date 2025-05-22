@@ -1594,8 +1594,8 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	costTime := sessVars.GetTotalCostDuration()
 	threshold := time.Duration(atomic.LoadUint64(&cfg.Instance.SlowThreshold)) * time.Millisecond
 	enable := cfg.Instance.EnableSlowLog.Load()
-	// if the level is Debug, or trace is enabled, print slow logs anyway
-	force := level <= zapcore.DebugLevel || trace.IsEnabled()
+	// if the level is Debug, print slow logs anyway
+	force := level <= zapcore.DebugLevel
 	if (!enable || costTime < threshold) && !force {
 		return
 	}
