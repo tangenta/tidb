@@ -889,3 +889,36 @@ func TestAddIndexInsertSameOriginIndexValue(t *testing.T) {
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionStateBeforeMerge", "1*return")
 	tk.MustExec("alter table t add unique index idx(b);")
 }
+
+func TestAddIndexConflictPessimisticTxn(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+
+	tk.MustExec("drop database if exists addindexlit;")
+	tk.MustExec("create database addindexlit;")
+	tk.MustExec("use addindexlit;")
+	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=off;`)
+	tk.MustExec("set global tidb_enable_dist_task = off;")
+
+	tk.MustExec("create table t (id int primary key clustered, a char(255), b char(255), c char(255));")
+	tk.MustExec("insert into t values (1, 'a', 'b', 'c');")
+
+	tk1 := testkit.NewTestKit(t, store)
+	tk1.MustExec("use addindexlit;")
+
+	var runUpdate bool
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionWhenBackfilling", func() {
+		if runUpdate {
+			return
+		}
+		tk1.MustExec("begin pessimistic;")
+		tk1.MustExec("update t set c = 'c1' where id = 1;")
+		tk1.MustExec("commit;")
+		runUpdate = true
+	})
+
+	tk.MustExec("alter table t add index idx(b);")
+	tk.MustQuery("select count(1) from t use index();").Check(testkit.Rows("1"))
+	tk.MustQuery("select count(1) from t use index(idx);").Check(testkit.Rows("1"))
+	tk.MustExec("admin check table t;")
+}

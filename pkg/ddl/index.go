@@ -2438,10 +2438,10 @@ func (w *addIndexTxnWorker) BackfillData(handleRange reorgBackfillTask) (taskCtx
 			// For the normal pessimistic transaction, it's ok. But if async commit is used, it may lead to inconsistent data and index.
 			// TODO: For global index, lock the correct key?! Currently it locks the partition (phyTblID) and the handle or actual key?
 			// but should really lock the table's ID + key col(s)
-			err := txn.LockKeys(context.Background(), new(kv.LockCtx), idxRecord.key)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			// err := txn.LockKeys(context.Background(), new(kv.LockCtx), idxRecord.key)
+			// if err != nil {
+			// 	return errors.Trace(err)
+			// }
 
 			handle, err := w.indexes[i%len(w.indexes)].Create(
 				w.tblCtx, txn, idxRecord.vals, idxRecord.handle, idxRecord.rsData,
@@ -2458,6 +2458,7 @@ func (w *addIndexTxnWorker) BackfillData(handleRange reorgBackfillTask) (taskCtx
 				return errors.Trace(err)
 			}
 			taskCtx.addedCount++
+			failpoint.InjectCall("mockDMLExecutionWhenBackfilling")
 		}
 
 		return nil
