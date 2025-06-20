@@ -36,9 +36,13 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/tests/realtikvtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/txnkv/transaction"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
@@ -902,23 +906,79 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 
 	tk.MustExec("create table t (id int primary key clustered, a char(255), b char(255), c char(255));")
 	tk.MustExec("insert into t values (1, 'a', 'b', 'c');")
+	tk.MustExec("set global tidb_enable_1pc = off;")
 
 	tk1 := testkit.NewTestKit(t, store)
 	tk1.MustExec("use addindexlit;")
 
-	var runUpdate bool
-	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionWhenBackfilling", func() {
-		if runUpdate {
-			return
-		}
-		tk1.MustExec("begin pessimistic;")
-		tk1.MustExec("update t set c = 'c1' where id = 1;")
-		tk1.MustExec("commit;")
-		runUpdate = true
+	eg := errgroup.Group{}
+	ddlBeforeGetCommitTSOnce := &sync.Once{}
+	dmlAfterUpdateLatestTS := make(chan struct{})
+	dmlAfterUpdateLatestTSOnce := &sync.Once{}
+
+	ddlAfterGetCommitTSOnce := &sync.Once{}
+	dmlAfterGetCommitTS := make(chan struct{})
+	dmlAfterGetCommitTSOnce := &sync.Once{}
+
+	transaction.AfterDMLUpdateLatestTS = func(ts uint64) {
+		dmlAfterUpdateLatestTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: after update latest ts", zap.Uint64("ts", ts))
+			close(dmlAfterUpdateLatestTS)
+		})
+	}
+	transaction.BeforeDDLGetCommitTS = func() {
+		ddlBeforeGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-ddl: before get commit ts")
+			<-dmlAfterUpdateLatestTS
+		})
+	}
+	transaction.AfterDDLGetCommitTS = func(ts uint64) {
+		ddlAfterGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-ddl: after get commit ts", zap.Uint64("ts", ts))
+			<-dmlAfterGetCommitTS
+			logutil.BgLogger().Info("tangenta-ddl: after wait dml get commit ts")
+		})
+	}
+	transaction.AfterDMLGetCommitTS = func(ts uint64) {
+		dmlAfterGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: after get commit ts", zap.Uint64("ts", ts))
+			close(dmlAfterGetCommitTS)
+		})
+	}
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/beforeBackfillDataCtx", func(ctxPtr *context.Context) {
+		*ctxPtr = context.WithValue(*ctxPtr, "tangenta-ddl", struct{}{})
 	})
 
-	tk.MustExec("alter table t add index idx(b);")
+	runPessimisticTxnOnce := &sync.Once{}
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionWhenBackfilling", func() {
+		runPessimisticTxnOnce.Do(func() {
+			tk1.MustExec("begin pessimistic;")
+			tk1.MustExec("update t set c = 'c1' where id = 1;")
+			eg.Go(func() error {
+				logutil.BgLogger().Info("tangenta-dml: commit async")
+				ctx := context.WithValue(context.Background(), "tangenta-dml", "test")
+				tk1.MustExecWithContext(ctx, "commit;")
+				return nil
+			})
+		})
+	})
+
+	tk.MustExec("alter table t add index idx(c);")
+	eg.Wait()
+
 	tk.MustQuery("select count(1) from t use index();").Check(testkit.Rows("1"))
 	tk.MustQuery("select count(1) from t use index(idx);").Check(testkit.Rows("1"))
 	tk.MustExec("admin check table t;")
+	crs := tk.MustQuery("select tidb_mvcc_info(tidb_encode_index_key('addindexlit', 't', 'idx', 'c', 1));").Rows()
+	logutil.BgLogger().Info("check mvcc info", zap.String("mvcc", fmt.Sprintf("%v", crs)))
+	c1rs := tk.MustQuery("select tidb_mvcc_info(tidb_encode_index_key('addindexlit', 't', 'idx', 'c1', 1));").Rows()
+	logutil.BgLogger().Info("check mvcc info", zap.String("mvcc", fmt.Sprintf("%v", c1rs)))
+	ddlBeforeGetCommitTSOnce.Do(func() {
+		t.Log("before get commit ts should have been called")
+		t.Fail()
+	})
+	dmlAfterUpdateLatestTSOnce.Do(func() {
+		t.Log("finish update latest ts should have been called")
+		t.Fail()
+	})
 }
