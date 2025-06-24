@@ -3724,6 +3724,9 @@ func doDMLWorks(s sessiontypes.Session) {
 	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES(%?, %?, "Bootstrap version. Do not delete.")`,
 		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion,
 	)
+	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, "TiDB Enterprise Edition bootstrap version.") `,
+		mysql.SystemDB, mysql.TiDBTable, tidbEnterpriseEditionServerVersionVar, currentEEBootstrapVersion,
+	)
 	writeSystemTZ(s)
 
 	writeNewCollationParameter(s, config.GetGlobalConfig().NewCollationsEnabledOnFirstBootstrap)
