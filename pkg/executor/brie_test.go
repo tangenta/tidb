@@ -44,7 +44,7 @@ func TestGlueGetVersion(t *testing.T) {
 	g := tidbGlue{}
 	version := g.GetVersion()
 	require.Contains(t, version, `Release Version`)
-	require.Contains(t, version, `Git Commit Hash`)
+	require.Contains(t, version, `Git TiDB Commit Hash`)
 	require.Contains(t, version, `GoVersion`)
 }
 
