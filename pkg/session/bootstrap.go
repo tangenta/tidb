@@ -853,6 +853,28 @@ func getFunctionName(f func(sessiontypes.Session, int64)) (string, error) {
 }
 
 const (
+	// init Enterprise Edition version.
+	// // eeversion2 add Max_user_connections into mysql.user.
+	// eeversion2 = 2
+	// // eeversion3 add mysql.login_history
+	// eeversion3 = 3
+	// eeversion4 add the table INFORMATION_SCHEMA.routines
+	eeversion4 = 4
+	// eeversion5 add label security tables.
+	eeversion5 = 5
+	// eeversion6 add the table mysql.procs_priv
+	eeversion6 = 6
+	// eeversion7 add the table mysql.audit_log_filters and mysql.audit_log_filter_rules
+	eeversion7 = 7
+	// eeversion8 add the table mysql.whitelist
+	eeversion8 = 8
+	// eeversion9 removes the value of `Column_priv` in both `mysql.tables_priv` and `mysql.columns_priv`
+	eeversion9 = 9
+	// eeversion10 alters table mysql.login_history MODIFY column Time DATETIME(6).
+	eeversion10 = 10
+)
+
+const (
 	// varTrue is the true value in mysql.TiDB table for boolean columns.
 	varTrue = "True"
 	// varFalse is the false value in mysql.TiDB table for boolean columns.
@@ -864,6 +886,9 @@ const (
 	// The variable name in mysql.TiDB table.
 	// It is used for getting the version of the TiDB server which bootstrapped the store.
 	tidbServerVersionVar = "tidb_server_version"
+	// The variable name in mysql.TiDB table.
+	// It is used for getting the version of the TiDB Enterprise Edition server which bootstrapped the store.
+	tidbEnterpriseEditionServerVersionVar = "tidb_enterprise_edition_server_version"
 	// The variable name in mysql.tidb table and it will be used when we want to know
 	// system timezone.
 	tidbSystemTZ = "system_tz"
@@ -1290,6 +1315,10 @@ const (
 // please make sure this is the largest version
 var currentBootstrapVersion int64 = version247
 
+// currentEEBootstrapVersion is defined as a variable, so we can modify its value for testing.
+// please make sure this is the largest version
+var currentEEBootstrapVersion int64 = eeversion10
+
 // DDL owner key's expired time is ManagerSessionTTL seconds, we should wait the time and give more time to have a chance to finish it.
 var internalSQLTimeout = owner.ManagerSessionTTL + 15
 
@@ -1472,6 +1501,18 @@ var (
 		upgradeToVer246,
 		upgradeToVer247,
 	}
+
+	bootstrapEEVersion = []func(sessiontypes.Session, int64){
+		//upgradeEEToVer2,
+		//upgradeEEToVer3,
+		upgradeEEToVer4,
+		upgradeEEToVer5,
+		upgradeEEToVer6,
+		upgradeEEToVer7,
+		upgradeEEToVer8,
+		upgradeEEToVer9,
+		upgradeEEToVer10,
+	}
 )
 
 func checkBootstrapped(s sessiontypes.Session) (bool, error) {
@@ -1570,10 +1611,12 @@ func upgrade(s sessiontypes.Session) {
 		logutil.BgLogger().Fatal("[upgrade] init metadata lock failed", zap.Error(err))
 	}
 
-	var ver int64
+	var ver, verEE int64
 	ver, err = getBootstrapVersion(s)
 	terror.MustNil(err)
-	if ver >= currentBootstrapVersion {
+	verEE, err = getBootstrapEEVersion(s)
+	terror.MustNil(err)
+	if ver >= currentBootstrapVersion && verEE >= currentEEBootstrapVersion {
 		// It is already bootstrapped/upgraded by a higher version TiDB server.
 		return
 	}
@@ -1596,6 +1639,9 @@ func upgrade(s sessiontypes.Session) {
 			zap.Int64("old-start-version", ver),
 			zap.String("in-progress-version", funcName),
 			zap.Int64("latest-version", currentBootstrapVersion))
+	}
+	for _, upgrade := range bootstrapEEVersion {
+		upgrade(s, verEE)
 	}
 	if isNull {
 		upgradeToVer99After(s)
@@ -1622,6 +1668,28 @@ func upgrade(s sessiontypes.Session) {
 		logutil.BgLogger().Fatal("[upgrade] upgrade failed",
 			zap.Int64("from", ver),
 			zap.Int64("to", currentBootstrapVersion),
+			zap.Error(err))
+	}
+
+	updateEEBootstrapVer(s)
+	_, err = s.ExecuteInternal(ctx, "COMMIT")
+	if err != nil {
+		sleepTime := 1 * time.Second
+		logutil.BgLogger().Info("update bootstrap ver failed",
+			zap.Error(err), zap.Duration("sleeping time", sleepTime))
+		time.Sleep(sleepTime)
+		// Check if TiDB is already upgraded.
+		v, err1 := getBootstrapEEVersion(s)
+		if err1 != nil {
+			logutil.BgLogger().Fatal("upgrade enterprise edition failed", zap.Error(err1))
+		}
+		if v >= currentEEBootstrapVersion {
+			// It is already bootstrapped/upgraded by a higher version TiDB server.
+			return
+		}
+		logutil.BgLogger().Fatal("[upgrade enterprise edition] upgrade failed",
+			zap.Int64("from", verEE),
+			zap.Int64("to", currentEEBootstrapVersion),
 			zap.Error(err))
 	}
 }
@@ -3477,6 +3545,55 @@ func upgradeToVer247(s sessiontypes.Session, ver int64) {
 	doReentrantDDL(s, "ALTER TABLE mysql.stats_meta ADD COLUMN last_stats_histograms_version bigint unsigned DEFAULT NULL", infoschema.ErrColumnExists)
 }
 
+func upgradeEEToVer4(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion4 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer5(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion5 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer6(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion6 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer7(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion7 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer8(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion8 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer9(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion9 {
+		return
+	}
+	// TODO
+}
+
+func upgradeEEToVer10(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion10 {
+		return
+	}
+	// TODO
+}
+
 // initGlobalVariableIfNotExists initialize a global variable with specific val if it does not exist.
 func initGlobalVariableIfNotExists(s sessiontypes.Session, name string, val any) {
 	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnBootstrap)
@@ -3519,6 +3636,26 @@ func getBootstrapVersion(s sessiontypes.Session) (int64, error) {
 		return 0, nil
 	}
 	return strconv.ParseInt(sVal, 10, 64)
+}
+
+// getBootstrapEEVersion gets bootstrap eeversion from mysql.tidb table;
+func getBootstrapEEVersion(s sessiontypes.Session) (int64, error) {
+	sVal, isNull, err := getTiDBVar(s, tidbEnterpriseEditionServerVersionVar)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if isNull {
+		return 0, nil
+	}
+	return strconv.ParseInt(sVal, 10, 64)
+}
+
+// updateEEBootstrapVer updates bootstrap version variable in mysql.TiDB table.
+func updateEEBootstrapVer(s sessiontypes.Session) {
+	// Update bootstrap eeversion.
+	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, "TiDB Enterprise Edition bootstrap version.") ON DUPLICATE KEY UPDATE VARIABLE_VALUE=%?`,
+		mysql.SystemDB, mysql.TiDBTable, tidbEnterpriseEditionServerVersionVar, currentEEBootstrapVersion, currentEEBootstrapVersion,
+	)
 }
 
 // doDDLWorks executes DDL statements in bootstrap stage.
