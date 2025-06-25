@@ -280,9 +280,6 @@ const (
 	// TiDBExplicitRequestSourceType indicates the source of the request, it's a complement of RequestSourceType.
 	// The value maybe "lightning", "br", "dumpling" etc.
 	TiDBExplicitRequestSourceType = "tidb_request_source_type"
-
-	// TiDBXEnableScheduleLeaderRule indicates whether to enable region leader in one store.
-	TiDBXEnableScheduleLeaderRule = "tidbx_enable_schedule_leader_rule"
 )
 
 // TiDB system variable names that both in session and global scope.
@@ -1023,9 +1020,6 @@ const (
 
 	// TiDBAccelerateUserCreationUpdate decides whether tidb will load & update the whole user's data in-memory.
 	TiDBAccelerateUserCreationUpdate = "tidb_accelerate_user_creation_update"
-
-	// TiDBXEnableTiKVLocalCall indicates whether to enable TiKV local calls.
-	TiDBXEnableTiKVLocalCall = "tidbx_enable_tikv_local_call"
 )
 
 // TiDB vars that have only global scope
@@ -1659,8 +1653,6 @@ const (
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
 	DefTiDBAccelerateUserCreationUpdate               = false
-	DefTiDBXEnableLocalRpcOpt                         = false
-	DefTiDBXEnableScheduleLeaderRule                  = false
 )
 
 // Process global variables.
@@ -1788,9 +1780,6 @@ var (
 	SchemaCacheSize              = atomic.NewUint64(DefTiDBSchemaCacheSize)
 	SchemaCacheSizeOriginText    = atomic.NewString(strconv.Itoa(DefTiDBSchemaCacheSize))
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
-
-	EnableScheduleLeaderRule                = atomic.NewBool(DefTiDBXEnableScheduleLeaderRule)
-	EnableScheduleLeaderRuleFn func(v bool) = nil
 )
 
 func serverMemoryLimitDefaultValue() string {

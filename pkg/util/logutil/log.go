@@ -178,7 +178,11 @@ func InitLogger(cfg *LogConfig, opts ...zap.Option) error {
 
 	initGRPCLogger(gl)
 	tikv.SetLogContextKey(CtxLogKey)
-	tikv.SetAppLogger(gl)
+
+	if setAppLoggerFunc != nil {
+		setAppLoggerFunc(gl)
+	}
+
 	return nil
 }
 
@@ -237,7 +241,10 @@ func ReplaceLogger(cfg *LogConfig, opts ...zap.Option) error {
 		}
 	}
 
-	tikv.SetAppLogger(gl)
+	if setAppLoggerFunc != nil {
+		setAppLoggerFunc(gl)
+	}
+
 	BgLogger().Info("replaced global logger", zap.String("config", string(cfgJSON)))
 
 	return nil
@@ -259,6 +266,7 @@ type ctxLogKeyType struct{}
 // public for test usage.
 var CtxLogKey = ctxLogKeyType{}
 
+// AppLogger is used for fusion mode
 var AppLogger *zap.Logger
 
 // Logger gets a contextual logger from current context.

@@ -44,7 +44,7 @@ func PrintTiDBInfo() {
 		zap.String("Git Branch", versioninfo.TiDBGitBranch),
 		zap.String("UTC Build Time", versioninfo.TiDBBuildTS),
 		zap.String("GoVersion", buildVersion),
-		zap.Bool("TiDBX Mode", versioninfo.TiDBXMode),
+		zap.Bool("Fusion", versioninfo.TiDBXMode),
 		zap.Bool("Race Enabled", israce.RaceEnabled),
 		zap.Bool("Check Table Before Drop", config.CheckTableBeforeDrop),
 	}

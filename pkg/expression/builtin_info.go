@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	tidbxversion "git.pingcap.net/pingkai/tidbx-server/tidbx/versioninfo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/pkg/expression/expropt"
@@ -568,7 +567,7 @@ func (c *tidbVersionFunctionClass) getFunction(ctx BuildContext, args []Expressi
 	if err != nil {
 		return nil, err
 	}
-	bf.tp.SetFlen(len(tidbxversion.GetTiDBXInfo()))
+	bf.tp.SetFlen(len(VersionPrinter))
 	sig := &builtinTiDBVersionSig{bf}
 	return sig, nil
 }
@@ -589,7 +588,7 @@ func (b *builtinTiDBVersionSig) Clone() builtinFunc {
 // evalString evals a builtinTiDBVersionSig.
 // This will show git hash and build time for tidb-server.
 func (b *builtinTiDBVersionSig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
-	return tidbxversion.GetTiDBXInfo(), false, nil
+	return VersionPrinter, false, nil
 }
 
 type tidbIsDDLOwnerFunctionClass struct {

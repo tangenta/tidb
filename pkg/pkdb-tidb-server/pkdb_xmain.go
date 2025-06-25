@@ -1,18 +1,4 @@
-// Copyright 2015 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package main
+package tidbserver
 
 import (
 	"context"
@@ -38,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/executor/mppcoordmanager"
 	"github.com/pingcap/tidb/pkg/extension"
-	_ "github.com/pingcap/tidb/pkg/extension/_import"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
@@ -194,7 +179,7 @@ var (
 	help                        *bool
 )
 
-func initFlagSet() *flag.FlagSet {
+func initFlagSet(args []string) *flag.FlagSet {
 	fset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	version = flagBoolean(fset, nmVersion, false, "print version information and exit")
 	configPath = fset.String(nmConfig, "", "config file path")
@@ -251,7 +236,7 @@ func initFlagSet() *flag.FlagSet {
 	session.RegisterMockUpgradeFlag(fset)
 	// Ignore errors; CommandLine is set for ExitOnError.
 	// nolint:errcheck
-	fset.Parse(os.Args[1:])
+	fset.Parse(args)
 	if *help {
 		fset.Usage()
 		os.Exit(0)
@@ -259,8 +244,12 @@ func initFlagSet() *flag.FlagSet {
 	return fset
 }
 
-func main() {
-	fset := initFlagSet()
+// ExistSignalHandleFunc is used in fusion mode
+var ExistSignalHandleFunc = func(singal os.Signal) {}
+
+// RunTiDBServer is the entry point of tidb-server in fusion mode
+func RunTiDBServer(args []string) {
+	fset := initFlagSet(args)
 	if args := fset.Args(); len(args) != 0 {
 		if args[0] == "collect-log" && len(args) > 1 {
 			output := "-"
@@ -329,14 +318,25 @@ func main() {
 	svr := createServer(storage, dom)
 
 	exited := make(chan struct{})
-	signal.SetupSignalHandler(func(_ os.Signal) {
-		svr.Close()
-		resourcemanager.InstanceResourceManager.Stop()
-		cleanup(svr, storage, dom)
-		cpuprofile.StopCPUProfiler()
-		executor.Stop()
-		close(exited)
-	})
+	if !versioninfo.TiDBXMode {
+		signal.SetupSignalHandler(func(_ os.Signal) {
+			svr.Close()
+			resourcemanager.InstanceResourceManager.Stop()
+			cleanup(svr, storage, dom)
+			cpuprofile.StopCPUProfiler()
+			executor.Stop()
+			close(exited)
+		})
+	} else {
+		ExistSignalHandleFunc = func(singal os.Signal) {
+			svr.Close()
+			resourcemanager.InstanceResourceManager.Stop()
+			cleanup(svr, storage, dom)
+			cpuprofile.StopCPUProfiler()
+			executor.Stop()
+			close(exited)
+		}
+	}
 	topsql.SetupTopSQL(svr)
 	terror.MustNil(svr.Run(dom))
 	<-exited

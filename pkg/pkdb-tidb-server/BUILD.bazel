@@ -1,10 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "tidb-server_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/pingcap/tidb/cmd/tidb-server",
-    visibility = ["//visibility:private"],
+    name = "pkdb-tidb-server",
+    srcs = ["pkdb_xmain.go"],
+    importpath = "github.com/pingcap/tidb/pkg/pkdb-tidb-server",
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/bindinfo",
         "//pkg/config",
@@ -13,7 +13,6 @@ go_library(
         "//pkg/executor",
         "//pkg/executor/mppcoordmanager",
         "//pkg/extension",
-        "//pkg/extension/_import",
         "//pkg/extension/enterprise/audit",
         "//pkg/extension/enterprise/whitelist",
         "//pkg/keyspace",
@@ -29,7 +28,6 @@ go_library(
         "//pkg/server",
         "//pkg/session",
         "//pkg/session/txninfo",
-        "//pkg/sessionctx/vardef",
         "//pkg/sessionctx/variable",
         "//pkg/statistics",
         "//pkg/store",
@@ -43,7 +41,6 @@ go_library(
         "//pkg/util/deadlockhistory",
         "//pkg/util/disk",
         "//pkg/util/domainutil",
-        "//pkg/util/intest",
         "//pkg/util/kvcache",
         "//pkg/util/logutil",
         "//pkg/util/memory",
@@ -70,47 +67,5 @@ go_library(
         "@com_github_tikv_client_go_v2//txnkv/transaction",
         "@org_uber_go_automaxprocs//maxprocs",
         "@org_uber_go_zap//:zap",
-    ],
-)
-
-go_binary(
-    name = "tidb-server",
-    embed = [":tidb-server_lib"],
-    visibility = ["//visibility:public"],
-    x_defs = {
-        "github.com/pingcap/tidb/pkg/parser/mysql.TiDBReleaseVersion": "{STABLE_TiDB_RELEASE_VERSION}",
-        "github.com/pingcap/tidb/pkg/util/versioninfo.TiDBBuildTS": "{STABLE_TiDB_BUILD_UTCTIME}",
-        "github.com/pingcap/tidb/pkg/util/versioninfo.TiDBGitHash": "{STABLE_TIDB_GIT_HASH}",
-        "github.com/pingcap/tidb/pkg/util/versioninfo.TiDBEnterpriseExtensionGitHash": "{STABLE_TIDB_ENTERPRISE_EXTENSION_GIT_HASH}",
-        "github.com/pingcap/tidb/pkg/util/versioninfo.TiDBGitBranch": "{STABLE_TIDB_GIT_BRANCH}",
-        "github.com/pingcap/tidb/pkg/util/versioninfo.TiDBEdition": "{STABLE_TIDB_EDITION}",
-    },
-)
-
-go_binary(
-    name = "tidb-server-check",
-    embed = [":tidb-server_lib"],
-    gc_linkopts = [
-        "-X",
-        "github.com/pingcap/tidb/pkg/config.checkBeforeDropLDFlag=1",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "tidb-server_test",
-    timeout = "short",
-    srcs = ["main_test.go"],
-    embed = [":tidb-server_lib"],
-    flaky = True,
-    deps = [
-        "//pkg/config",
-        "//pkg/parser/mysql",
-        "//pkg/sessionctx/vardef",
-        "//pkg/sessionctx/variable",
-        "//pkg/testkit/testsetup",
-        "@com_github_stretchr_testify//require",
-        "@io_opencensus_go//stats/view",
-        "@org_uber_go_goleak//:goleak",
     ],
 )
