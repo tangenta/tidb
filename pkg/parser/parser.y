@@ -199,6 +199,7 @@ import (
 	long              "LONG"
 	longblobType      "LONGBLOB"
 	longtextType      "LONGTEXT"
+	loop              "LOOP"
 	lowPriority       "LOW_PRIORITY"
 	match             "MATCH"
 	maxValue          "MAXVALUE"
@@ -975,6 +976,7 @@ import (
 	AlterRangeStmt             "Alter data range configuration statement"
 	AlterPolicyStmt            "Alter Placement Policy statement"
 	AlterResourceGroupStmt     "Alter Resource Group statement"
+	AlterProcedureStmt         "Alter procedurce attributes statement"
 	AlterSequenceStmt          "Alter sequence statement"
 	AnalyzeTableStmt           "Analyze table statement"
 	BeginTransactionStmt       "BEGIN TRANSACTION statement"
@@ -1044,6 +1046,7 @@ import (
 	ProcedureStatementStmt     "The normal statements in procedure, such as dml, select, set ..."
 	SelectStmt                 "SELECT statement"
 	SelectStmtWithClause       "common table expression SELECT statement"
+	StartTransactionStmt       "START TRANSACTION statement"
 	RenameTableStmt            "rename table statement"
 	RenameUserStmt             "rename user statement"
 	ReplaceIntoStmt            "REPLACE INTO statement"
@@ -1546,6 +1549,13 @@ import (
 	ProcedureFetchList                     "Procedure fetch into variables"
 	ProcedureHandlerType                   "Procedure handler operation type"
 	ProcedureHcondList                     "Procedure handler condition value list"
+	ProcedureCreateChistics                "Attributes when creating stored procedures"
+	ProcedureCreateChistic                 "Attribute when creating stored procedures"
+	ProcedureChistic                       "Attribute about stored procedures"
+	ProcedureAlterChistics                 "Attributes when alter stored procedures"
+	ProcedureName                          "Procedure Name"
+	RoutineDefiner                         "Routine definer"
+	SQLStateText                           "Sqlstate text"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -3439,7 +3449,9 @@ BeginTransactionStmt:
 			Mode: ast.Optimistic,
 		}
 	}
-|	"START" "TRANSACTION"
+
+StartTransactionStmt:
+	"START" "TRANSACTION"
 	{
 		$$ = &ast.BeginStmt{}
 	}
@@ -10181,6 +10193,10 @@ LimitOption:
 	{
 		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
 	}
+|	Identifier
+	{
+		$$ = &ast.ProcedureVar{Name: ast.NewCIStr($1)}
+	}
 
 RowOrRows:
 	"ROW"
@@ -11003,7 +11019,11 @@ ConfigItemName:
 VariableAssignment:
 	VariableName EqOrAssignmentEq SetExpr
 	{
-		$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true}
+		if parser.inProcedure {
+			$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: false}
+		} else {
+			$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true}
+		}
 	}
 |	"GLOBAL" VariableName EqOrAssignmentEq SetExpr
 	{
@@ -12342,6 +12362,7 @@ Statement:
 |	AlterSequenceStmt
 |	AlterPolicyStmt
 |	AlterResourceGroupStmt
+|	AlterProcedureStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
 |	BinlogStmt
@@ -12410,6 +12431,7 @@ Statement:
 |	SetOprStmt
 |	SelectStmt
 |	SelectStmtWithClause
+|	StartTransactionStmt
 |	SubSelect
 	{
 		var sel ast.StmtNode
@@ -12473,6 +12495,7 @@ TraceableStmt:
 |	RollbackStmt
 |	SetStmt
 |	AnalyzeTableStmt
+|	StartTransactionStmt
 
 ExplainableStmt:
 	DeleteFromStmt
@@ -16040,13 +16063,14 @@ SpPdparams:
 	}
 
 SpPdparam:
-	SpOptInout Identifier Type
+	SpOptInout Identifier Type OptCollate
 	{
 		x := &ast.StoreParameter{
 			Paramstatus: $1.(int),
 			ParamType:   $3.(*types.FieldType),
 			ParamName:   $2,
 		}
+		x.ParamType.SetCollate($4)
 		$$ = x
 	}
 
@@ -16069,7 +16093,11 @@ SpOptInout:
 	}
 
 ProcedureStatementStmt:
-	SelectStmt
+	AlterTableStmt
+|	CallStmt
+|	CreateTableStmt
+|	DropTableStmt
+|	SelectStmt
 |	SelectStmtWithClause
 |	SubSelect
 	{
@@ -16096,6 +16124,11 @@ ProcedureStatementStmt:
 |	DeleteFromStmt
 |	AnalyzeTableStmt
 |	TruncateTableStmt
+|	StartTransactionStmt
+|	PreparedStmt
+|	DeallocateStmt
+|	ExecuteStmt
+|	ShowStmt
 
 ProcedureCursorSelectStmt:
 	SelectStmt
@@ -16140,24 +16173,29 @@ ProcedureOptDefault:
 	}
 |	"DEFAULT" Expression
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
 		$$ = $2
 	}
 
 ProcedureDecl:
-	"DECLARE" ProcedureDeclIdents Type ProcedureOptDefault
+	"DECLARE" ProcedureDeclIdents Type OptCollate ProcedureOptDefault
 	{
 		x := &ast.ProcedureDecl{
 			DeclNames: $2.([]string),
 			DeclType:  $3.(*types.FieldType),
 		}
-		if $4 != nil {
-			x.DeclDefault = $4.(ast.ExprNode)
+		if $4 != "" {
+			x.DeclType.SetCollate($4)
+		}
+		if $5 != nil {
+			x.DeclDefault = $5.(ast.ExprNode)
 		}
 		$$ = x
 	}
 |	"DECLARE" identifier "CURSOR" "FOR" ProcedureCursorSelectStmt
 	{
 		name := strings.ToLower($2)
+		$5.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
 		$$ = &ast.ProcedureCursor{
 			CurName:      name,
 			Selectstring: $5.(ast.StmtNode),
@@ -16169,6 +16207,14 @@ ProcedureDecl:
 			ControlHandle: $2.(int),
 			ErrorCon:      $5.([]ast.ErrNode),
 			Operate:       $6.(ast.StmtNode),
+		}
+	}
+
+SQLStateText:
+	"SQLSTATE" optValue stringLit
+	{
+		$$ = &ast.ProcedureErrorState{
+			CodeStatus: $3,
 		}
 	}
 
@@ -16228,11 +16274,9 @@ ProcedurceCond:
 			ErrorNum: getUint64FromNUM($1),
 		}
 	}
-|	"SQLSTATE" optValue stringLit
+|	SQLStateText
 	{
-		$$ = &ast.ProcedureErrorState{
-			CodeStatus: $3,
-		}
+		$$ = $1.(*ast.ProcedureErrorState)
 	}
 
 optValue:
@@ -16352,6 +16396,7 @@ ProcedureIfstmt:
 ProcedureIf:
 	Expression "THEN" ProcedureProcStmt1s procedurceElseIfs
 	{
+		$1.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-3]):parser.startOffset(&yyS[yypt-2])]))
 		ifBlock := &ast.ProcedureIfBlock{
 			IfExpr:           $1.(ast.ExprNode),
 			ProcedureIfStmts: $3.([]ast.StmtNode),
@@ -16416,6 +16461,7 @@ SearchedWhenThenList:
 SimpleWhenThen:
 	"WHEN" Expression "THEN" ProcedureProcStmt1s
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.SimpleWhenThenStmt{
 			Expr:           $2.(ast.ExprNode),
 			ProcedureStmts: $4.([]ast.StmtNode),
@@ -16425,6 +16471,7 @@ SimpleWhenThen:
 SearchWhenThen:
 	"WHEN" Expression "THEN" ProcedureProcStmt1s
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.SearchWhenThenStmt{
 			Expr:           $2.(ast.ExprNode),
 			ProcedureStmts: $4.([]ast.StmtNode),
@@ -16443,6 +16490,7 @@ ElseCaseOpt:
 ProcedureSimpleCase:
 	"CASE" Expression SimpleWhenThenList ElseCaseOpt "END" "CASE"
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-4]):parser.startOffset(&yyS[yypt-3])]))
 		caseStmt := &ast.SimpleCaseStmt{
 			Condition: $2.(ast.ExprNode),
 			WhenCases: $3.([]*ast.SimpleWhenThenStmt),
@@ -16474,6 +16522,7 @@ ProcedureUnlabelLoopBlock:
 ProcedureUnlabelLoopStmt:
 	"WHILE" Expression "DO" ProcedureProcStmt1s "END" "WHILE"
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-4]):parser.startOffset(&yyS[yypt-3])]))
 		$$ = &ast.ProcedureWhileStmt{
 			Condition: $2.(ast.ExprNode),
 			Body:      $4.([]ast.StmtNode),
@@ -16481,9 +16530,16 @@ ProcedureUnlabelLoopStmt:
 	}
 |	"REPEAT" ProcedureProcStmt1s "UNTIL" Expression "END" "REPEAT"
 	{
+		$4.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.ProcedureRepeatStmt{
 			Body:      $2.([]ast.StmtNode),
 			Condition: $4.(ast.ExprNode),
+		}
+	}
+|	"LOOP" ProcedureProcStmt1s "END" "LOOP"
+	{
+		$$ = &ast.ProcedureLoopStmt{
+			Body: $2.([]ast.StmtNode),
 		}
 	}
 
@@ -16545,6 +16601,10 @@ ProcedureLeave:
 
 ProcedureProcStmt:
 	ProcedureStatementStmt
+	{
+		$1.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
+		$$ = $1
+	}
 |	ProcedureUnlabeledBlock
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
@@ -16556,6 +16616,67 @@ ProcedureProcStmt:
 |	ProcedurelabeledLoopStmt
 |	ProcedureIterate
 |	ProcedureLeave
+
+ProcedureCreateChistics:
+	{
+		$$ = []ast.ProcedureCharacteristic{}
+	}
+|	ProcedureCreateChistics ProcedureCreateChistic
+	{
+		l := $1.([]ast.ProcedureCharacteristic)
+		l = append(l, $2.(ast.ProcedureCharacteristic))
+		$$ = l
+	}
+
+ProcedureCreateChistic:
+	ProcedureChistic
+	{
+		$$ = $1
+	}
+
+ProcedureChistic:
+	"COMMENT" stringLit
+	{
+		$$ = &ast.ProcedureComment{
+			Type:    ast.PROCEDURCOMMENT,
+			Comment: $2,
+		}
+	}
+|	"SQL" "SECURITY" "DEFINER"
+	{
+		$$ = &ast.ProcedureSecurity{
+			Type:     ast.PROCEDURSECURITY,
+			Security: ast.SecurityDefiner,
+		}
+	}
+|	"SQL" "SECURITY" "INVOKER"
+	{
+		$$ = &ast.ProcedureSecurity{
+			Type:     ast.PROCEDURSECURITY,
+			Security: ast.SecurityInvoker,
+		}
+	}
+
+ProcedureAlterChistics:
+	{
+		$$ = []ast.ProcedureCharacteristic{}
+	}
+|	ProcedureAlterChistics ProcedureChistic
+	{
+		l := $1.([]ast.ProcedureCharacteristic)
+		l = append(l, $2.(ast.ProcedureCharacteristic))
+		$$ = l
+	}
+
+ProcedureName:
+	TableName
+
+RoutineDefiner:
+	ViewDefiner
+	{
+		parser.inProcedure = true
+		$$ = $1
+	}
 
 /********************************************************************************************
  *
@@ -16576,31 +16697,55 @@ ProcedureProcStmt:
  *  Valid SQL routine statement
  ********************************************************************************************/
 CreateProcedureStmt:
-	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureProcStmt
+	"CREATE" OrReplace ViewAlgorithm RoutineDefiner "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureCreateChistics ProcedureProcStmt
 	{
-		x := &ast.ProcedureInfo{
-			IfNotExists:    $3.(bool),
-			ProcedureName:  $4.(*ast.TableName),
-			ProcedureParam: $6.([]*ast.StoreParameter),
-			ProcedureBody:  $8,
+		if $2.(bool) {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
 		}
+		if $3.(ast.ViewAlgorithm) != ast.AlgorithmUndefined {
+			v := $3.(ast.ViewAlgorithm)
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:     $6.(bool),
+			Definer:         $4.(*auth.UserIdentity),
+			ProcedureName:   $7.(*ast.TableName),
+			ProcedureParam:  $9.([]*ast.StoreParameter),
+			Characteristics: $11.([]ast.ProcedureCharacteristic),
+			ProcedureBody:   $12,
+		}
+		parser.inProcedure = false
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $8
+		originStmt := $12
 		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
-		startOffset = parser.startOffset(&yyS[yypt-3])
+		startOffset = parser.startOffset(&yyS[yypt-4])
 		if parser.src[startOffset] == '(' {
 			startOffset++
 		}
-		endOffset := parser.startOffset(&yyS[yypt-1])
+		endOffset := parser.startOffset(&yyS[yypt-2])
 		x.ProcedureParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
 		$$ = x
+	}
+
+/********************************************************************************************
+*  ALTER PROCEDURE sp_name [characteristic ...]
+********************************************************************************************/
+AlterProcedureStmt:
+	"ALTER" "PROCEDURE" ProcedureName ProcedureAlterChistics
+	{
+		$$ = &ast.AlterProcedureStmt{
+			ProcedureName:   $3.(*ast.TableName),
+			Characteristics: $4.([]ast.ProcedureCharacteristic),
+		}
 	}
 
 /********************************************************************************************
 *  DROP PROCEDURE  [IF EXISTS] sp_name
 ********************************************************************************************/
 DropProcedureStmt:
-	"DROP" "PROCEDURE" IfExists TableName
+	"DROP" "PROCEDURE" IfExists ProcedureName
 	{
 		$$ = &ast.DropProcedureStmt{
 			IfExists:      $3.(bool),

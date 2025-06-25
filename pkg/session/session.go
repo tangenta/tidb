@@ -1390,6 +1390,10 @@ var _ sqlexec.SQLParser = &session{}
 func (s *session) ParseSQL(ctx context.Context, sql string, params ...parser.ParseParam) ([]ast.StmtNode, []error, error) {
 	defer tracing.StartRegion(ctx, "ParseSQL").End()
 	p := parserutil.GetParser()
+	if s.sessionVars.GetCallProcedure() {
+		p.InProcedure()
+		defer p.OutProcedure()
+	}
 	defer func() {
 		parserutil.DestroyParser(p)
 	}()
