@@ -104,8 +104,9 @@ const (
 	// TableEngines is the string constant of infoschema table.
 	TableEngines = "ENGINES"
 	// TableViews is the string constant of infoschema table.
-	TableViews          = "VIEWS"
-	tableRoutines       = "ROUTINES"
+	TableViews = "VIEWS"
+	// TableRoutines is the string constant of infoschema table.
+	TableRoutines       = "ROUTINES"
 	tableParameters     = "PARAMETERS"
 	tableEvents         = "EVENTS"
 	tableOptimizerTrace = "OPTIMIZER_TRACE"
@@ -270,7 +271,7 @@ var tableIDMap = map[string]int64{
 	tableColumnPrivileges: autoid.InformationSchemaDBID + 21,
 	TableEngines:          autoid.InformationSchemaDBID + 22,
 	TableViews:            autoid.InformationSchemaDBID + 23,
-	tableRoutines:         autoid.InformationSchemaDBID + 24,
+	TableRoutines:         autoid.InformationSchemaDBID + 24,
 	tableParameters:       autoid.InformationSchemaDBID + 25,
 	tableEvents:           autoid.InformationSchemaDBID + 26,
 	// Removed, see https://github.com/pingcap/tidb/issues/9154
@@ -2446,7 +2447,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableColumnPrivileges:                   tableColumnPrivilegesCols,
 	TableEngines:                            tableEnginesCols,
 	TableViews:                              tableViewsCols,
-	tableRoutines:                           tableRoutinesCols,
+	TableRoutines:                           tableRoutinesCols,
 	tableParameters:                         tableParametersCols,
 	tableEvents:                             tableEventsCols,
 	tableOptimizerTrace:                     tableOptimizerTraceCols,

@@ -1258,6 +1258,12 @@ const (
 	// TiDBCircuitBreakerPDMetadataErrorRateThresholdPct variable is used to set percent of errors to trip the circuit breaker for get region calls to PD
 	// https://github.com/tikv/rfcs/blob/master/text/0115-circuit-breaker.md
 	TiDBCircuitBreakerPDMetadataErrorRateThresholdPct = "tidb_cb_pd_metadata_error_rate_threshold_pct"
+	// TiDBEnableProcedure if enable store procedure
+	TiDBEnableProcedure = "tidb_enable_procedure"
+	// TiDBEnableProcedureAstCache indicates whether tidb need enable or disable ast cache.
+	TiDBEnableProcedureAstCache = "tidb_enable_sp_ast_cache"
+	//TiDBProcedureLastErrorSQL procedure last hander SQL warning/error.
+	TiDBProcedureLastErrorSQL = "sp_last_error_sql"
 )
 
 // TiDB intentional limits, can be raised in the future.
@@ -1653,6 +1659,8 @@ const (
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
 	DefTiDBAccelerateUserCreationUpdate               = false
+	DefStoredProgramCacheSize                         = 256
+	DefTiDBEnableProcedure                            = false
 )
 
 // Process global variables.
@@ -1780,6 +1788,10 @@ var (
 	SchemaCacheSize              = atomic.NewUint64(DefTiDBSchemaCacheSize)
 	SchemaCacheSizeOriginText    = atomic.NewString(strconv.Itoa(DefTiDBSchemaCacheSize))
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
+	StoredProgramCacheSize       = atomic.NewInt64(DefStoredProgramCacheSize)
+	TiDBEnableSPAstReuse         = atomic.NewBool(true)
+	TiDBEnableProcedureValue     = atomic.NewBool(DefTiDBEnableProcedure)
+	AutomaticSPPrivileges        = atomic.NewBool(true)
 )
 
 func serverMemoryLimitDefaultValue() string {

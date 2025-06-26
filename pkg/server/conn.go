@@ -91,6 +91,7 @@ import (
 	server_metrics "github.com/pingcap/tidb/pkg/server/metrics"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
@@ -1559,6 +1560,8 @@ func (cc *clientConn) writeError(ctx context.Context, e error) error {
 		switch y := e.(type) {
 		case *terror.Error:
 			m = terror.ToSQLError(y)
+		case *terror.TiDBError:
+			m = &mysql.SQLError{Code: uint16(y.MYSQLERRNO), Message: y.MESSAGETEXT, State: y.SQLSTATE}
 		default:
 			m = mysql.NewErrf(mysql.ErrUnknown, "%s", nil, e.Error())
 		}
@@ -1719,6 +1722,7 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	prevWarns := sc.GetWarnings()
 	var stmts []ast.StmtNode
 	cc.ctx.GetSessionVars().SetAlloc(cc.chunkAlloc)
+	cc.ctx.SetSessionExec(&ClientConn{cc})
 	if stmts, err = cc.ctx.Parse(ctx, sql); err != nil {
 		cc.onExtensionSQLParseFailed(sql, err)
 		return err
@@ -2619,6 +2623,60 @@ func (cc *clientConn) handleRefresh(ctx context.Context, subCommand byte) error 
 }
 
 var _ fmt.Stringer = getLastStmtInConn{}
+
+var _ sessionctx.SessionExec = &ClientConn{}
+
+// ClientConn procedure implementation interface
+type ClientConn struct {
+	*clientConn
+}
+
+// MultiHanldeNodeWithResult execute sql with result.
+func (cc *ClientConn) MultiHanldeNodeWithResult(ctx context.Context, stmt ast.StmtNode) (err error) {
+	sessVars := cc.ctx.GetSessionVars()
+	var retryable bool
+	// expiredTaskID is the task ID of the previous statement. When executing a stmt,
+	// the StmtCtx will be reinit and the TaskID will change. We can compare the StmtCtx.TaskID
+	// with the previous one to determine whether StmtCtx has been inited for the current stmt.
+	sc := sessVars.StmtCtx
+	prevWarns := sc.GetWarnings()
+	warns := sc.GetWarnings()
+	parserWarns := warns[len(prevWarns):]
+	retryable, err = cc.handleStmt(ctx, stmt, parserWarns, false)
+	if err != nil {
+		action, txnErr := sessiontxn.GetTxnManager(&cc.ctx).OnStmtErrorForNextAction(ctx, sessiontxn.StmtErrAfterQuery, err)
+		if txnErr != nil {
+			err = txnErr
+			return err
+		}
+
+		if retryable && action == sessiontxn.StmtActionRetryReady {
+			cc.ctx.GetSessionVars().RetryInfo.Retrying = true
+			_, err = cc.handleStmt(ctx, stmt, parserWarns, false)
+			cc.ctx.GetSessionVars().RetryInfo.Retrying = false
+			if err != nil {
+				return err
+			}
+		}
+		if !retryable || !errors.ErrorEqual(err, storeerr.ErrTiFlashServerTimeout) {
+			return err
+		}
+		_, allowTiFlashFallback := cc.ctx.GetSessionVars().AllowFallbackToTiKV[kv.TiFlash]
+		if !allowTiFlashFallback {
+			return err
+		}
+		// When the TiFlash server seems down, we append a warning to remind the user to check the status of the TiFlash
+		// server and fallback to TiKV.
+		warns := append(parserWarns, stmtctx.SQLWarn{Level: contextutil.WarnLevelError, Err: err})
+		delete(cc.ctx.GetSessionVars().IsolationReadEngines, kv.TiFlash)
+		_, err = cc.handleStmt(ctx, stmt, warns, false)
+		cc.ctx.GetSessionVars().IsolationReadEngines[kv.TiFlash] = struct{}{}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 type getLastStmtInConn struct {
 	*clientConn

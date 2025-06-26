@@ -227,6 +227,10 @@ const (
 	PasswordHistoryTable = "password_history"
 	// WorkloadSchema is the name of workload repository database.
 	WorkloadSchema = "workload_schema"
+	// Routines is the table in system db contains procedure.
+	Routines = "routines"
+	// ProcsPriv is the table in system db contains routine privilege.
+	ProcsPriv = "procs_priv"
 )
 
 // MySQL type maximum length.

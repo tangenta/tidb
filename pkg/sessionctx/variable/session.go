@@ -34,6 +34,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/executor/join/joinversion"
 	"github.com/pingcap/tidb/pkg/kv"
@@ -75,6 +76,7 @@ import (
 	"github.com/tikv/client-go/v2/util"
 	"github.com/twmb/murmur3"
 	atomic2 "go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 var (
@@ -1652,6 +1654,9 @@ type SessionVars struct {
 		num    int
 	}
 
+	// procedureContext indicates current procedure environment variable
+	procedureContext sessionProcedureContext
+
 	// FastCheckTable is used to control whether fast check table is enabled.
 	FastCheckTable bool
 
@@ -1727,6 +1732,13 @@ type SessionVars struct {
 
 	// BulkDMLEnabled indicates whether to enable bulk DML in pipelined mode.
 	BulkDMLEnabled bool
+
+	// database name +"."+procedure_name as key , *RoutineCacahe as value.
+	ProcedurePlanCache map[string]any
+	// LastProcedureErrorStr is used to save last handler command.
+	LastProcedureErrorStr string
+	// MaxSpRecursionDepth indicates how many recursions are allowed in a stored procedure
+	MaxSpRecursionDepth int
 }
 
 // GetSessionVars implements the `SessionVarsProvider` interface.
@@ -2251,6 +2263,11 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		GroupConcatMaxLen:             vardef.DefGroupConcatMaxLen,
 		EnableRedactLog:               vardef.DefTiDBRedactLog,
 		EnableWindowFunction:          vardef.DefEnableWindowFunction,
+		inCallProcedure: struct {
+			inCall bool
+			num    int
+		}{inCall: false, num: 0},
+		ProcedurePlanCache: make(map[string]any),
 	}
 	vars.status.Store(uint32(mysql.ServerStatusAutocommit))
 	vars.StmtCtx.ResourceGroupName = resourcegroup.DefaultResourceGroupName
@@ -4063,4 +4080,48 @@ func (s *SessionVars) PessimisticLockEligible() bool {
 		return true
 	}
 	return false
+}
+
+// SetInCallProcedure set in procedure flag.
+func (s *SessionVars) SetInCallProcedure() {
+	if !s.inCallProcedure.inCall {
+		s.inCallProcedure.inCall = true
+	}
+	s.inCallProcedure.num++
+}
+
+// InOtherCall in other procedure.
+func (s *SessionVars) InOtherCall() bool {
+	return s.inCallProcedure.num >= 2
+}
+
+// OutCallProcedure out of procedure.
+func (s *SessionVars) OutCallProcedure(clearStmtCtx bool) {
+	s.inCallProcedure.num--
+	if s.inCallProcedure.num <= 0 {
+		s.inCallProcedure.inCall = false
+		//clear all BackupStmtCtxes
+		if clearStmtCtx {
+			for i := range s.procedureContext.BackupStmtCtx {
+				s.procedureContext.BackupStmtCtx[i] = nil
+			}
+			s.procedureContext.BackupStmtCtx = s.procedureContext.BackupStmtCtx[:0]
+		}
+		if len(s.procedureContext.BackupStmtCtx) != 0 {
+			log.Error("procedure unclear backup stmtctx", zap.String("SQL", s.StmtCtx.OriginalSQL))
+		}
+		if len(s.ProcedurePlanCache) > int(vardef.StoredProgramCacheSize.Load()) {
+			for k := range s.ProcedurePlanCache {
+				delete(s.ProcedurePlanCache, k)
+			}
+		}
+	}
+}
+
+// GetProcedureContext get procedure environment variables.
+func (s *SessionVars) GetProcedureContext() *sessionProcedureContext {
+	if !s.inCallProcedure.inCall {
+		return nil
+	}
+	return &s.procedureContext
 }
