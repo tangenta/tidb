@@ -1020,6 +1020,11 @@ const (
 
 	// TiDBAccelerateUserCreationUpdate decides whether tidb will load & update the whole user's data in-memory.
 	TiDBAccelerateUserCreationUpdate = "tidb_accelerate_user_creation_update"
+
+	// TiDBEnableUDVSubstitute indicates whether to enable user defined variable substitute.
+	TiDBEnableUDVSubstitute = "tidb_enable_udv_substitute"
+	// TiDBEnableSPParamSubstitute indicates whether to enable stored procedure parameter substitute.
+	TiDBEnableSPParamSubstitute = "tidb_enable_sp_param_substitute"
 )
 
 // TiDB vars that have only global scope
@@ -1661,6 +1666,8 @@ const (
 	DefTiDBAccelerateUserCreationUpdate               = false
 	DefStoredProgramCacheSize                         = 256
 	DefTiDBEnableProcedure                            = false
+	DefTiDBEnableUDVSubstitute                        = false
+	DefTiDBEnableSPParamSubstitute                    = false
 )
 
 // Process global variables.

@@ -3536,6 +3536,14 @@ var defaultSysVars = []*SysVar{
 		vardef.TiDBEnableSPAstReuse.Store(TiDBOptOn(val))
 		return nil
 	}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableUDVSubstitute, Value: BoolToOnOff(vardef.DefTiDBEnableUDVSubstitute), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
+		s.EnableUDVSubstitute = TiDBOptOn(val)
+		return nil
+	}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableSPParamSubstitute, Value: BoolToOnOff(vardef.DefTiDBEnableSPParamSubstitute), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
+		s.EnableSPParamSubstitute = TiDBOptOn(val)
+		return nil
+	}},
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBIdleTransactionTimeout, Value: strconv.Itoa(vardef.DefTiDBIdleTransactionTimeout), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: secondsPerYear,
 		SetSession: func(s *SessionVars, val string) error {
 			s.IdleTransactionTimeout = tidbOptPositiveInt32(val, vardef.DefTiDBIdleTransactionTimeout)

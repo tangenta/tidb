@@ -149,6 +149,10 @@ func Preprocess(ctx context.Context, sctx sessionctx.Context, node *resolve.Node
 	if len(v.varsReadonly) > 0 {
 		sctx.GetSessionVars().StmtCtx.SetSkipPlanCache("read-only variables are used")
 	}
+	// Check if user defined variables can be replaced by constant values
+	if sctx.GetSessionVars().EnableUDVSubstitute {
+		extractReplaceAbleVarsForUDV(sctx, v.userDefVarsTypeGet, v.userDefVarsTypeSet)
+	}
 	return errors.Trace(v.err)
 }
 
@@ -250,8 +254,10 @@ type preprocessor struct {
 	// values that may be returned
 	*PreprocessorReturn
 	err error
-
-	resolveCtx *resolve.Context
+	// for udv push down
+	userDefVarsTypeGet map[string]struct{}
+	userDefVarsTypeSet map[string]struct{}
+	resolveCtx         *resolve.Context
 }
 
 func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
@@ -449,6 +455,9 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 			if !ok {
 				p.varsReadonly[node.Name] = struct{}{}
 			}
+		}
+		if p.sctx.GetSessionVars().EnableUDVSubstitute {
+			p.checkUserDefineVariable(node)
 		}
 	case *ast.Constraint:
 		// Used in ALTER TABLE or CREATE TABLE
@@ -2205,4 +2214,37 @@ func getTableRefsAlias(tableRefs ast.ResultSetNode) *ast.CIStr {
 
 func (*aliasChecker) Leave(in ast.Node) (ast.Node, bool) {
 	return in, true
+}
+
+func (p *preprocessor) checkUserDefineVariable(node *ast.VariableExpr) {
+	if node.IsGlobal || node.IsSystem {
+		return
+	}
+	if node.Value == nil {
+		if p.userDefVarsTypeGet == nil {
+			p.userDefVarsTypeGet = make(map[string]struct{})
+		}
+		p.userDefVarsTypeGet[strings.ToLower(node.Name)] = struct{}{}
+	} else {
+		if p.userDefVarsTypeSet == nil {
+			p.userDefVarsTypeSet = make(map[string]struct{})
+		}
+		p.userDefVarsTypeSet[strings.ToLower(node.Name)] = struct{}{}
+	}
+}
+
+func extractReplaceAbleVarsForUDV(sctx sessionctx.Context, getV, setV map[string]struct{}) {
+	// always substitute ReplaceAbleUserDefVars
+	if len(getV) == 0 || len(setV) == 0 {
+		sctx.GetSessionVars().ReplaceAbleUserDefVars = getV
+		return
+	}
+
+	replaceAbleVars := make(map[string]struct{})
+	for colName := range getV {
+		if _, ok := setV[colName]; !ok {
+			replaceAbleVars[colName] = struct{}{}
+		}
+	}
+	sctx.GetSessionVars().ReplaceAbleUserDefVars = replaceAbleVars
 }
