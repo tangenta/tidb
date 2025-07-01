@@ -1540,17 +1540,19 @@ var (
 		upgradeToVer246,
 		upgradeToVer247,
 	}
+)
 
+var (
 	bootstrapEEVersion = []func(sessiontypes.Session, int64){
 		//upgradeEEToVer2,
 		//upgradeEEToVer3,
-		upgradeEEToVer4,
-		upgradeEEToVer5,
-		upgradeEEToVer6,
-		upgradeEEToVer7,
-		upgradeEEToVer8,
-		upgradeEEToVer9,
-		upgradeEEToVer10,
+		upgradeToEEVer4,
+		upgradeToEEVer5,
+		upgradeToEEVer6,
+		upgradeToEEVer7,
+		upgradeToEEVer8,
+		upgradeToEEVer9,
+		upgradeToEEVer10,
 	}
 )
 
@@ -3584,49 +3586,49 @@ func upgradeToVer247(s sessiontypes.Session, ver int64) {
 	doReentrantDDL(s, "ALTER TABLE mysql.stats_meta ADD COLUMN last_stats_histograms_version bigint unsigned DEFAULT NULL", infoschema.ErrColumnExists)
 }
 
-func upgradeEEToVer4(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer4(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion4 {
 		return
 	}
 	doReentrantDDL(s, CreateRouteTable)
 }
 
-func upgradeEEToVer5(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer5(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion5 {
 		return
 	}
 	// TODO
 }
 
-func upgradeEEToVer6(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer6(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion6 {
 		return
 	}
 	doReentrantDDL(s, CreateProcsPriv)
 }
 
-func upgradeEEToVer7(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer7(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion7 {
 		return
 	}
 	// TODO
 }
 
-func upgradeEEToVer8(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer8(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion8 {
 		return
 	}
 	// TODO
 }
 
-func upgradeEEToVer9(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer9(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion9 {
 		return
 	}
 	// TODO
 }
 
-func upgradeEEToVer10(s sessiontypes.Session, ver int64) {
+func upgradeToEEVer10(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion10 {
 		return
 	}
@@ -3904,7 +3906,7 @@ func doDMLWorks(s sessiontypes.Session) {
 	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES(%?, %?, "Bootstrap version. Do not delete.")`,
 		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion,
 	)
-	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, "TiDB Enterprise Edition bootstrap version.") `,
+	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, "TiDB Enterprise Edition bootstrap version. Do not delete.") `,
 		mysql.SystemDB, mysql.TiDBTable, tidbEnterpriseEditionServerVersionVar, currentEEBootstrapVersion,
 	)
 	writeSystemTZ(s)

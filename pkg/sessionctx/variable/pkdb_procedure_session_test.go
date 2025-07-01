@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/types"
@@ -100,7 +101,7 @@ func TestProcedureFlag(t *testing.T) {
 	// The cache is not full and the cache is not cleared
 	require.Equal(t, len(v.ProcedurePlanCache), 3)
 
-	variable.StoredProgramCacheSize.Store(5)
+	vardef.StoredProgramCacheSize.Store(5)
 	v.SetInCallProcedure() // 1
 	require.True(t, v.GetCallProcedure())
 	v.ProcedurePlanCache["4"] = 1

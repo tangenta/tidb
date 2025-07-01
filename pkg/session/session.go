@@ -3483,8 +3483,9 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 		return nil, err
 	}
 	ver := getStoreBootstrapVersionWithCache(store)
-	if ver < currentBootstrapVersion {
-		runInBootstrapSession(store, ver)
+	verEE := getStoreEEBootstrapVersionWithCache(store)
+	if ver < currentBootstrapVersion || verEE < currentEEBootstrapVersion {
+		runInBootstrapSession(store, ver, verEE)
 	} else {
 		err = InitMDLVariable(store)
 		if err != nil {
@@ -3693,21 +3694,21 @@ func GetDomain(store kv.Storage) (*domain.Domain, error) {
 	return domap.Get(store)
 }
 
-func getStartMode(ver int64) ddl.StartMode {
-	if ver == notBootstrapped {
+func getStartMode(ver, verEE int64) ddl.StartMode {
+	if ver >= currentBootstrapVersion && verEE >= currentEEBootstrapVersion {
+		return ddl.Normal
+	} else if ver == notBootstrapped && verEE == notBootstrapped {
 		return ddl.Bootstrap
-	} else if ver < currentBootstrapVersion {
-		return ddl.Upgrade
 	}
-	return ddl.Normal
+	return ddl.Upgrade
 }
 
 // runInBootstrapSession create a special session for bootstrap to run.
 // If no bootstrap and storage is remote, we must use a little lease time to
 // bootstrap quickly, after bootstrapped, we will reset the lease time.
 // TODO: Using a bootstrap tool for doing this may be better later.
-func runInBootstrapSession(store kv.Storage, ver int64) {
-	startMode := getStartMode(ver)
+func runInBootstrapSession(store kv.Storage, ver, verEE int64) {
+	startMode := getStartMode(ver, verEE)
 
 	if startMode == ddl.Upgrade {
 		// TODO at this time domain must not be created, else it will register server
@@ -3719,7 +3720,8 @@ func runInBootstrapSession(store kv.Storage, ver int64) {
 		}
 		defer releaseFn()
 		currVer := mustGetStoreBootstrapVersion(store)
-		if currVer >= currentBootstrapVersion {
+		currEEVersion := mustGetStoreEEBootstrapVersion(store)
+		if currVer >= currentBootstrapVersion && currEEVersion >= currentEEBootstrapVersion {
 			// It is already bootstrapped/upgraded by another TiDB instance, but
 			// we still need to go through the following domain Start/Close code
 			// right now as we have already initialized it when creating the session,
@@ -3908,6 +3910,22 @@ func mustGetStoreBootstrapVersion(store kv.Storage) int64 {
 	return ver
 }
 
+func mustGetStoreEEBootstrapVersion(store kv.Storage) int64 {
+	var ver int64
+	// check in kv store
+	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnBootstrap)
+	err := kv.RunInNewTxn(ctx, store, false, func(_ context.Context, txn kv.Transaction) error {
+		var err error
+		t := meta.NewMutator(txn)
+		ver, err = t.GetBootstrapEEVersion()
+		return err
+	})
+	if err != nil {
+		logutil.BgLogger().Fatal("get store bootstrap version failed", zap.Error(err))
+	}
+	return ver
+}
+
 func getStoreBootstrapVersionWithCache(store kv.Storage) int64 {
 	// check in memory
 	_, ok := store.GetOption(StoreBootstrappedKey)
@@ -3926,6 +3944,24 @@ func getStoreBootstrapVersionWithCache(store kv.Storage) int64 {
 	return ver
 }
 
+func getStoreEEBootstrapVersionWithCache(store kv.Storage) int64 {
+	// check in memory
+	_, ok := store.GetOption(StoreEEBootstrappedKey)
+	if ok {
+		return currentEEBootstrapVersion
+	}
+
+	ver := mustGetStoreEEBootstrapVersion(store)
+
+	if ver > notBootstrapped {
+		// here mean memory is not ok, but other server has already finished it
+		store.SetOption(StoreEEBootstrappedKey, true)
+	}
+
+	modifyBootstrapVersionForTest(ver)
+	return ver
+}
+
 func finishBootstrap(store kv.Storage) {
 	store.SetOption(StoreBootstrappedKey, true)
 
@@ -3933,6 +3969,10 @@ func finishBootstrap(store kv.Storage) {
 	err := kv.RunInNewTxn(ctx, store, true, func(_ context.Context, txn kv.Transaction) error {
 		t := meta.NewMutator(txn)
 		err := t.FinishBootstrap(currentBootstrapVersion)
+		if err != nil {
+			return err
+		}
+		err = t.FinishBootstrapEE(currentEEBootstrapVersion)
 		return err
 	})
 	if err != nil {
