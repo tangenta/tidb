@@ -1352,24 +1352,24 @@ func TestTiDBServerMemoryLimitUpgradeTo651_2(t *testing.T) {
 
 func TestTiDBEnterpriseEditionUpgrade(t *testing.T) {
 	// rollback ee version
-	store, _ := CreateStoreAndBootstrap(t)
+	store, dom := CreateStoreAndBootstrap(t)
 	defer func() { require.NoError(t, store.Close()) }()
 	ver0 := 0
 	seV0 := CreateSessionAndSetID(t, store)
 	txn, err := store.Begin()
 	require.NoError(t, err)
-	m := meta.NewMeta(txn)
+	m := meta.NewMutator(txn)
 	err = m.FinishBootstrapEE(int64(ver0))
 	require.NoError(t, err)
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	MustExec(t, seV0, "delete from mysql.tidb  where variable_name='tidb_enterprise_edition_server_version'")
 	MustExec(t, seV0, "commit")
-	unsetStoreBootstrapped(store.UUID())
 	// update ee version
 	ver, err := getBootstrapEEVersion(seV0)
 	require.NoError(t, err)
 	require.Equal(t, int64(ver0), ver)
+	dom.Close()
 	domCurVer, err := BootstrapSession(store)
 	require.NoError(t, err)
 	defer domCurVer.Close()
