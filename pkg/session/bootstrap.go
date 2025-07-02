@@ -827,6 +827,13 @@ const (
 		PRIMARY KEY (Host,User,Db,Routine_name,Routine_type) /*T![clustered_index] CLUSTERED */,
 		KEY Grantor (Grantor)
 	  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='Procedure privileges'`
+	// CreateWhitelistTableSQL is the SQL statement to create whitelist table.
+	CreateWhitelistTableSQL = `CREATE TABLE IF NOT EXISTS mysql.whitelist (
+		id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		name VARCHAR(16) UNIQUE,
+		list TEXT,
+		action ENUM('accept','reject')
+	);`
 )
 
 // CreateTimers is a table to store all timers for tidb
@@ -3618,7 +3625,8 @@ func upgradeToEEVer8(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion8 {
 		return
 	}
-	// TODO
+	// create whitelist table
+	doReentrantDDL(s, CreateWhitelistTableSQL)
 }
 
 func upgradeToEEVer9(s sessiontypes.Session, ver int64) {
@@ -3813,6 +3821,8 @@ func doDDLWorks(s sessiontypes.Session) {
 	mustExecute(s, CreateIndexAdvisorTable)
 	// create mysql.tidb_kernel_options
 	mustExecute(s, CreateKernelOptionsTable)
+	// Create whitelist table
+	mustExecute(s, CreateWhitelistTableSQL)
 	// create mysql.tidb_workload_values
 	mustExecute(s, CreateTiDBWorkloadValuesTable)
 }

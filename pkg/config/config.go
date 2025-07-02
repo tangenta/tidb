@@ -605,6 +605,8 @@ type Security struct {
 	AuthTokenRefreshInterval string `toml:"auth-token-refresh-interval" json:"auth-token-refresh-interval"`
 	// Disconnect directly when the password is expired
 	DisconnectOnExpiredPassword bool `toml:"disconnect-on-expired-password" json:"disconnect-on-expired-password"`
+	// EnableWhiteListPlugin indicate whether enable whitelist plugin
+	EnableWhiteListPlugin bool `toml:"enable-whitelist-plugin" json:"enable-whitelist-plugin"`
 }
 
 // The ErrConfigValidationFailed error is used so that external callers can do a type assertion
@@ -1045,6 +1047,7 @@ var defaultConf = Config{
 		AuthTokenJWKS:               "",
 		AuthTokenRefreshInterval:    DefAuthTokenRefreshInterval.String(),
 		DisconnectOnExpiredPassword: true,
+		EnableWhiteListPlugin:       false,
 	},
 	DeprecateIntegerDisplayWidth:         true,
 	EnableEnumLengthLimit:                true,

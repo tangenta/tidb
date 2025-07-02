@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/mppcoordmanager"
 	"github.com/pingcap/tidb/pkg/extension"
 	_ "github.com/pingcap/tidb/pkg/extension/_import"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/whitelist"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
@@ -289,6 +290,7 @@ func main() {
 	}
 	setupLog()
 	memory.InitMemoryHook()
+	whitelist.Register()
 	setupExtensions()
 	setupStmtSummary()
 
