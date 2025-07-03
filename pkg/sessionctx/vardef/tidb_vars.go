@@ -1263,6 +1263,9 @@ const (
 	// TiDBCircuitBreakerPDMetadataErrorRateThresholdPct variable is used to set percent of errors to trip the circuit breaker for get region calls to PD
 	// https://github.com/tikv/rfcs/blob/master/text/0115-circuit-breaker.md
 	TiDBCircuitBreakerPDMetadataErrorRateThresholdPct = "tidb_cb_pd_metadata_error_rate_threshold_pct"
+	// TiDBEnableTSValidation controls whether to enable the timestamp validation in client-go.
+	TiDBEnableTSValidation = "tidb_enable_ts_validation"
+
 	// TiDBEnableProcedure if enable store procedure
 	TiDBEnableProcedure = "tidb_enable_procedure"
 	// TiDBEnableProcedureAstCache indicates whether tidb need enable or disable ast cache.
@@ -1664,6 +1667,7 @@ const (
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
 	DefTiDBAccelerateUserCreationUpdate               = false
+	DefTiDBEnableTSValidation                         = true
 	DefStoredProgramCacheSize                         = 256
 	DefTiDBEnableProcedure                            = false
 	DefTiDBEnableUDVSubstitute                        = false

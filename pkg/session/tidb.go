@@ -54,6 +54,7 @@ import (
 // StoreBootstrappedKey is used by store.G/SetOption to store related bootstrap context for kv.Storage.
 const StoreBootstrappedKey = "bootstrap"
 
+// StoreEEBootstrappedKey is used in ee version.
 const StoreEEBootstrappedKey = "ee_bootstrap"
 
 type domainMap struct {
