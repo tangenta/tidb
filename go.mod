@@ -80,7 +80,7 @@ require (
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef
 	github.com/nishanths/predeclared v0.2.2
-	github.com/openai/openai-go v1.7.0
+	github.com/openai/openai-go v0.1.0-alpha.59
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/otiai10/copy v1.14.0

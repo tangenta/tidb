@@ -2377,6 +2377,7 @@ func (b *executorBuilder) buildMemTable(v *plannercore.PhysicalMemTable) exec.Ex
 			strings.ToLower(infoschema.TableMemoryUsageOpsHistory),
 			strings.ToLower(infoschema.ClusterTableMemoryUsage),
 			strings.ToLower(infoschema.ClusterTableMemoryUsageOpsHistory),
+			strings.ToLower(infoschema.TableUserLoginHistory),
 			strings.ToLower(infoschema.TableResourceGroups),
 			strings.ToLower(infoschema.TableRunawayWatches),
 			strings.ToLower(infoschema.TableCheckConstraints),

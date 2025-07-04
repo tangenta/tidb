@@ -1265,7 +1265,10 @@ const (
 	TiDBCircuitBreakerPDMetadataErrorRateThresholdPct = "tidb_cb_pd_metadata_error_rate_threshold_pct"
 	// TiDBEnableTSValidation controls whether to enable the timestamp validation in client-go.
 	TiDBEnableTSValidation = "tidb_enable_ts_validation"
-
+	// TiDBEnableLoginHistory indicates whether tidb need enable the login-history.
+	TiDBEnableLoginHistory = "tidb_enable_login_history"
+	// TiDBLoginHistoryRetainDuration indicates the duration of retaining the record in mysql.log_history.
+	TiDBLoginHistoryRetainDuration = "tidb_login_history_retain_duration"
 	// TiDBEnableProcedure if enable store procedure
 	TiDBEnableProcedure = "tidb_enable_procedure"
 	// TiDBEnableProcedureAstCache indicates whether tidb need enable or disable ast cache.
@@ -1668,6 +1671,8 @@ const (
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
 	DefTiDBAccelerateUserCreationUpdate               = false
 	DefTiDBEnableTSValidation                         = true
+	DefTiDBEnableLoginHistory                         = false
+	DefTiDBLoginHistoryRetainDuration                 = time.Hour * 24 * 90 // default 90 days.
 	DefStoredProgramCacheSize                         = 256
 	DefTiDBEnableProcedure                            = false
 	DefTiDBEnableUDVSubstitute                        = false
@@ -1798,6 +1803,8 @@ var (
 
 	SchemaCacheSize              = atomic.NewUint64(DefTiDBSchemaCacheSize)
 	SchemaCacheSizeOriginText    = atomic.NewString(strconv.Itoa(DefTiDBSchemaCacheSize))
+	EnableLoginHistory           = atomic.NewBool(DefTiDBEnableLoginHistory)
+	LoginHistoryRetainDuration   = atomic.NewDuration(DefTiDBLoginHistoryRetainDuration)
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
 	StoredProgramCacheSize       = atomic.NewInt64(DefStoredProgramCacheSize)
 	TiDBEnableSPAstReuse         = atomic.NewBool(true)

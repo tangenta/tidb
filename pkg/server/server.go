@@ -676,6 +676,17 @@ func (s *Server) onConn(conn *clientConn) {
 	ctx := logutil.WithConnID(context.Background(), conn.connectionID)
 
 	if err := conn.handshake(ctx); err != nil {
+		if checkHost, _, err1 := conn.PeerHost("NO", false); err1 == nil {
+			if tidbContext := conn.getCtx(); tidbContext != nil {
+				if authUser, err1 := tidbContext.MatchIdentity(ctx, conn.user, checkHost); err1 == nil {
+					if insertErr := insertLoginHistoryTable(ctx, conn, authUser, err); insertErr != nil {
+						terror.Log(conn.Close())
+						return
+					}
+				}
+			}
+		}
+
 		conn.onExtensionConnEvent(extension.ConnHandshakeRejected, err)
 		if plugin.IsEnable(plugin.Audit) && conn.getCtx() != nil {
 			conn.getCtx().GetSessionVars().ConnectionInfo = conn.connectInfo()
@@ -732,6 +743,12 @@ func (s *Server) onConn(conn *clientConn) {
 	sessionVars := conn.ctx.GetSessionVars()
 	sessionVars.ConnectionInfo = conn.connectInfo()
 	conn.onExtensionConnEvent(extension.ConnHandshakeAccepted, nil)
+
+	if err := insertLoginHistoryTable(ctx, conn, sessionVars.User, nil); err != nil {
+		logutil.Logger(ctx).Warn("faild to insert login record", zap.Error(err))
+		return
+	}
+
 	err = plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
 		authPlugin := plugin.DeclareAuditManifest(p.Manifest)
 		if authPlugin.OnConnectionEvent != nil {

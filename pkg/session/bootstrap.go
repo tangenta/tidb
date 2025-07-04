@@ -546,6 +546,21 @@ const (
 		current_job_status varchar(64) DEFAULT NULL,
   		current_job_status_update_time timestamp NULL DEFAULT NULL);`
 
+	// CreateLoginHistory is a table about login history in mysql.
+	CreateLoginHistory = `CREATE TABLE  IF NOT EXISTS mysql.login_history (
+		Time datetime(6) NOT NULL,
+		Server_host char(255)  NOT NULL DEFAULT '',
+		User char(32)  NOT NULL DEFAULT '',
+		User_host char(255) NOT NULL DEFAULT '',
+		DB char(64)  NOT NULL DEFAULT '',
+		Connection_id BIGINT(21) UNSIGNED NOT NULL DEFAULT 0,
+		Result char(16)  NOT NULL DEFAULT '',
+		Client_host char(255)  NOT NULL DEFAULT '',
+		Detail text,
+		INDEX idx_user(User, User_host, Result, Time),
+		INDEX idx_time(Time)
+		); `
+
 	// CreateTTLTask is a table about parallel ttl tasks
 	CreateTTLTask = `CREATE TABLE IF NOT EXISTS mysql.tidb_ttl_task (
 		job_id varchar(64) NOT NULL,
@@ -900,11 +915,12 @@ func getFunctionName(f func(sessiontypes.Session, int64)) (string, error) {
 
 const (
 	// init Enterprise Edition version.
-	// // eeversion2 add Max_user_connections into mysql.user.
-	// eeversion2 = 2
-	// // eeversion3 add mysql.login_history
-	// eeversion3 = 3
-	// eeversion4 add the table INFORMATION_SCHEMA.routines
+	eeversion1 = 1
+	// eeversion2 add Max_user_connections into mysql.user.
+	eeversion2 = 2
+	// eeversion3 add mysql.login_history
+	eeversion3 = 3
+	// eeversions4 add the table INFORMATION_SCHEMA.routines
 	eeversion4 = 4
 	// eeversion5 add label security tables.
 	eeversion5 = 5
@@ -918,6 +934,10 @@ const (
 	eeversion9 = 9
 	// eeversion10 alters table mysql.login_history MODIFY column Time DATETIME(6).
 	eeversion10 = 10
+	// eeversion11 alters table mysql.login_history renaming column `host` to `server_host` and adding a new column `user_host`
+	eeversion11 = 11
+	// eeversion12 solves the problem that the `mysql.login_history` table is created by open-source TiDB
+	eeversion12 = 12
 )
 
 const (
@@ -1363,7 +1383,7 @@ var currentBootstrapVersion int64 = version247
 
 // currentEEBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // please make sure this is the largest version
-var currentEEBootstrapVersion int64 = eeversion10
+var currentEEBootstrapVersion int64 = eeversion12
 
 // DDL owner key's expired time is ManagerSessionTTL seconds, we should wait the time and give more time to have a chance to finish it.
 var internalSQLTimeout = owner.ManagerSessionTTL + 15
@@ -1551,8 +1571,8 @@ var (
 
 var (
 	bootstrapEEVersion = []func(sessiontypes.Session, int64){
-		//upgradeEEToVer2,
-		//upgradeEEToVer3,
+		upgradeEEToVer2,
+		upgradeEEToVer3,
 		upgradeToEEVer4,
 		upgradeToEEVer5,
 		upgradeToEEVer6,
@@ -1560,6 +1580,8 @@ var (
 		upgradeToEEVer8,
 		upgradeToEEVer9,
 		upgradeToEEVer10,
+		upgradeToEEVer11,
+		upgradeToEEVer12,
 	}
 )
 
@@ -3591,6 +3613,21 @@ func upgradeToVer247(s sessiontypes.Session, ver int64) {
 		return
 	}
 	doReentrantDDL(s, "ALTER TABLE mysql.stats_meta ADD COLUMN last_stats_histograms_version bigint unsigned DEFAULT NULL", infoschema.ErrColumnExists)
+
+}
+
+func upgradeEEToVer2(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion2 {
+		return
+	}
+	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN IF NOT EXISTS `Max_user_connections` SMALLINT UNSIGNED DEFAULT 0 AFTER `Password_lifetime`")
+}
+
+func upgradeEEToVer3(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion3 {
+		return
+	}
+	doReentrantDDL(s, CreateLoginHistory)
 }
 
 func upgradeToEEVer4(s sessiontypes.Session, ver int64) {
@@ -3640,7 +3677,32 @@ func upgradeToEEVer10(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion10 {
 		return
 	}
-	// TODO
+
+	mustExecute(s, "ALTER TABLE mysql.login_history MODIFY COLUMN Time DATETIME(6) NOT NULL")
+	mustExecute(s, "ALTER TABLE mysql.login_history ADD INDEX IF NOT EXISTS idx_time(Time)")
+	if ver >= eeversion6 {
+		mustExecute(s, "ALTER TABLE mysql.login_history REMOVE TTL")
+	}
+}
+
+func upgradeToEEVer11(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion11 {
+		return
+	}
+
+	mustExecute(s, "ALTER TABLE `mysql`.`login_history` CHANGE COLUMN IF EXISTS Host Server_host char(255) NOT NULL DEFAULT ''")
+	mustExecute(s, "ALTER TABLE `mysql`.`login_history` ADD COLUMN IF NOT EXISTS `User_host` char(255) NOT NULL DEFAULT '' AFTER `User`")
+	mustExecute(s, "ALTER TABLE `mysql`.`login_history` DROP INDEX IF EXISTS idx_session_id")
+	mustExecute(s, "ALTER TABLE `mysql`.`login_history` DROP INDEX IF EXISTS idx_user")
+	mustExecute(s, "ALTER TABLE `mysql`.`login_history` ADD INDEX IF NOT EXISTS idx_user(User, User_host, Result, Time)")
+}
+
+func upgradeToEEVer12(s sessiontypes.Session, ver int64) {
+	if ver >= eeversion12 {
+		return
+	}
+
+	doReentrantDDL(s, "ALTER TABLE `mysql`.`user` MODIFY COLUMN Max_user_connections INT UNSIGNED NOT NULL DEFAULT 0")
 }
 
 // initGlobalVariableIfNotExists initialize a global variable with specific val if it does not exist.
@@ -3821,6 +3883,8 @@ func doDDLWorks(s sessiontypes.Session) {
 	mustExecute(s, CreateIndexAdvisorTable)
 	// create mysql.tidb_kernel_options
 	mustExecute(s, CreateKernelOptionsTable)
+	// Create login_history table
+	mustExecute(s, CreateLoginHistory)
 	// Create whitelist table
 	mustExecute(s, CreateWhitelistTableSQL)
 	// create mysql.tidb_workload_values

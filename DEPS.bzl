@@ -5711,13 +5711,13 @@ def go_deps():
         name = "com_github_openai_openai_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/openai/openai-go",
-        sha256 = "560e1a16093d2fd87e7da0c79bfeaa1c0d464d88272e0344351767e5efda78b3",
-        strip_prefix = "github.com/openai/openai-go@v1.7.0",
+        sha256 = "a44472c58973413a5b2ca7880d028e19cc98e7a99405693f679f464ac4c570c3",
+        strip_prefix = "github.com/openai/openai-go@v0.1.0-alpha.59",
         urls = [
-            "http://bazel-cache.pingcap.net:8080/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v1.7.0.zip",
-            "http://ats.apps.svc/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v1.7.0.zip",
-            "https://cache.hawkingrei.com/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v1.7.0.zip",
-            "https://storage.googleapis.com/pingcapmirror/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v1.7.0.zip",
+            "http://bazel-cache.pingcap.net:8080/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v0.1.0-alpha.59.zip",
+            "http://ats.apps.svc/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v0.1.0-alpha.59.zip",
+            "https://cache.hawkingrei.com/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v0.1.0-alpha.59.zip",
+            "https://storage.googleapis.com/pingcapmirror/gomod/github.com/openai/openai-go/com_github_openai_openai_go-v0.1.0-alpha.59.zip",
         ],
     )
     go_repository(

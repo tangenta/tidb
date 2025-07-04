@@ -209,7 +209,11 @@ type clientConn struct {
 }
 
 type userResourceLimits struct {
+	resetUtime  uint64
 	connections int
+	connPerHour int32
+	updates     int32
+	questions   int32
 }
 
 func (cc *clientConn) getCtx() *TiDBContext {

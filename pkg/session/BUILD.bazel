@@ -146,6 +146,7 @@ go_test(
         "bench_test.go",
         "bootstrap_test.go",
         "main_test.go",
+        "pkdb_bootstrap_test.go",
         "session_test.go",
         "tidb_test.go",
     ],

@@ -319,7 +319,7 @@ go_library(
 
 go_test(
     name = "executor_test",
-    timeout = "moderate",
+    timeout = "short",
     srcs = [
         "adapter_test.go",
         "analyze_test.go",
@@ -362,6 +362,7 @@ go_test(
         "partition_table_test.go",
         "pkdb_error_related_test.go",
         "pkdb_procedure_test.go",
+        "pkdb_user_login_history_test.go",
         "pkg_test.go",
         "point_get_test.go",
         "prepared_test.go",
