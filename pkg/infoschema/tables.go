@@ -353,7 +353,8 @@ var tableIDMap = map[string]int64{
 	ClusterTableTiDBStatementsStats:      autoid.InformationSchemaDBID + 99,
 	TableKeyspaceMeta:                    autoid.InformationSchemaDBID + 100,
 
-	TableUserLoginHistory: autoid.PingKaiTablesBaseID + 1,
+	// PingKaiDB tables.
+	TableUserLoginHistory: autoid.InformationSchemaDBID + 5000,
 }
 
 // columnInfo represents the basic column information of all kinds of INFORMATION_SCHEMA tables

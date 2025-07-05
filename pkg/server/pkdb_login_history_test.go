@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	servererr "github.com/pingcap/tidb/pkg/server/err"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
@@ -88,7 +88,7 @@ func TestInsertLoginHistoryTable(t *testing.T) {
 	require.Len(t, rows, 0)
 
 	// variable.EnableLoginHistory = true
-	variable.EnableLoginHistory.Store(true)
+	vardef.EnableLoginHistory.Store(true)
 	err = insertLoginHistoryTable(context.TODO(), c.clientConn, user, nil)
 	require.Nil(t, err, "connection_id: %v", c.clientConn.connectionID)
 	rows = tk.MustQuery("SELECT * FROM mysql.login_history").Rows()

@@ -207,15 +207,19 @@ func (b *Ballast) GenHTTPHandler() func(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-var defaultHTTPRouter = mux.NewRouter()
+var httpHandlers = make(map[string]func(http.ResponseWriter, *http.Request))
 
 // RegisterHTTPHandleFunc uses to register http handler for other component.
 func RegisterHTTPHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) {
-	defaultHTTPRouter.HandleFunc(path, f)
+	httpHandlers[path] = f
 }
 
 func (s *Server) startHTTPServer() {
-	router := defaultHTTPRouter
+	router := mux.NewRouter()
+
+	for path, f := range httpHandlers {
+		router.HandleFunc(path, f)
+	}
 
 	router.HandleFunc("/status", s.handleStatus).Name("Status")
 	// HTTP path for prometheus.

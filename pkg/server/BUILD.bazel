@@ -186,7 +186,6 @@ go_test(
         "//pkg/server/internal/util",
         "//pkg/session",
         "//pkg/sessionctx/vardef",
-        "//pkg/sessionctx/variable",
         "//pkg/sessiontxn",
         "//pkg/store/mockstore",
         "//pkg/store/mockstore/unistore",

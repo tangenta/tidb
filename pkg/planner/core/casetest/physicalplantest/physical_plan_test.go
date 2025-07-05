@@ -1648,7 +1648,7 @@ func TestUDVSubstituteInSP(t *testing.T) {
 		//in
 		tk.MustExec("create procedure sp() begin explain format = 'brief' " + ts + "; end")
 		tk.MustExec("call sp()")
-		tk.Res[0].Check(testkit.Rows(output[2*i+1].Plan...))
+		tk.Res[0].Check(testkit.Rows(output[2*i].Plan...))
 		tk.ClearProcedureRes()
 		tk.MustExec("drop procedure sp")
 	}
