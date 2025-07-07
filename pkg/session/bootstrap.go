@@ -842,12 +842,28 @@ const (
 		PRIMARY KEY (Host,User,Db,Routine_name,Routine_type) /*T![clustered_index] CLUSTERED */,
 		KEY Grantor (Grantor)
 	  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='Procedure privileges'`
+
 	// CreateWhitelistTableSQL is the SQL statement to create whitelist table.
 	CreateWhitelistTableSQL = `CREATE TABLE IF NOT EXISTS mysql.whitelist (
 		id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		name VARCHAR(16) UNIQUE,
 		list TEXT,
 		action ENUM('accept','reject')
+	);`
+
+	// CreateFilterTableSQL creates audit log filter table
+	CreateFilterTableSQL = `CREATE TABLE IF NOT EXISTS mysql.audit_log_filters (
+		filter_name VARCHAR(128),
+		content     TEXT,
+		PRIMARY KEY(filter_name)
+	);`
+
+	// CreateFilterRuleTableSQL creates audit log filter rule table
+	CreateFilterRuleTableSQL = `CREATE TABLE IF NOT EXISTS mysql.audit_log_filter_rules (
+		user        VARCHAR(64),
+		filter_name VARCHAR(128),
+		enabled     TINYINT(4),
+		PRIMARY KEY(filter_name, user)
 	);`
 )
 
@@ -3655,7 +3671,11 @@ func upgradeToEEVer7(s sessiontypes.Session, ver int64) {
 	if ver >= eeversion7 {
 		return
 	}
-	// TODO
+	// FIXME: move the creating of audit tables to the `audit` package
+	//     The switching of concurrent ddl framework should be considered,
+	//     since the place for ddl job (queue or table) is different.
+	doReentrantDDL(s, CreateFilterTableSQL)
+	doReentrantDDL(s, CreateFilterRuleTableSQL)
 }
 
 func upgradeToEEVer8(s sessiontypes.Session, ver int64) {
@@ -3889,6 +3909,9 @@ func doDDLWorks(s sessiontypes.Session) {
 	mustExecute(s, CreateWhitelistTableSQL)
 	// create mysql.tidb_workload_values
 	mustExecute(s, CreateTiDBWorkloadValuesTable)
+	// Create audit tables
+	mustExecute(s, CreateFilterTableSQL)
+	mustExecute(s, CreateFilterRuleTableSQL)
 }
 
 // doBootstrapSQLFile executes SQL commands in a file as the last stage of bootstrap.

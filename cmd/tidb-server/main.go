@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/mppcoordmanager"
 	"github.com/pingcap/tidb/pkg/extension"
 	_ "github.com/pingcap/tidb/pkg/extension/_import"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
 	"github.com/pingcap/tidb/pkg/extension/enterprise/whitelist"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
@@ -289,6 +290,8 @@ func main() {
 		checkTempStorageQuota()
 	}
 	setupLog()
+	// register extensions
+	audit.Register()
 	memory.InitMemoryHook()
 	whitelist.Register()
 	setupExtensions()

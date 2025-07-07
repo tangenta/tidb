@@ -101,6 +101,7 @@ var IllegalFunctions4GeneratedColumns = map[string]struct{}{
 	ast.CurrentUser:          {},
 	ast.Curtime:              {},
 	ast.Database:             {},
+	ast.DataOperationAudit:   {},
 	ast.FoundRows:            {},
 	ast.GetLock:              {},
 	ast.GetProcedureVar:      {},

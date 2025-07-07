@@ -20,6 +20,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +57,11 @@ const StoreBootstrappedKey = "bootstrap"
 
 // StoreEEBootstrappedKey is used in ee version.
 const StoreEEBootstrappedKey = "ee_bootstrap"
+
+const (
+	// commitFailAuditLogStr is the audit log string template of commit failure.
+	commitFailAuditLogStr = "[Commit failed error info: %s]"
+)
 
 type domainMap struct {
 	mu      syncutil.Mutex
@@ -279,6 +285,7 @@ func autoCommitAfterStmt(ctx context.Context, se *session, meetsErr error, sql s
 
 	if !sessVars.InTxn() {
 		if err := se.CommitTxn(ctx); err != nil {
+			sessionctx.OnExtensionSecurity(se, fmt.Sprintf(commitFailAuditLogStr, err.Error()), se.GetSessionVars().StmtCtx)
 			if _, ok := sql.(*executor.ExecStmt).StmtNode.(*ast.CommitStmt); ok {
 				err = errors.Annotatef(err, "previous statement: %s", se.GetSessionVars().PrevStmt)
 			}

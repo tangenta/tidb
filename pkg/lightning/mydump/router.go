@@ -198,6 +198,8 @@ var defaultFileRouteRules = []*config.FileRouteRule{
 	// source file pattern, matches files like '{schema}.{table}.0001.{sql|csv}[.{compress}]'
 	{Pattern: `(?i)^(?:[^/]*/)*([^/.]+)\.(.*?)(?:\.([0-9]+))?\.(sql|csv|parquet)(?:\.(\w+))?$`,
 		Schema: "$1", Table: "$2", Type: "$4", Key: "$3", Compression: "$5", Unescape: true},
+	// ignore accessmeta file
+	{Pattern: `accessmeta`, Type: "ignore"},
 }
 
 // FileRouter provides some operations to apply a rule to route file path to target schema/table

@@ -127,6 +127,11 @@ func (s *builtinLastInsertIDWithIDSig) SafeToShareAcrossSession() bool {
 }
 
 // SafeToShareAcrossSession implements BuiltinFunc.SafeToShareAcrossSession.
+func (s *builtinDataOpAuditSig) SafeToShareAcrossSession() bool {
+	return false
+}
+
+// SafeToShareAcrossSession implements BuiltinFunc.SafeToShareAcrossSession.
 func (s *builtinTiDBIsDDLOwnerSig) SafeToShareAcrossSession() bool {
 	return false
 }
