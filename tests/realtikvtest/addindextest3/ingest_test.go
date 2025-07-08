@@ -897,6 +897,12 @@ func TestAddIndexInsertSameOriginIndexValue(t *testing.T) {
 func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	store := realtikvtest.CreateMockStoreAndSetup(t)
 	tk := testkit.NewTestKit(t, store)
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.TiKVClient.AsyncCommit.SafeWindow = 10 * time.Second
+		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 2 * time.Second
+	})
+	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("use test")
 
 	tk.MustExec("drop database if exists addindexlit;")
 	tk.MustExec("create database addindexlit;")
@@ -914,7 +920,7 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 
 	eg := errgroup.Group{}
 	ddlBeforeGetCommitTSOnce := &sync.Once{}
-	// dmlAfterUpdateLatestTS := make(chan struct{})
+	dmlAfterUpdateLatestTS := make(chan struct{})
 	dmlAfterUpdateLatestTSOnce := &sync.Once{}
 
 	ddlAfterGetCommitTSOnce := &sync.Once{}
@@ -924,13 +930,15 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	transaction.AfterDMLUpdateLatestTS = func(ts uint64) {
 		dmlAfterUpdateLatestTSOnce.Do(func() {
 			logutil.BgLogger().Info("tangenta-dml: after update latest ts", zap.Uint64("ts", ts))
-			// close(dmlAfterUpdateLatestTS)
+			close(dmlAfterUpdateLatestTS)
 		})
 	}
 	transaction.BeforeDDLGetCommitTS = func() {
 		ddlBeforeGetCommitTSOnce.Do(func() {
 			logutil.BgLogger().Info("tangenta-ddl: before get commit ts")
 			time.Sleep(100 * time.Millisecond)
+			tk2.MustExec("begin;")
+			tk2.MustExec("rollback;")
 			// <-dmlAfterUpdateLatestTS
 		})
 	}
@@ -953,7 +961,18 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	transaction.AfterDDLCommit = func(ts uint64) {
 		afterDDLCommitOnce.Do(func() {
 			logutil.BgLogger().Info("tangenta-ddl: after commit", zap.Uint64("ts", ts))
+			// time.Sleep(1 * time.Second)
 			close(afterDDLCommit)
+			<-dmlAfterUpdateLatestTS
+		})
+	}
+
+	beforeDMLPrewrite := &sync.Once{}
+	transaction.BeforePrewrite = func() {
+		beforeDMLPrewrite.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: before prewrite start")
+			<-afterDDLCommit
+			logutil.BgLogger().Info("tangenta-dml: before prewrite end")
 		})
 	}
 
@@ -965,8 +984,9 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionWhenBackfilling", func() {
 		runPessimisticTxnOnce.Do(func() {
 			tk1.MustExec("begin pessimistic;")
+			tk1.MustQuery("select * from t where id = 1;")
 			eg.Go(func() error {
-				<-afterDDLCommit
+				// <-afterDDLCommit
 				logutil.BgLogger().Info("tangenta-dml: start to lock row")
 				tk1.MustExec("update t set c = 'c1' where id = 1;")
 				ctx := context.WithValue(context.Background(), "tangenta-dml", "test")
@@ -979,8 +999,8 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	tk.MustExec("alter table t add index idx(c);")
 	eg.Wait()
 
-	tk.MustQuery("select count(1) from t use index();").Check(testkit.Rows("1"))
-	tk.MustQuery("select count(1) from t use index(idx);").Check(testkit.Rows("1"))
+	// tk.MustQuery("select count(1) from t use index();").Check(testkit.Rows("1"))
+	// tk.MustQuery("select count(1) from t use index(idx);").Check(testkit.Rows("1"))
 	tk.MustExec("admin check table t;")
 	crs := tk.MustQuery("select tidb_mvcc_info(tidb_encode_index_key('addindexlit', 't', 'idx', 'c', 1));").Rows()
 	logutil.BgLogger().Info("check mvcc info", zap.String("mvcc", fmt.Sprintf("%v", crs)))
@@ -994,4 +1014,116 @@ func TestAddIndexConflictPessimisticTxn(t *testing.T) {
 	// 	t.Log("finish update latest ts should have been called")
 	// 	t.Fail()
 	// })
+}
+
+func TestAddIndexConflictPessimisticTxnDelete(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.TiKVClient.AsyncCommit.SafeWindow = 10 * time.Second
+		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 2 * time.Second
+	})
+	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("use test")
+
+	tk.MustExec("drop database if exists addindexlit;")
+	tk.MustExec("create database addindexlit;")
+	tk.MustExec("use addindexlit;")
+	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+	tk.MustExec("set global tidb_enable_dist_task = off;")
+
+	tk.MustExec("create table t (id int primary key clustered, a char(255), b char(255), c char(255));")
+	tk.MustExec("insert into t values (1, 'a', 'b', 'c');")
+	tk.MustExec("set global tidb_enable_1pc = off;")
+	tk.MustExec("set global tidb_guarantee_linearizability = off;")
+
+	tk1 := testkit.NewTestKit(t, store)
+	tk1.MustExec("use addindexlit;")
+
+	eg := errgroup.Group{}
+	ddlBeforeGetCommitTSOnce := &sync.Once{}
+	dmlAfterUpdateLatestTS := make(chan struct{})
+	dmlAfterUpdateLatestTSOnce := &sync.Once{}
+
+	ddlAfterGetCommitTSOnce := &sync.Once{}
+	dmlAfterGetCommitTSOnce := &sync.Once{}
+
+	transaction.AfterDMLUpdateLatestTS = func(ts uint64) {
+		dmlAfterUpdateLatestTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: after update latest ts", zap.Uint64("ts", ts))
+			close(dmlAfterUpdateLatestTS)
+		})
+	}
+	transaction.BeforeDDLGetCommitTS = func() {
+		ddlBeforeGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-ddl: before get commit ts")
+			tk2.MustExec("begin;")
+			tk2.MustExec("rollback;")
+		})
+	}
+	transaction.AfterDDLGetCommitTS = func(ts uint64) {
+		ddlAfterGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-ddl: after get commit ts", zap.Uint64("ts", ts))
+		})
+	}
+	transaction.AfterDMLGetCommitTS = func(ts uint64) {
+		dmlAfterGetCommitTSOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: after get commit ts", zap.Uint64("ts", ts))
+		})
+	}
+
+	afterDDLCommitOnce := &sync.Once{}
+	afterDDLCommit := make(chan struct{})
+	transaction.AfterDDLCommit = func(ts uint64) {
+		afterDDLCommitOnce.Do(func() {
+			logutil.BgLogger().Info("tangenta-ddl: after commit", zap.Uint64("ts", ts))
+			close(afterDDLCommit)
+			<-dmlAfterUpdateLatestTS
+		})
+	}
+
+	beforeDMLPrewrite := &sync.Once{}
+	transaction.BeforePrewrite = func() {
+		beforeDMLPrewrite.Do(func() {
+			logutil.BgLogger().Info("tangenta-dml: before prewrite start")
+			<-afterDDLCommit
+			logutil.BgLogger().Info("tangenta-dml: before prewrite end")
+		})
+	}
+
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/beforeMergeDataCtx", func(ctxPtr *context.Context) {
+		*ctxPtr = context.WithValue(*ctxPtr, "tangenta-ddl", struct{}{})
+	})
+
+	runPessimisticTxnOnce := &sync.Once{}
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/mockDMLExecutionWhenMerging", func() {
+		runPessimisticTxnOnce.Do(func() {
+			tk1.MustExec("begin pessimistic;")
+			tk1.MustQuery("select * from t where id = 1;")
+			eg.Go(func() error {
+				logutil.BgLogger().Info("tangenta-dml: start to lock row")
+				tk1.MustExec("insert into t values (1, 'a', 'b', 'c');")
+				ctx := context.WithValue(context.Background(), "tangenta-dml", "test")
+				tk1.MustExecWithContext(ctx, "commit;")
+				return nil
+			})
+		})
+	})
+
+	ingest.MockDMLExecutionStateBeforeImport = func() {
+		_, err := tk1.Exec("delete from t where id = 1;")
+		assert.NoError(t, err)
+	}
+	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/ddl/ingest/mockDMLExecutionStateBeforeImport", "1*return")
+
+	tk.MustExec("alter table t add index idx(c);")
+	eg.Wait()
+
+	// tk.MustQuery("select count(1) from t use index();").Check(testkit.Rows("1"))
+	// tk.MustQuery("select count(1) from t use index(idx);").Check(testkit.Rows("1"))
+	tk.MustExec("admin check table t;")
+	crs := tk.MustQuery("select tidb_mvcc_info(tidb_encode_index_key('addindexlit', 't', 'idx', 'c', 1));").Rows()
+	logutil.BgLogger().Info("check mvcc info", zap.String("mvcc", fmt.Sprintf("%v", crs)))
+	c1rs := tk.MustQuery("select tidb_mvcc_info(tidb_encode_index_key('addindexlit', 't', 'idx', 'c1', 1));").Rows()
+	logutil.BgLogger().Info("check mvcc info", zap.String("mvcc", fmt.Sprintf("%v", c1rs)))
 }

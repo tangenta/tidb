@@ -180,7 +180,7 @@ func (w *mergeIndexWorker) BackfillData(taskRange reorgBackfillTask) (taskCtx ba
 
 	oprStartTime := time.Now()
 	ctx := kv.WithInternalSourceAndTaskType(context.Background(), w.jobContext.ddlJobSourceType(), kvutil.ExplicitTypeDDL)
-
+	failpoint.InjectCall("beforeMergeDataCtx", &ctx)
 	errInTxn = kv.RunInNewTxn(ctx, w.ddlCtx.store, true, func(_ context.Context, txn kv.Transaction) error {
 		taskCtx.addedCount = 0
 		taskCtx.scanCount = 0
@@ -214,10 +214,12 @@ func (w *mergeIndexWorker) BackfillData(taskRange reorgBackfillTask) (taskCtx ba
 
 			// Lock the corresponding row keys so that it doesn't modify the index KVs
 			// that are changing by a pessimistic transaction.
-			rowKey := tablecodec.EncodeRecordKey(w.table.RecordPrefix(), idxRecord.handle)
-			err := txn.LockKeys(context.Background(), new(kv.LockCtx), rowKey)
-			if err != nil {
-				return errors.Trace(err)
+			if !idxRecord.delete {
+				rowKey := tablecodec.EncodeRecordKey(w.table.RecordPrefix(), idxRecord.handle)
+				err := txn.LockKeys(context.Background(), new(kv.LockCtx), rowKey)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 
 			if idxRecord.delete {
@@ -233,6 +235,7 @@ func (w *mergeIndexWorker) BackfillData(taskRange reorgBackfillTask) (taskCtx ba
 				return err
 			}
 			taskCtx.addedCount++
+			failpoint.InjectCall("mockDMLExecutionWhenMerging")
 		}
 		return nil
 	})
