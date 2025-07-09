@@ -607,6 +607,12 @@ type Security struct {
 	DisconnectOnExpiredPassword bool `toml:"disconnect-on-expired-password" json:"disconnect-on-expired-password"`
 	// EnableWhiteListPlugin indicate whether enable whitelist plugin
 	EnableWhiteListPlugin bool `toml:"enable-whitelist-plugin" json:"enable-whitelist-plugin"`
+	// TLCP config
+	TLCPCA      string `toml:"tlcp-ca" json:"tlcp-ca"`
+	TLCPSigCert string `toml:"tlcp-sig-cert" json:"tlcp-sig-cert"`
+	TLCPSigKey  string `toml:"tlcp-sig-key" json:"tlcp-sig-key"`
+	TLCPEncCert string `toml:"tlcp-enc-cert" json:"tlcp-enc-cert"`
+	TLCPEncKey  string `toml:"tlcp-enc-key" json:"tlcp-enc-key"`
 }
 
 // The ErrConfigValidationFailed error is used so that external callers can do a type assertion
