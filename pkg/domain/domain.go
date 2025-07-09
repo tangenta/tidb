@@ -1077,7 +1077,7 @@ func (e *securityEventInfo) RedactedText() string { return "" }
 
 func auditServerInfos(last, cur []infoschema.ServerInfo, label string) string {
 	var res []string
-	lastMap, curMap := make(map[string]interface{}, len(last)), make(map[string]interface{}, len(cur))
+	lastMap, curMap := make(map[string]any, len(last)), make(map[string]any, len(cur))
 	// add
 	for _, s := range last {
 		lastMap[s.Address] = nil

@@ -2318,3 +2318,37 @@ func TestSetRoutinePrivileges(t *testing.T) {
 	require.NoError(t, tk.Session().Auth(&auth.UserIdentity{Username: "test", Hostname: "127.0.0.1", AuthHostname: "%"}, nil, nil, nil))
 	tk.MustGetErrCode(`grant execute on procedure test.t2 to test3`, 8121)
 }
+
+func TestUserGroupMisc(t *testing.T) {
+	store := createStoreAndPrepareDB(t)
+	rootTk := testkit.NewTestKit(t, store)
+	rootTk.MustExec(`CREATE GROUP analyticsteam`)
+	rootTk.MustExec("GRANT SELECT ON test.* TO analyticsteam")
+	rootTk.MustExec("CREATE USER jennifer")
+	rootTk.MustExec("GRANT analyticsteam TO jennifer")
+	defer rootTk.MustExec("DROP USER jennifer")
+	defer rootTk.MustExec("DROP GROUP analyticsteam")
+
+	tk := testkit.NewTestKit(t, store)
+	activeRoles := make([]*auth.RoleIdentity, 0)
+	require.NoError(t, tk.Session().Auth(&auth.UserIdentity{Username: "jennifer", Hostname: "%"}, nil, nil, nil))
+	pc := privilege.GetPrivilegeManager(tk.Session())
+	require.False(t, pc.RequestVerification(activeRoles, "test", "", "", mysql.SelectPriv))
+
+	tk.MustQuery("SHOW GRANTS").Sort().Check(testkit.Rows(`GRANT 'analyticsteam'@'%' TO 'jennifer'@'%'`, `GRANT USAGE ON *.* TO 'jennifer'@'%'`))
+
+	tk.QueryToErr("SHOW TABLES in test")
+	tk.MustExec("SET GROUP analyticsteam")
+	res := tk.MustQuery("SHOW GRANTS")
+	require.Equal(t, len(res.Rows()), 3)
+	tk.MustExec("SHOW TABLES in test")
+
+	rootTk.MustExec("CREATE USER michael")
+	rootTk.MustExec("GRANT analyticsteam TO michael")
+	tk2 := testkit.NewTestKit(t, store)
+	require.NoError(t, tk2.Session().Auth(&auth.UserIdentity{Username: "michael", Hostname: "%"}, nil, nil, nil))
+	err := tk2.QueryToErr("SHOW TABLES in test")
+	require.Error(t, err)
+	res = tk2.MustQuery("SHOW GRANTS")
+	require.Equal(t, len(res.Rows()), 2)
+}

@@ -11006,7 +11006,7 @@ SetStmt:
 	}
 
 SetRoleStmt:
-	"SET" "ROLE" SetRoleOpt
+	"SET" RoleOrGroup SetRoleOpt
 	{
 		$$ = $3.(*ast.SetRoleStmt)
 	}
