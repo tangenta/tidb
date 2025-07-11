@@ -2557,6 +2557,7 @@ const (
 	AdminUnsetBDRRole
 	AdminAlterDDLJob
 	AdminWorkloadRepoCreate
+	AdminLBACEnable
 )
 
 // HandleRange represents a range where handle value >= Begin and < End.

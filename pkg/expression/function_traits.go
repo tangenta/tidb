@@ -109,6 +109,7 @@ var IllegalFunctions4GeneratedColumns = map[string]struct{}{
 	ast.IsFreeLock:           {},
 	ast.IsUsedLock:           {},
 	ast.JSONMerge:            {},
+	ast.LabelAceesible:       {},
 	ast.LastInsertId:         {},
 	ast.LoadFile:             {},
 	ast.LocalTime:            {},
@@ -296,4 +297,5 @@ var booleanFunctions = map[string]struct{}{
 	ast.JSONSchemaValid:    {},
 	ast.JSONValid:          {},
 	ast.RegexpLike:         {},
+	ast.LabelAceesible:     {},
 }

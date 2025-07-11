@@ -1030,6 +1030,9 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) exec.Executor {
 		SelectExec:                selectExec,
 		rowLen:                    v.RowLen,
 		ignoreErr:                 v.IgnoreErr,
+		PolicyName:                v.PolicyName,
+		UserLabel:                 v.UserLabel,
+		LabelColumn:               v.LabelColumn,
 	}
 	err := ivs.initInsertColumns()
 	if err != nil {
@@ -2835,6 +2838,9 @@ func (b *executorBuilder) buildUpdate(v *plannercore.Update) exec.Executor {
 		tblColPosInfos:            v.TblColPosInfos,
 		assignFlag:                assignFlag,
 		IgnoreError:               v.IgnoreError,
+		PolicyName:                v.PolicyName,
+		LabelColumn:               v.LabelColumn,
+		UserLabel:                 v.UserLabel,
 	}
 	updateExec.fkChecks, b.err = buildTblID2FKCheckExecs(b.ctx, tblID2table, v.FKChecks)
 	if b.err != nil {

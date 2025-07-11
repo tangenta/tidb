@@ -488,6 +488,7 @@ import (
 	last                     "LAST"
 	lastval                  "LASTVAL"
 	lastBackup               "LAST_BACKUP"
+	lbac                     "LBAC"
 	less                     "LESS"
 	level                    "LEVEL"
 	list                     "LIST"
@@ -7173,6 +7174,7 @@ UnReservedKeyword:
 |	"REPLICA"
 |	"LOCATION"
 |	"LABELS"
+|	"LBAC"
 |	"LOGS"
 |	"HOSTS"
 |	"AGAINST"
@@ -11558,6 +11560,12 @@ AdminStmt:
 		$$ = &ast.AdminStmt{
 			Tp:      ast.AdminPluginEnable,
 			Plugins: $4.([]string),
+		}
+	}
+|	"ADMIN" "LBAC" "ENABLE"
+	{
+		$$ = &ast.AdminStmt{
+			Tp: ast.AdminLBACEnable,
 		}
 	}
 |	"ADMIN" "PLUGINS" "DISABLE" PluginNameList

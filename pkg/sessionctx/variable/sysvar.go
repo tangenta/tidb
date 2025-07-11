@@ -3531,6 +3531,12 @@ var defaultSysVars = []*SysVar{
 			vardef.SchemaVersionCacheLimit.Store(TidbOptInt64(val, vardef.DefTiDBSchemaVersionCacheLimit))
 			return nil
 		}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableLabelSecurity, Value: BoolToOnOff(vardef.DefTiDBEnableLabelSecurity), Type: vardef.TypeBool, SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+		vardef.EnableLabelSecurity.Store(TiDBOptOn(val))
+		return nil
+	}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+		return BoolToOnOff(vardef.EnableLabelSecurity.Load()), nil
+	}},
 	{Scope: vardef.ScopeGlobal, Name: vardef.SPCacheSize, Value: strconv.Itoa(vardef.DefStoredProgramCacheSize), Type: vardef.TypeInt, MinValue: 0, MaxValue: 524288, SetGlobal: func(ctx context.Context, vars *SessionVars, s string) error {
 		val, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {

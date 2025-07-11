@@ -98,7 +98,7 @@ func testConcurrentlyInitStats(t *testing.T) {
 			require.False(t, col.IsAllEvicted())
 		}
 	}
-	require.Equal(t, int64(140), handle.GetMaxTidRecordForTest())
+	require.Equal(t, int64(148), handle.GetMaxTidRecordForTest())
 }
 
 func TestDropTableBeforeConcurrentlyInitStats(t *testing.T) {

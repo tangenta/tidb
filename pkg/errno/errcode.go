@@ -1166,6 +1166,8 @@ const (
 	// Reserved for future use.
 	ErrEngineAttributeInvalidFormat = 8270
 	ErrStorageClassInvalidSpec      = 8271
+	// Enterprise Edit errors.
+	ErrRowLabelUnAccessible = 8800
 
 	// TiKV/PD/TiFlash errors.
 	ErrPDServerTimeout           = 9001
