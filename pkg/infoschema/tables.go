@@ -225,6 +225,8 @@ const (
 	TableTiDBPlanCache = "TIDB_PLAN_CACHE"
 	// TableKeyspaceMeta is the table to show the keyspace meta.
 	TableKeyspaceMeta = "KEYSPACE_META"
+	// TableRegions is the string constant of table regions.
+	TableRegions = "TABLE_REGIONS"
 )
 
 const (
@@ -359,6 +361,7 @@ var tableIDMap = map[string]int64{
 	TableUserLoginHistory: autoid.InformationSchemaDBID + 5000,
 	ClusterTableAuditLog:  autoid.InformationSchemaDBID + 5001,
 	TableAuditLog:         autoid.InformationSchemaDBID + 5002,
+	TableRegions:          autoid.InformationSchemaDBID + 5003,
 }
 
 // columnInfo represents the basic column information of all kinds of INFORMATION_SCHEMA tables
@@ -1124,6 +1127,20 @@ var TableTiKVRegionStatusCols = []columnInfo{
 	{name: "APPROXIMATE_KEYS", tp: mysql.TypeLonglong, size: 21},
 	{name: "REPLICATIONSTATUS_STATE", tp: mysql.TypeVarchar, size: 64},
 	{name: "REPLICATIONSTATUS_STATEID", tp: mysql.TypeLonglong, size: 21},
+}
+
+// TableRegionsCols is table regions mem table columns.
+var TableRegionsCols = []columnInfo{
+	{name: "REGION_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "START_KEY", tp: mysql.TypeBlob, size: types.UnspecifiedLength},
+	{name: "END_KEY", tp: mysql.TypeBlob, size: types.UnspecifiedLength},
+	{name: "TABLE_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "DB_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "TABLE_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "PARTITION_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "PARTITION_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "APPROXIMATE_SIZE", tp: mysql.TypeLonglong, size: 21},
+	{name: "APPROXIMATE_KEYS", tp: mysql.TypeLonglong, size: 21},
 }
 
 // TableTiKVRegionPeersCols is TiKV region peers mem table columns.
@@ -2563,6 +2580,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableTiDBPlanCache:                      tablePlanCache,
 	TableKeyspaceMeta:                       tableKeyspaceMetaCols,
 	TableUserLoginHistory:                   tableUserLoginHistoryCols,
+	TableRegions:                            TableRegionsCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, _ func() (pools.Resource, error), meta *model.TableInfo) (table.Table, error) {

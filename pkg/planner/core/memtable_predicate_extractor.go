@@ -1844,3 +1844,57 @@ func (e *TiKVRegionStatusExtractor) ExplainInfo(_ base.PhysicalPlan) string {
 func (e *TiKVRegionStatusExtractor) GetTablesID() []int64 {
 	return e.tablesID
 }
+
+// TableRegionsExtractor is used to extract single schema and table from predictions
+type TableRegionsExtractor struct {
+	extractHelper
+	schemaName, tableName ast.CIStr
+}
+
+// Extract implements the MemTablePredicateExtractor Extract interface
+func (e *TableRegionsExtractor) Extract(ctx base.PlanContext,
+	schema *expression.Schema,
+	names []*types.FieldName,
+	predicates []expression.Expression,
+) (remained []expression.Expression) {
+	// TODO: support more push down strategies, for example, only table_name or only db_name, or multiple table_name/db_name.
+	remained, _, dbNameSet := e.extractCol(ctx, schema, names, predicates, "db_name", true)
+	if dbNameSet.Count() != 1 {
+		return predicates
+	}
+	remained, _, tableNameSet := e.extractCol(ctx, schema, names, remained, "table_name", true)
+	if tableNameSet.Count() != 1 {
+		return predicates
+	}
+	for dbName := range dbNameSet {
+		for tableName := range tableNameSet {
+			e.schemaName = ast.NewCIStr(dbName)
+			e.tableName = ast.NewCIStr(tableName)
+		}
+	}
+	return remained
+}
+
+// ExplainInfo implements base.MemTablePredicateExtractor interface.
+func (e *TableRegionsExtractor) ExplainInfo(_ base.PhysicalPlan) string {
+	r := new(bytes.Buffer)
+	if e.schemaName.String() != "" {
+		r.WriteString("schema name: ")
+		r.WriteString(e.schemaName.String())
+	}
+	if e.tableName.String() != "" {
+		r.WriteString(", table name: ")
+		r.WriteString(e.tableName.String())
+	}
+	return r.String()
+}
+
+// GetSchemaName return the extracted schema name
+func (e *TableRegionsExtractor) GetSchemaName() ast.CIStr {
+	return e.schemaName
+}
+
+// GetTableName return the extracted table name
+func (e *TableRegionsExtractor) GetTableName() ast.CIStr {
+	return e.tableName
+}
