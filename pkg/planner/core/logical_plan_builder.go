@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -293,7 +294,7 @@ func (b *PlanBuilder) buildAggregation(ctx context.Context, p base.LogicalPlan, 
 	for i, aggFunc := range aggFuncList {
 		newArgList := make([]expression.Expression, 0, len(aggFunc.Args))
 		for _, arg := range aggFunc.Args {
-			newArg, np, err := b.rewrite(ctx, arg, p, nil, true)
+			newArg, np, err := b.rewrite(ctx, arg, p, nil, true, requireColumnPriv)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -320,7 +321,7 @@ func (b *PlanBuilder) buildAggregation(ctx context.Context, p base.LogicalPlan, 
 				if resolver.err != nil {
 					return nil, nil, errors.Trace(resolver.err)
 				}
-				newByItem, np, err := b.rewrite(ctx, retExpr.(ast.ExprNode), p, nil, true)
+				newByItem, np, err := b.rewrite(ctx, retExpr.(ast.ExprNode), p, nil, true, requireColumnPriv)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -679,7 +680,7 @@ func (b *PlanBuilder) buildJoin(ctx context.Context, joinNode *ast.Join) (base.L
 		}
 	} else if joinNode.On != nil {
 		b.curClause = onClause
-		onExpr, newPlan, err := b.rewrite(ctx, joinNode.On.Expr, joinPlan, nil, false)
+		onExpr, newPlan, err := b.rewrite(ctx, joinNode.On.Expr, joinPlan, nil, false, requireColumnPriv)
 		if err != nil {
 			return nil, err
 		}
@@ -931,7 +932,7 @@ func (b *PlanBuilder) buildSelection(ctx context.Context, p base.LogicalPlan, wh
 	expressions := make([]expression.Expression, 0, len(conditions))
 	selection := logicalop.LogicalSelection{}.Init(b.ctx, b.getSelectOffset())
 	for _, cond := range conditions {
-		expr, np, err := b.rewrite(ctx, cond, p, aggMapper, false)
+		expr, np, err := b.rewrite(ctx, cond, p, aggMapper, false, requireColumnPriv)
 		if err != nil {
 			return nil, err
 		}
@@ -1181,7 +1182,7 @@ func (p *userVarTypeProcessor) Enter(in ast.Node) (ast.Node, bool) {
 	if v.IsSystem || v.Value == nil {
 		return in, true
 	}
-	_, p.plan, p.err = p.builder.rewrite(p.ctx, v, p.plan, p.mapper, true)
+	_, p.plan, p.err = p.builder.rewrite(p.ctx, v, p.plan, p.mapper, true, nil)
 	return in, true
 }
 
@@ -1349,7 +1350,11 @@ func (b *PlanBuilder) buildProjection(ctx context.Context, p base.LogicalPlan, f
 			newNames = append(newNames, name)
 			continue
 		}
-		newExpr, np, err := b.rewriteWithPreprocess(ctx, field.Expr, p, mapper, windowMapper, true, nil)
+		priv := *requireColumnPriv
+		if field.IsUnfoldFromWildCard {
+			priv.unfoldFromWildcard = true
+		}
+		newExpr, np, err := b.rewriteWithPreprocess(ctx, field.Expr, p, mapper, windowMapper, true, nil, &priv)
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -1956,7 +1961,7 @@ func (b *PlanBuilder) buildSortWithCheck(ctx context.Context, p base.LogicalPlan
 	for i, item := range byItems {
 		newExpr, _ := item.Expr.Accept(transformer)
 		item.Expr = newExpr.(ast.ExprNode)
-		it, np, err := b.rewriteWithPreprocess(ctx, item.Expr, p, aggMapper, windowMapper, true, nil)
+		it, np, err := b.rewriteWithPreprocess(ctx, item.Expr, p, aggMapper, windowMapper, true, nil, requireColumnPriv)
 		if err != nil {
 			return nil, err
 		}
@@ -2178,6 +2183,7 @@ func (b *PlanBuilder) buildLimit(src base.LogicalPlan, limit *ast.Limit) (base.L
 	return li, nil
 }
 
+// resolveFromSelectFields returns the index of v in fields
 func resolveFromSelectFields(v *ast.ColumnNameExpr, fields []*ast.SelectField, ignoreAsName bool) (index int, err error) {
 	var matchedExpr ast.ExprNode
 	index = -1
@@ -2410,9 +2416,7 @@ func (a *havingWindowAndOrderbyExprResolver) Leave(n ast.Node) (node ast.Node, o
 		} else {
 			// We should ignore the err when resolving from schema. Because we could resolve successfully
 			// when considering select fields.
-			var err error
-			index, err = a.resolveFromPlan(v, a.p, resolveFieldsFirst)
-			_ = err
+			index, _ = a.resolveFromPlan(v, a.p, resolveFieldsFirst)
 			if index == -1 && a.curClause != fieldList &&
 				a.curClause != windowOrderByClause && a.curClause != partitionByClause {
 				index, a.err = resolveFromSelectFields(v, a.selectFields, false)
@@ -2497,7 +2501,7 @@ func (b *PlanBuilder) resolveHavingAndOrderBy(ctx context.Context, sel *ast.Sele
 		for _, byItem := range sel.OrderBy.Items {
 			if _, ok := byItem.Expr.(*ast.SubqueryExpr); ok {
 				// correlated agg will be extracted completely latter.
-				_, np, err := b.rewrite(ctx, byItem.Expr, p, nil, true)
+				_, np, err := b.rewrite(ctx, byItem.Expr, p, nil, true, requireColumnPriv)
 				if err != nil {
 					return nil, nil, errors.Trace(err)
 				}
@@ -2584,7 +2588,7 @@ func (b *PlanBuilder) extractCorrelatedAggFuncs(ctx context.Context, p base.Logi
 	aggMapper := make(map[*ast.AggregateFuncExpr]int)
 	for _, agg := range aggFuncs {
 		for _, arg := range agg.Args {
-			expr, _, err := b.rewrite(ctx, arg, p, aggMapper, true)
+			expr, _, err := b.rewrite(ctx, arg, p, aggMapper, true, requireColumnPriv)
 			if err != nil {
 				return nil, err
 			}
@@ -3550,7 +3554,7 @@ func (b *PlanBuilder) resolveGbyExprs(ctx context.Context, p base.LogicalPlan, g
 		}
 
 		itemExpr := retExpr.(ast.ExprNode)
-		expr, np, err := b.rewrite(ctx, itemExpr, p, nil, true)
+		expr, np, err := b.rewrite(ctx, itemExpr, p, nil, true, requireColumnPriv)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -3605,12 +3609,12 @@ func unfoldWildStar(field *ast.SelectField, outputName types.NameSlice, column [
 					Name:   name.ColName,
 				}}
 			colName.SetType(col.GetStaticType())
-			field := &ast.SelectField{Expr: colName}
+			field := &ast.SelectField{Expr: colName, IsUnfoldFromWildCard: true}
 			field.SetText(nil, name.ColName.O)
 			resultList = append(resultList, field)
 		}
 	}
-	return resultList
+	return
 }
 
 func (b *PlanBuilder) addAliasName(ctx context.Context, selectStmt *ast.SelectStmt, p base.LogicalPlan) (resultList []*ast.SelectField, err error) {
@@ -4478,12 +4482,6 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 		return nil, plannererrors.ErrViewSelectTemporaryTable.GenWithStackByArgs(tn.Name)
 	}
 
-	var authErr error
-	if sessionVars.User != nil {
-		authErr = plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", sessionVars.User.AuthUsername, sessionVars.User.AuthHostname, tableInfo.Name.L)
-	}
-	b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SelectPriv, dbName.L, tableInfo.Name.L, "", authErr)
-
 	if tbl.Type().IsVirtualTable() {
 		if tn.TableSample != nil {
 			return nil, expression.ErrInvalidTableSample.GenWithStackByArgs("Unsupported TABLESAMPLE in virtual tables")
@@ -4771,7 +4769,7 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 				var err error
 				originVal := b.allowBuildCastArray
 				b.allowBuildCastArray = true
-				expr, _, err = b.rewrite(ctx, columns[i].GeneratedExpr.Clone(), ds, nil, true)
+				expr, _, err = b.rewrite(ctx, columns[i].GeneratedExpr.Clone(), ds, nil, true, requireColumnPriv)
 				b.allowBuildCastArray = originVal
 				if err != nil {
 					return nil, err
@@ -5006,8 +5004,12 @@ func (b *PlanBuilder) checkRecursiveView(dbName ast.CIStr, tableName ast.CIStr) 
 // qbNameMap4View maps the query block name to the view table lists.
 // viewHints group the view hints based on the view's query block name.
 func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName ast.CIStr, tableInfo *model.TableInfo, qbNameMap4View map[string][]ast.HintTable, viewHints map[string][]*ast.TableOptimizerHint) (base.LogicalPlan, error) {
-	viewDepth := b.ctx.GetSessionVars().StmtCtx.ViewDepth
-	b.ctx.GetSessionVars().StmtCtx.ViewDepth++
+	stmtCtx := b.ctx.GetSessionVars().StmtCtx
+	viewDepth := stmtCtx.ViewDepth
+	stmtCtx.ViewDepth++
+	defer func() {
+		stmtCtx.ViewDepth--
+	}()
 	deferFunc, err := b.checkRecursiveView(dbName, tableInfo.Name)
 	if err != nil {
 		return nil, err
@@ -5088,6 +5090,7 @@ func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName ast.CI
 	}()
 	nodeW := resolve.NewNodeWWithCtx(selectNode, b.resolveCtx)
 	selectLogicalPlan, err := b.Build(ctx, nodeW)
+	errViewInvalid := plannererrors.ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
 	if err != nil {
 		logutil.BgLogger().Error("build plan for view failed", zap.Error(err))
 		if terror.ErrorNotEqual(err, plannererrors.ErrViewRecursive) &&
@@ -5097,23 +5100,24 @@ func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName ast.CI
 			terror.ErrorNotEqual(err, plannererrors.ErrMixOfGroupFuncAndFields) &&
 			terror.ErrorNotEqual(err, plannererrors.ErrViewNoExplain) &&
 			terror.ErrorNotEqual(err, plannererrors.ErrNotSupportedYet) {
-			err = plannererrors.ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
+			err = errViewInvalid
 		}
 		failpoint.Inject("BuildDataSourceFailed", func() {})
 		return nil, err
 	}
 	pm := privilege.GetPrivilegeManager(b.ctx)
-	if viewDepth != 0 &&
-		b.ctx.GetSessionVars().StmtCtx.InExplainStmt &&
+	if viewDepth > 0 &&
+		stmtCtx.InExplainStmt &&
 		pm != nil &&
 		!pm.RequestVerification(b.ctx.GetSessionVars().ActiveRoles, dbName.L, tableInfo.Name.L, "", mysql.SelectPriv) {
 		return nil, plannererrors.ErrViewNoExplain
 	}
 	if tableInfo.View.Security == ast.SecurityDefiner {
 		if pm != nil {
+			// DEFINER VIEWs always use default roles
 			for _, v := range b.visitInfo {
 				if !pm.RequestVerificationWithUser(ctx, v.db, v.table, v.column, v.privilege, tableInfo.View.Definer) {
-					return nil, plannererrors.ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
+					return nil, errViewInvalid
 				}
 			}
 		}
@@ -5121,12 +5125,12 @@ func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName ast.CI
 	}
 	b.visitInfo = append(originalVisitInfo, b.visitInfo...)
 
-	if b.ctx.GetSessionVars().StmtCtx.InExplainStmt {
+	if stmtCtx.InExplainStmt {
 		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.ShowViewPriv, dbName.L, tableInfo.Name.L, "", plannererrors.ErrViewNoExplain)
 	}
 
 	if len(tableInfo.Columns) != selectLogicalPlan.Schema().Len() {
-		return nil, plannererrors.ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
+		return nil, errViewInvalid
 	}
 
 	return b.buildProjUponView(ctx, dbName, tableInfo, selectLogicalPlan)
@@ -5574,19 +5578,6 @@ func (b *PlanBuilder) buildUpdate(ctx context.Context, update *ast.UpdateStmt) (
 		return nil, err
 	}
 
-	nodeW := resolve.NewNodeWWithCtx(update.TableRefs.TableRefs, b.resolveCtx)
-	tableList := ExtractTableList(nodeW, false)
-	for _, t := range tableList {
-		dbName := t.Schema.L
-		if dbName == "" {
-			dbName = b.ctx.GetSessionVars().CurrentDB
-		}
-		// Avoid adding CTE table to the SELECT privilege list, maybe we have better way to do this?
-		if _, ok := b.nameMapCTE[t.Name.L]; !ok {
-			b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SelectPriv, dbName, t.Name.L, "", nil)
-		}
-	}
-
 	oldSchemaLen := p.Schema().Len()
 	if update.Where != nil {
 		p, err = b.buildSelection(ctx, p, update.Where, nil)
@@ -5677,6 +5668,8 @@ func (b *PlanBuilder) buildUpdate(ctx context.Context, update *ast.UpdateStmt) (
 	}
 	// Label security takes effect currently when updating single table.
 	// TODO: When updateing multi-tables, label security takes effect.
+	nodeW := resolve.NewNodeWWithCtx(update.TableRefs.TableRefs, b.resolveCtx)
+	tableList := ExtractTableList(nodeW, false)
 	if len(tableList) == 1 {
 		err = b.buildLabelSecurityInfo(updt, tableList[0])
 	}
@@ -5845,6 +5838,11 @@ func (b *PlanBuilder) buildUpdateLists(ctx context.Context, tableList []*ast.Tab
 		// We save a flag for the column in map `modifyColumns`
 		// This flag indicated if assign keyword `DEFAULT` to the column
 		modifyColumns[columnFullName] = IsDefaultExprSameColumn(p.OutputNames()[idx:idx+1], assign.Expr)
+
+		// Check column privilege
+		userName, hostName := auth.GetUserAndHostName(b.ctx.GetSessionVars().User)
+		authErr := plannererrors.ErrColumnaccessDenied.FastGenByArgs("UPDATE", userName, hostName, name.OrigColName.L, name.OrigTblName.L)
+		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.UpdatePriv, name.DBName.L, name.OrigTblName.L, name.OrigColName.L, authErr)
 	}
 
 	// If columns in set list contains generated columns, raise error.
@@ -5919,7 +5917,7 @@ func (b *PlanBuilder) buildUpdateLists(ctx context.Context, tableList []*ast.Tab
 			if expr := extractDefaultExpr(assign.Expr); expr != nil {
 				expr.Name = assign.Column
 			}
-			newExpr, np, err = b.rewrite(ctx, assign.Expr, p, nil, true)
+			newExpr, np, err = b.rewrite(ctx, assign.Expr, p, nil, true, requireColumnPriv)
 			if err != nil {
 				return nil, nil, false, err
 			}
@@ -5943,7 +5941,7 @@ func (b *PlanBuilder) buildUpdateLists(ctx context.Context, tableList []*ast.Tab
 
 			o := b.allowBuildCastArray
 			b.allowBuildCastArray = true
-			newExpr, np, err = b.rewriteWithPreprocess(ctx, assign.Expr, p, nil, nil, true, rewritePreprocess(assign))
+			newExpr, np, err = b.rewriteWithPreprocess(ctx, assign.Expr, p, nil, nil, true, rewritePreprocess(assign), requireColumnPriv)
 			b.allowBuildCastArray = o
 			if err != nil {
 				return nil, nil, false, err
@@ -5973,15 +5971,6 @@ func (b *PlanBuilder) buildUpdateLists(ctx context.Context, tableList []*ast.Tab
 			b.ctx.GetSessionVars().StmtCtx.ColRefFromUpdatePlan.UnionWith(cols)
 		}
 		newList = append(newList, &expression.Assignment{Col: col, ColName: name.ColName, Expr: newExpr})
-		dbName := name.DBName.L
-		// To solve issue#10028, we need to get database name by the table alias name.
-		if dbNameTmp, ok := tblDbMap[name.TblName.L]; ok {
-			dbName = dbNameTmp
-		}
-		if dbName == "" {
-			dbName = b.ctx.GetSessionVars().CurrentDB
-		}
-		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.UpdatePriv, dbName, name.OrigTblName.L, "", nil)
 	}
 	return newList, p, allAssignmentsAreConstant, nil
 }
@@ -6159,9 +6148,8 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, ds *ast.DeleteStmt) (base
 			if dbName == "" {
 				dbName = b.ctx.GetSessionVars().CurrentDB
 			}
-			if sessionVars.User != nil {
-				authErr = plannererrors.ErrTableaccessDenied.FastGenByArgs("DELETE", sessionVars.User.AuthUsername, sessionVars.User.AuthHostname, v.Name.L)
-			}
+			userName, hostName := auth.GetUserAndHostName(sessionVars.User)
+			authErr = plannererrors.ErrTableaccessDenied.FastGenByArgs("DELETE", userName, hostName, v.Name.L)
 			b.visitInfo = appendVisitInfo(b.visitInfo, mysql.DeletePriv, dbName, v.Name.L, "", authErr)
 		}
 	}
@@ -6328,7 +6316,7 @@ func (b *PlanBuilder) buildProjectionForWindow(ctx context.Context, p base.Logic
 
 	newArgList = make([]expression.Expression, 0, len(args))
 	for _, arg := range args {
-		newArg, np, err := b.rewrite(ctx, arg, p, aggMap, true)
+		newArg, np, err := b.rewrite(ctx, arg, p, aggMap, true, requireColumnPriv)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -6360,7 +6348,7 @@ func (b *PlanBuilder) buildArgs4WindowFunc(ctx context.Context, p base.LogicalPl
 	// it's okay here because we only want to return the args used in window function
 	newColIndex := 0
 	for _, arg := range args {
-		newArg, np, err := b.rewrite(ctx, arg, p, aggMap, true)
+		newArg, np, err := b.rewrite(ctx, arg, p, aggMap, true, requireColumnPriv)
 		if err != nil {
 			return nil, err
 		}
@@ -6392,7 +6380,7 @@ func (b *PlanBuilder) buildByItemsForWindow(
 	for _, item := range items {
 		newExpr, _ := item.Expr.Accept(transformer)
 		item.Expr = newExpr.(ast.ExprNode)
-		it, np, err := b.rewrite(ctx, item.Expr, p, aggMap, true)
+		it, np, err := b.rewrite(ctx, item.Expr, p, aggMap, true, requireColumnPriv)
 		if err != nil {
 			return nil, nil, err
 		}
