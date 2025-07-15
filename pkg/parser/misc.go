@@ -845,6 +845,7 @@ var tokenMap = map[string]int{
 	"TABLES":                     tables,
 	"TABLESAMPLE":                tableSample,
 	"TABLESPACE":                 tablespace,
+	"TABLESPLIT":                 tableSplit,
 	"TEMPORARY":                  temporary,
 	"TEMPTABLE":                  temptable,
 	"TERMINATED":                 terminated,
