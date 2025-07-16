@@ -7,6 +7,7 @@ go_library(
         "mock_globalaccessor.go",
         "noop.go",
         "pkdb_procedure_session.go",
+        "pkdb_sysvar.go",
         "removed.go",
         "sequence_state.go",
         "session.go",
