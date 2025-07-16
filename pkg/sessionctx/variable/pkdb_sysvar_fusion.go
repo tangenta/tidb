@@ -21,7 +21,7 @@ var ffiSysVars = []*SysVar{
 			if TiDBOptOn(s) != tikvrpc.EnableTiKVLocalCall.Load() {
 				tikvrpc.EnableTiKVLocalCall.Store(TiDBOptOn(s))
 				logutil.BgLogger().Info("set enable local rpc opt",
-					zap.String("variable", TiDBXEnableTiKVLocalCall),
+					zap.String("variable", vardef.TiDBXEnableTiKVLocalCall),
 					zap.Bool("enable", TiDBOptOn(s)))
 			}
 			return nil
