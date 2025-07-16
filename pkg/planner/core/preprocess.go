@@ -149,6 +149,10 @@ func Preprocess(ctx context.Context, sctx sessionctx.Context, node *resolve.Node
 	if len(v.varsReadonly) > 0 {
 		sctx.GetSessionVars().StmtCtx.SetSkipPlanCache("read-only variables are used")
 	}
+	// Check if user defined variables can be replaced by constant values
+	if sctx.GetSessionVars().EnableUDVSubstitute {
+		extractReplaceAbleVarsForUDV(sctx, v.userDefVarsTypeGet, v.userDefVarsTypeSet)
+	}
 	return errors.Trace(v.err)
 }
 
@@ -176,6 +180,9 @@ const (
 	inImportInto
 	// inAnalyze is set when visiting an analyze statement.
 	inAnalyze
+	// inCreateRoutine is set when visiting routine.
+	// skip table && execute precheck
+	inCreateRoutine
 )
 
 // Make linter happy.
@@ -247,8 +254,10 @@ type preprocessor struct {
 	// values that may be returned
 	*PreprocessorReturn
 	err error
-
-	resolveCtx *resolve.Context
+	// for udv push down
+	userDefVarsTypeGet map[string]struct{}
+	userDefVarsTypeSet map[string]struct{}
+	resolveCtx         *resolve.Context
 }
 
 func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
@@ -388,8 +397,8 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		if node.FnName.L == ast.NextVal || node.FnName.L == ast.LastVal || node.FnName.L == ast.SetVal {
 			p.flag |= inSequenceFunction
 		}
-		// not support procedure right now.
-		if node.Schema.L != "" {
+		// not support function right now.
+		if node.Schema.L != "" && p.stmtTp == TypeSelect {
 			p.err = expression.ErrFunctionNotExists.GenWithStackByArgs("FUNCTION", node.Schema.L+"."+node.FnName.L)
 		}
 	case *ast.BRIEStmt:
@@ -447,9 +456,14 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 				p.varsReadonly[node.Name] = struct{}{}
 			}
 		}
+		if p.sctx.GetSessionVars().EnableUDVSubstitute {
+			p.checkUserDefineVariable(node)
+		}
 	case *ast.Constraint:
 		// Used in ALTER TABLE or CREATE TABLE
 		p.checkConstraintGrammar(node)
+	case *ast.CreateProcedureInfo:
+		p.flag |= inCreateRoutine
 	default:
 		p.flag &= ^parentIsJoin
 	}
@@ -543,12 +557,7 @@ func (p *preprocessor) tableByName(tn *ast.TableName) (table.Table, error) {
 		currentUser, activeRoles := p.sctx.GetSessionVars().User, p.sctx.GetSessionVars().ActiveRoles
 		if pm := privilege.GetPrivilegeManager(p.sctx); pm != nil {
 			if !pm.RequestVerification(activeRoles, sName.L, tn.Name.O, "", mysql.AllPrivMask) {
-				u := currentUser.Username
-				h := currentUser.Hostname
-				if currentUser.AuthHostname != "" {
-					u = currentUser.AuthUsername
-					h = currentUser.AuthHostname
-				}
+				u, h := auth.GetUserAndHostName(currentUser)
 				return nil, plannererrors.ErrTableaccessDenied.GenWithStackByArgs(p.stmtType(), u, h, tn.Name.O)
 			}
 		}
@@ -703,6 +712,8 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		if x.With != nil {
 			p.preprocessWith.cteStack = p.preprocessWith.cteStack[0 : len(p.preprocessWith.cteStack)-1]
 		}
+	case *ast.CreateProcedureInfo:
+		p.flag &= ^inCreateOrDropTable
 	case *ast.SetOprStmt:
 		if x.With != nil {
 			p.preprocessWith.cteStack = p.preprocessWith.cteStack[0 : len(p.preprocessWith.cteStack)-1]
@@ -1711,6 +1722,10 @@ func (p *preprocessor) stmtType() string {
 }
 
 func (p *preprocessor) handleTableName(tn *ast.TableName) {
+	// Creating routine doesn't check tables exist or not.
+	if p.flag&inCreateRoutine == inCreateRoutine {
+		return
+	}
 	if tn.Schema.L == "" {
 		for _, cte := range p.preprocessWith.cteCanUsed {
 			if cte == tn.Name.L {
@@ -1839,6 +1854,9 @@ func (p *preprocessor) resolveShowStmt(node *ast.ShowStmt) {
 }
 
 func (p *preprocessor) resolveExecuteStmt(node *ast.ExecuteStmt) {
+	if p.flag&inCreateRoutine == inCreateRoutine {
+		return
+	}
 	prepared, err := GetPreparedStmt(node, p.sctx.GetSessionVars())
 	if err != nil {
 		p.err = err
@@ -2191,4 +2209,37 @@ func getTableRefsAlias(tableRefs ast.ResultSetNode) *ast.CIStr {
 
 func (*aliasChecker) Leave(in ast.Node) (ast.Node, bool) {
 	return in, true
+}
+
+func (p *preprocessor) checkUserDefineVariable(node *ast.VariableExpr) {
+	if node.IsGlobal || node.IsSystem {
+		return
+	}
+	if node.Value == nil {
+		if p.userDefVarsTypeGet == nil {
+			p.userDefVarsTypeGet = make(map[string]struct{})
+		}
+		p.userDefVarsTypeGet[strings.ToLower(node.Name)] = struct{}{}
+	} else {
+		if p.userDefVarsTypeSet == nil {
+			p.userDefVarsTypeSet = make(map[string]struct{})
+		}
+		p.userDefVarsTypeSet[strings.ToLower(node.Name)] = struct{}{}
+	}
+}
+
+func extractReplaceAbleVarsForUDV(sctx sessionctx.Context, getV, setV map[string]struct{}) {
+	// always substitute ReplaceAbleUserDefVars
+	if len(getV) == 0 || len(setV) == 0 {
+		sctx.GetSessionVars().ReplaceAbleUserDefVars = getV
+		return
+	}
+
+	replaceAbleVars := make(map[string]struct{})
+	for colName := range getV {
+		if _, ok := setV[colName]; !ok {
+			replaceAbleVars[colName] = struct{}{}
+		}
+	}
+	sctx.GetSessionVars().ReplaceAbleUserDefVars = replaceAbleVars
 }
