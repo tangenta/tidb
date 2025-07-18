@@ -1020,6 +1020,11 @@ const (
 
 	// TiDBAccelerateUserCreationUpdate decides whether tidb will load & update the whole user's data in-memory.
 	TiDBAccelerateUserCreationUpdate = "tidb_accelerate_user_creation_update"
+
+	// TiDBEnableUDVSubstitute indicates whether to enable user defined variable substitute.
+	TiDBEnableUDVSubstitute = "tidb_enable_udv_substitute"
+	// TiDBEnableSPParamSubstitute indicates whether to enable stored procedure parameter substitute.
+	TiDBEnableSPParamSubstitute = "tidb_enable_sp_param_substitute"
 )
 
 // TiDB vars that have only global scope
@@ -1255,9 +1260,25 @@ const (
 	// TiDBTSOClientRPCMode controls how the TSO client performs the TSO RPC requests. It internally controls the
 	// concurrency of the RPC. This variable provides an approach to tune the latency of getting timestamps from PD.
 	TiDBTSOClientRPCMode = "tidb_tso_client_rpc_mode"
+	// TiDBEnableLabelSecurity is use to enable or disable label security on TiDB.
+	TiDBEnableLabelSecurity = "tidb_enable_label_security"
 	// TiDBCircuitBreakerPDMetadataErrorRateThresholdPct variable is used to set percent of errors to trip the circuit breaker for get region calls to PD
 	// https://github.com/tikv/rfcs/blob/master/text/0115-circuit-breaker.md
 	TiDBCircuitBreakerPDMetadataErrorRateThresholdPct = "tidb_cb_pd_metadata_error_rate_threshold_pct"
+	// TiDBEnableTSValidation controls whether to enable the timestamp validation in client-go.
+	TiDBEnableTSValidation = "tidb_enable_ts_validation"
+	// TiDBEnableLoginHistory indicates whether tidb need enable the login-history.
+	TiDBEnableLoginHistory = "tidb_enable_login_history"
+	// TiDBLoginHistoryRetainDuration indicates the duration of retaining the record in mysql.log_history.
+	TiDBLoginHistoryRetainDuration = "tidb_login_history_retain_duration"
+	// TiDBEnableProcedure if enable store procedure
+	TiDBEnableProcedure = "tidb_enable_procedure"
+	// TiDBEnableProcedureAstCache indicates whether tidb need enable or disable ast cache.
+	TiDBEnableProcedureAstCache = "tidb_enable_sp_ast_cache"
+	//TiDBProcedureLastErrorSQL procedure last hander SQL warning/error.
+	TiDBProcedureLastErrorSQL = "sp_last_error_sql"
+	// TiDBEnableDutySeparationMode indicates if enable the mode of duty separation.
+	TiDBEnableDutySeparationMode = "tidb_enable_duty_separation_mode"
 )
 
 // TiDB intentional limits, can be raised in the future.
@@ -1651,8 +1672,17 @@ const (
 	DefOptEnableProjectionPushDown                    = true
 	DefTiDBEnableSharedLockPromotion                  = false
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
+	DefTiDBEnableLabelSecurity                        = false
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
 	DefTiDBAccelerateUserCreationUpdate               = false
+	DefTiDBEnableTSValidation                         = true
+	DefTiDBEnableLoginHistory                         = false
+	DefTiDBLoginHistoryRetainDuration                 = time.Hour * 24 * 90 // default 90 days.
+	DefStoredProgramCacheSize                         = 256
+	DefTiDBEnableProcedure                            = false
+	DefTiDBEnableDutySeparationMode                   = false
+	DefTiDBEnableUDVSubstitute                        = false
+	DefTiDBEnableSPParamSubstitute                    = false
 )
 
 // Process global variables.
@@ -1779,7 +1809,15 @@ var (
 
 	SchemaCacheSize              = atomic.NewUint64(DefTiDBSchemaCacheSize)
 	SchemaCacheSizeOriginText    = atomic.NewString(strconv.Itoa(DefTiDBSchemaCacheSize))
+	EnableLabelSecurity          = atomic.NewBool(DefTiDBEnableLabelSecurity)
+	EnableLoginHistory           = atomic.NewBool(DefTiDBEnableLoginHistory)
+	LoginHistoryRetainDuration   = atomic.NewDuration(DefTiDBLoginHistoryRetainDuration)
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
+	StoredProgramCacheSize       = atomic.NewInt64(DefStoredProgramCacheSize)
+	TiDBEnableSPAstReuse         = atomic.NewBool(true)
+	TiDBEnableProcedureValue     = atomic.NewBool(DefTiDBEnableProcedure)
+	AutomaticSPPrivileges        = atomic.NewBool(true)
+	EnableDutySeparationMode     = atomic.NewBool(DefTiDBEnableDutySeparationMode)
 )
 
 func serverMemoryLimitDefaultValue() string {
