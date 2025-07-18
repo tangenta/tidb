@@ -941,6 +941,9 @@ type VariableAssignment struct {
 	IsGlobal bool
 	IsSystem bool
 
+	// The syntax can be used to stored procedure internal variables
+	CanSPVariable bool
+
 	// ExtendValue is a way to store extended info.
 	// VariableAssignment should be able to store information for SetCharset/SetPWD Stmt.
 	// For SetCharsetStmt, Value is charset, ExtendValue is collation.
@@ -950,16 +953,18 @@ type VariableAssignment struct {
 
 // Restore implements Node interface.
 func (n *VariableAssignment) Restore(ctx *format.RestoreCtx) error {
-	if n.IsSystem {
-		ctx.WritePlain("@@")
-		if n.IsGlobal {
-			ctx.WriteKeyWord("GLOBAL")
-		} else {
-			ctx.WriteKeyWord("SESSION")
+	if !n.CanSPVariable {
+		if n.IsSystem {
+			ctx.WritePlain("@@")
+			if n.IsGlobal {
+				ctx.WriteKeyWord("GLOBAL")
+			} else {
+				ctx.WriteKeyWord("SESSION")
+			}
+			ctx.WritePlain(".")
+		} else if n.Name != SetNames && n.Name != SetCharset {
+			ctx.WriteKeyWord("@")
 		}
-		ctx.WritePlain(".")
-	} else if n.Name != SetNames && n.Name != SetCharset {
-		ctx.WriteKeyWord("@")
 	}
 	if n.Name == SetNames {
 		ctx.WriteKeyWord("NAMES ")
@@ -2552,6 +2557,7 @@ const (
 	AdminUnsetBDRRole
 	AdminAlterDDLJob
 	AdminWorkloadRepoCreate
+	AdminLBACEnable
 )
 
 // HandleRange represents a range where handle value >= Begin and < End.
@@ -2922,6 +2928,8 @@ type PrivElem struct {
 
 	Priv mysql.PrivilegeType
 	Cols []*ColumnName
+
+	// Name stores the extended privilege like dynamic privilege.
 	Name string
 }
 
@@ -3001,6 +3009,11 @@ func (n ObjectTypeType) Restore(ctx *format.RestoreCtx) error {
 	return nil
 }
 
+// IsRoutineType checks whether it is a routine type
+func (n ObjectTypeType) IsRoutineType() bool {
+	return n == ObjectTypeProcedure || n == ObjectTypeFunction
+}
+
 // GrantLevelType is the type for grant level.
 type GrantLevelType int
 
@@ -3011,7 +3024,7 @@ const (
 	GrantLevelGlobal
 	// GrantLevelDB means the privileges apply to all objects in a given database.
 	GrantLevelDB
-	// GrantLevelTable means the privileges apply to all columns in a given table.
+	// GrantLevelTable means the privileges apply to columns in a given table.
 	GrantLevelTable
 )
 
