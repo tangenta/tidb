@@ -7282,6 +7282,7 @@ def go_deps():
     )
     go_repository(
         name = "com_github_tikv_client_go_v2",
+        build_tags = ["nextgen"],
         build_file_proto_mode = "disable_global",
         importpath = "github.com/tikv/client-go/v2",
         sha256 = "43c737d1c2d84af0f0b6ac408e0ef563ec3cb58de8dc3e60af3eb830c0713d2e",
@@ -7295,6 +7296,7 @@ def go_deps():
     )
     go_repository(
         name = "com_github_tikv_pd_client",
+        build_tags = ["nextgen"],
         build_file_proto_mode = "disable_global",
         importpath = "github.com/tikv/pd/client",
         sha256 = "c4ce5fd01bf97d4cb432b344f208a4f0c6517c87a7b602c099333fc559678b82",
