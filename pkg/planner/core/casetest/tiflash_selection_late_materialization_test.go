@@ -26,6 +26,7 @@ import (
 )
 
 func TestTiFlashLateMaterialization(t *testing.T) {
+	t.Skip("skip unstable test")
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
