@@ -401,6 +401,7 @@ var tokenMap = map[string]int{
 	"EXPLAIN":                    explain,
 	"EXPR_PUSHDOWN_BLACKLIST":    exprPushdownBlacklist,
 	"EXTENDED":                   extended,
+	"EXPLORE":                    explore,
 	"EXTRACT":                    extract,
 	"FALSE":                      falseKwd,
 	"FAULTS":                     faultsSym,

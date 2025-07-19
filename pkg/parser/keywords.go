@@ -390,6 +390,7 @@ var Keywords = []KeywordsType{
 	{"EXECUTE", false, "unreserved"},
 	{"EXPANSION", false, "unreserved"},
 	{"EXPIRE", false, "unreserved"},
+	{"EXPLORE", false, "unreserved"},
 	{"EXTENDED", false, "unreserved"},
 	{"FAILED_LOGIN_ATTEMPTS", false, "unreserved"},
 	{"FAULTS", false, "unreserved"},
