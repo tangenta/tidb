@@ -206,7 +206,7 @@ race: failpoint-enable
 ifeq ($(GOCOVER), )
     COVER_FLAG :=
 else
-    COVER_FLAG := -cover
+    COVER_FLAG := -cover -covermode='atomic'
 endif
 
 ifeq ($(TARGET), "")
