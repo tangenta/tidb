@@ -2929,7 +2929,7 @@ func TestWindowLogicalPlanAmbiguous(t *testing.T) {
 	iterations := 100
 	s := createPlannerSuite()
 	defer s.Close()
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		stmt, err := s.p.ParseOneStmt(sql, "", "")
 		require.NoError(t, err)
 		nodeW := resolve.NewNodeW(stmt)
@@ -3122,7 +3122,7 @@ func TestPruneColumnsForDelete(t *testing.T) {
 				innerRet = append(innerRet, sb.String())
 				sb.Reset()
 				fmt.Fprintf(&sb, "handle cols: %s:", colsLayout.HandleCols.StringWithCtx(s.sctx.GetExprCtx().GetEvalCtx(), errors.RedactLogDisable))
-				for i := 0; i < colsLayout.HandleCols.NumCols(); i++ {
+				for i := range colsLayout.HandleCols.NumCols() {
 					if i > 0 {
 						sb.WriteString(", ")
 					}

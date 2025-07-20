@@ -479,7 +479,7 @@ func (p *ProcedurceFetchInto) Execute(ctx context.Context, sctx sessionctx.Conte
 	}
 	ResetCallStatus(sctx)
 	sctx.GetSessionVars().SetProcedureContext(p.context)
-	for i := 0; i < curs.GetRow().Len(); i++ {
+	for i := range curs.GetRow().Len() {
 		datum := curs.GetRow().GetDatum(i, &curs.fields[i].Column.FieldType)
 		err := UpdateVariableVar(p.vars[i], datum, sctx.GetSessionVars())
 		if err != nil {
