@@ -69,7 +69,6 @@ import (
 	plannerutil "github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/planner/util/coreusage"
 	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
@@ -652,13 +651,11 @@ func (b *executorBuilder) buildRecoverIndex(v *plannercore.RecoverIndex) exec.Ex
 		table:            t,
 		physicalID:       t.Meta().ID,
 	}
-	sessCtx := e.Ctx().GetSessionVars().StmtCtx
-	e.handleCols = buildHandleColsForExec(sessCtx, tblInfo, e.columns)
+	e.handleCols = buildHandleColsForExec(tblInfo, e.columns)
 	return e
 }
 
-func buildHandleColsForExec(sctx *stmtctx.StatementContext, tblInfo *model.TableInfo,
-	allColInfo []*model.ColumnInfo) plannerutil.HandleCols {
+func buildHandleColsForExec(tblInfo *model.TableInfo, allColInfo []*model.ColumnInfo) plannerutil.HandleCols {
 	if !tblInfo.IsCommonHandle {
 		extraColPos := len(allColInfo) - 1
 		intCol := &expression.Column{
@@ -683,7 +680,7 @@ func buildHandleColsForExec(sctx *stmtctx.StatementContext, tblInfo *model.Table
 			}
 		}
 	}
-	return plannerutil.NewCommonHandleCols(sctx, tblInfo, pkIdx, tblCols)
+	return plannerutil.NewCommonHandleCols(tblInfo, pkIdx, tblCols)
 }
 
 func (b *executorBuilder) buildCleanupIndex(v *plannercore.CleanupIndex) exec.Executor {
@@ -721,8 +718,7 @@ func (b *executorBuilder) buildCleanupIndex(v *plannercore.CleanupIndex) exec.Ex
 		physicalID:   t.Meta().ID,
 		batchSize:    20000,
 	}
-	sessCtx := e.Ctx().GetSessionVars().StmtCtx
-	e.handleCols = buildHandleColsForExec(sessCtx, tblInfo, e.columns)
+	e.handleCols = buildHandleColsForExec(tblInfo, e.columns)
 	if e.index.Meta().Global {
 		e.columns = append(e.columns, model.NewExtraPhysTblIDColInfo())
 	}
@@ -2718,7 +2714,7 @@ func (b *executorBuilder) buildUnionAll(v *plannercore.PhysicalUnionAll) exec.Ex
 	return e
 }
 
-func buildHandleColsForSplit(sc *stmtctx.StatementContext, tbInfo *model.TableInfo) plannerutil.HandleCols {
+func buildHandleColsForSplit(tbInfo *model.TableInfo) plannerutil.HandleCols {
 	if tbInfo.IsCommonHandle {
 		primaryIdx := tables.FindPrimaryIndex(tbInfo)
 		tableCols := make([]*expression.Column, len(tbInfo.Columns))
@@ -2731,7 +2727,7 @@ func buildHandleColsForSplit(sc *stmtctx.StatementContext, tbInfo *model.TableIn
 		for i, pkCol := range primaryIdx.Columns {
 			tableCols[pkCol.Offset].Index = i
 		}
-		return plannerutil.NewCommonHandleCols(sc, tbInfo, primaryIdx, tableCols)
+		return plannerutil.NewCommonHandleCols(tbInfo, primaryIdx, tableCols)
 	}
 	intCol := &expression.Column{
 		RetType: types.NewFieldType(mysql.TypeLonglong),
@@ -2769,7 +2765,7 @@ func (b *executorBuilder) buildSplitRegion(v *plannercore.SplitRegion) exec.Exec
 			valueLists:     v.ValueLists,
 		}
 	}
-	handleCols := buildHandleColsForSplit(b.ctx.GetSessionVars().StmtCtx, v.TableInfo)
+	handleCols := buildHandleColsForSplit(v.TableInfo)
 	if len(v.ValueLists) > 0 {
 		return &SplitTableRegionExec{
 			BaseExecutor:   base,

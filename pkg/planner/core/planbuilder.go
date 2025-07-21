@@ -2020,7 +2020,9 @@ func (b *PlanBuilder) getColsInfo(tn *ast.TableName) (indicesInfo []*model.Index
 }
 
 // BuildHandleColsForAnalyze returns HandleCols for ANALYZE.
-func BuildHandleColsForAnalyze(ctx base.PlanContext, tblInfo *model.TableInfo, allColumns bool, colsInfo []*model.ColumnInfo) util.HandleCols {
+func BuildHandleColsForAnalyze(
+	_ base.PlanContext, tblInfo *model.TableInfo, allColumns bool, colsInfo []*model.ColumnInfo,
+) util.HandleCols {
 	var handleCols util.HandleCols
 	switch {
 	case tblInfo.PKIsHandle:
@@ -2064,7 +2066,7 @@ func BuildHandleColsForAnalyze(ctx base.PlanContext, tblInfo *model.TableInfo, a
 		// The second reason is that in (cb *CommonHandleCols).BuildHandleByDatums, tablecodec.TruncateIndexValues(cb.tblInfo, cb.idxInfo, datumBuf)
 		// is called, which asks that IndexColumn.Offset of cb.idxInfo must be according to cb,tblInfo.
 		// TODO: find a better way to find handle columns in ANALYZE rather than use Column.Index
-		handleCols = util.NewCommonHandlesColsWithoutColsAlign(ctx.GetSessionVars().StmtCtx, tblInfo, pkIdx, columns)
+		handleCols = util.NewCommonHandlesColsWithoutColsAlign(tblInfo, pkIdx, columns)
 	}
 	return handleCols
 }
@@ -5674,6 +5676,13 @@ func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt
 
 	var targetPlan base.Plan
 	if explain.Stmt != nil && !explain.Explore {
+		if strings.EqualFold(explain.Format, types.ExplainFormatCostTrace) {
+			origin := sctx.GetSessionVars().StmtCtx.EnableOptimizeTrace
+			sctx.GetSessionVars().StmtCtx.EnableOptimizeTrace = true
+			defer func() {
+				sctx.GetSessionVars().StmtCtx.EnableOptimizeTrace = origin
+			}()
+		}
 		nodeW := resolve.NewNodeWWithCtx(explain.Stmt, b.resolveCtx)
 		targetPlan, _, err = OptimizeAstNode(ctx, sctx, nodeW, b.is)
 		if err != nil {
