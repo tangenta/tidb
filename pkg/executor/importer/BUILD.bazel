@@ -8,6 +8,7 @@ go_library(
         "import.go",
         "job.go",
         "kv_encode.go",
+        "pkdb_import.go",
         "precheck.go",
         "table_import.go",
     ],
@@ -102,7 +103,7 @@ go_test(
     embed = [":importer"],
     flaky = True,
     race = "on",
-    shard_count = 26,
+    shard_count = 27,
     deps = [
         "//br/pkg/errors",
         "//br/pkg/mock",
