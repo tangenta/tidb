@@ -823,6 +823,13 @@ func TestDMLStmt(t *testing.T) {
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' optionally enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
+		// select into var list
+		{"select a into @a from t", true, "SELECT `a` INTO @`a` FROM `t`"},
+		{"select a, b into @a, @bc from t", true, "SELECT `a`,`b` INTO @`a`,@`bc` FROM `t`"},
+		{"select a, b+1 into @a, @bc from t", true, "SELECT `a`,`b`+1 INTO @`a`,@`bc` FROM `t`"},
+		{"select a into a from t", true, "SELECT `a` INTO `a` FROM `t`"},
+		{"select a, b into a, bc from t", true, "SELECT `a`,`b` INTO `a`,`bc` FROM `t`"},
+		{"select a, b+1 into a, bc from t", true, "SELECT `a`,`b`+1 INTO `a`,`bc` FROM `t`"},
 
 		// from join
 		{"SELECT * from t1, t2, t3", true, "SELECT * FROM ((`t1`) JOIN `t2`) JOIN `t3`"},
@@ -8019,6 +8026,32 @@ func TestSecondaryEngineAttribute(t *testing.T) {
 			false,
 			"",
 		},
+	}
+
+	RunTest(t, table, false)
+}
+
+func TestTableSplitStmt(t *testing.T) {
+	table := []testCase{
+		// Valid cases
+		{"SELECT * FROM t TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"select * from t tablesplit ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` AS `t1` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t PARTITION (p0) TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`) TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t1 TABLESPLIT ('a', 'b'), t2", true, "SELECT * FROM (`t1` TABLESPLIT('a', 'b')) JOIN `t2`"},
+		{"SELECT * FROM t1, t2 TABLESPLIT ('a', 'b')", true, "SELECT * FROM (`t1`) JOIN `t2` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t TABLESPLIT ('', 'b')", true, "SELECT * FROM `t` TABLESPLIT('', 'b')"},
+		{"SELECT * FROM t PARTITION (p0, p1) AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`, `p1`) AS `t1` TABLESPLIT('a', 'b')"},
+
+		// Invalid cases
+		{"SELECT * FROM t TABLESPLIT", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a',)", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a', 'b', 'c')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a' 'b')", false, ""},
+		{"SELECT * FROM t TABLESPLIT 'a', 'b'", false, ""},
+		{"SELECT * FROM t TABLESPLIT (a, b)", false, ""},
+		{"SELECT * FROM t TABLESPLIT (1, 2)", false, ""},
 	}
 
 	RunTest(t, table, false)
