@@ -1112,6 +1112,7 @@ func TestInfoSchemaConditionWorks(t *testing.T) {
 func TestInfoschemaTablesSpecialOptimizationCovered(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("set @@global.tidb_schema_cache_size = default")
 
 	for _, testCase := range []struct {
 		sql    string
@@ -1333,7 +1334,7 @@ func TestStatisticShowPublicIndexes(t *testing.T) {
 		if job.Type != model.ActionAddIndex || job.SchemaState == model.StatePublic {
 			return
 		}
-		rs := tk1.MustQuery(`SELECT count(1) FROM INFORMATION_SCHEMA.STATISTICS where 
+		rs := tk1.MustQuery(`SELECT count(1) FROM INFORMATION_SCHEMA.STATISTICS where
 			TABLE_SCHEMA = 'test' and table_name = 't' and index_name = 'idx';`).Rows()
 		require.Equal(t, "0", rs[0][0].(string))
 	})

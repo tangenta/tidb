@@ -234,6 +234,11 @@ type builtinInIntSig struct {
 func (b *builtinInIntSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = make(map[int64]bool, len(b.args)-1)
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -241,21 +246,41 @@ func (b *builtinInIntSig) buildHashMapForConstArgs(ctx BuildContext) error {
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
-			b.hashSet[val] = mysql.HasUnsignedFlag(b.args[i].GetType(ctx.GetEvalCtx()).GetFlag())
+
+			// Only keep this arg if value wasn't seen before
+			if _, exists := b.hashSet[val]; !exists {
+				b.hashSet[val] = mysql.HasUnsignedFlag(b.args[i].GetType(ctx.GetEvalCtx()).GetFlag())
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalInt(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
+
 	return nil
 }
 
@@ -338,6 +363,11 @@ func (b *builtinInStringSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = set.NewStringSet()
 	collator := collate.GetCollator(b.collation)
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -345,21 +375,41 @@ func (b *builtinInStringSig) buildHashMapForConstArgs(ctx BuildContext) error {
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
-			b.hashSet.Insert(string(collator.Key(val))) // should do memory copy here
+
+			key := string(collator.Key(val)) // should do memory copy here
+			// Only keep this arg if value wasn't seen before
+			if !b.hashSet.Exist(key) {
+				b.hashSet.Insert(key)
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalString(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
 
 	return nil
 }
@@ -422,6 +472,11 @@ type builtinInRealSig struct {
 func (b *builtinInRealSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = set.NewFloat64Set()
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -429,21 +484,40 @@ func (b *builtinInRealSig) buildHashMapForConstArgs(ctx BuildContext) error {
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
-			b.hashSet.Insert(val)
+
+			// Only keep this arg if value wasn't seen before
+			if !b.hashSet.Exist(val) {
+				b.hashSet.Insert(val)
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalReal(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
 
 	return nil
 }
@@ -504,6 +578,11 @@ type builtinInDecimalSig struct {
 func (b *builtinInDecimalSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = set.NewStringSet()
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -511,25 +590,46 @@ func (b *builtinInDecimalSig) buildHashMapForConstArgs(ctx BuildContext) error {
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
+
 			key, err := val.ToHashKey()
 			if err != nil {
 				return err
 			}
-			b.hashSet.Insert(string(key))
+
+			hashKey := string(key)
+			// Only keep this arg if value wasn't seen before
+			if !b.hashSet.Exist(hashKey) {
+				b.hashSet.Insert(hashKey)
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalDecimal(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
 
 	return nil
 }
@@ -595,6 +695,11 @@ type builtinInTimeSig struct {
 func (b *builtinInTimeSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = make(map[types.CoreTime]struct{}, len(b.args)-1)
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -602,21 +707,41 @@ func (b *builtinInTimeSig) buildHashMapForConstArgs(ctx BuildContext) error {
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
-			b.hashSet[val.CoreTime()] = struct{}{}
+
+			coreTime := val.CoreTime()
+			// Only keep this arg if value wasn't seen before
+			if _, exists := b.hashSet[coreTime]; !exists {
+				b.hashSet[coreTime] = struct{}{}
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalTime(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
 
 	return nil
 }
@@ -677,6 +802,11 @@ type builtinInDurationSig struct {
 func (b *builtinInDurationSig) buildHashMapForConstArgs(ctx BuildContext) error {
 	b.nonConstArgsIdx = make([]int, 0)
 	b.hashSet = make(map[time.Duration]struct{}, len(b.args)-1)
+
+	// Keep track of unique args count for in-place modification
+	uniqueArgCount := 1 // Start with 1 for the first arg (value to check)
+
+	// TODO: ConstOnlyInContext and default branch should also prune duplicate ones after expression are managed by memo.
 	for i := 1; i < len(b.args); i++ {
 		switch b.args[i].ConstLevel() {
 		case ConstStrict:
@@ -684,21 +814,40 @@ func (b *builtinInDurationSig) buildHashMapForConstArgs(ctx BuildContext) error 
 			if err != nil {
 				return err
 			}
+
 			if isNull {
-				b.hasNull = true
+				// Only keep one NULL value
+				if !b.hasNull {
+					b.hasNull = true
+					b.args[uniqueArgCount] = b.args[i]
+					uniqueArgCount++
+				}
 				continue
 			}
-			b.hashSet[val.Duration] = struct{}{}
+
+			// Only keep this arg if value wasn't seen before
+			if _, exists := b.hashSet[val.Duration]; !exists {
+				b.hashSet[val.Duration] = struct{}{}
+				b.args[uniqueArgCount] = b.args[i]
+				uniqueArgCount++
+			}
 		case ConstOnlyInContext:
 			// Avoid build plans for wrong type.
 			if _, _, err := b.args[i].EvalDuration(ctx.GetEvalCtx(), chunk.Row{}); err != nil {
 				return err
 			}
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		default:
-			b.nonConstArgsIdx = append(b.nonConstArgsIdx, i)
+			b.args[uniqueArgCount] = b.args[i]
+			b.nonConstArgsIdx = append(b.nonConstArgsIdx, uniqueArgCount)
+			uniqueArgCount++
 		}
 	}
+
+	// Truncate args to only include unique values
+	b.args = b.args[:uniqueArgCount]
 
 	return nil
 }
