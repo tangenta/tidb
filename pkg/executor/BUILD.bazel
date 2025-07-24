@@ -368,6 +368,7 @@ go_test(
         "parallel_apply_test.go",
         "partition_table_test.go",
         "pkdb_error_related_test.go",
+        "pkdb_infoschema_reader_test.go",
         "pkdb_label_security_test.go",
         "pkdb_procedure_test.go",
         "pkdb_user_login_history_test.go",
