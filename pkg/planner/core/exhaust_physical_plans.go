@@ -3238,6 +3238,11 @@ func getEnforcedStreamAggs(la *logicalop.LogicalAggregation, prop *property.Phys
 	if prop.IsFlashProp() {
 		return nil
 	}
+	if prop.IndexJoinProp != nil {
+		// since this stream agg is in the inner side of an index join, the
+		// enforced sort operator couldn't be built by executor layer now.
+		return nil
+	}
 	_, desc := prop.AllSameOrder()
 	allTaskTypes := prop.GetAllPossibleChildTaskTypes()
 	enforcedAggs := make([]base.PhysicalPlan, 0, len(allTaskTypes))
@@ -3644,11 +3649,11 @@ func exhaustPhysicalPlans4LogicalAggregation(lp base.LogicalPlan, prop *property
 	}
 	preferHash, preferStream := la.ResetHintIfConflicted()
 	hashAggs := getHashAggs(la, prop)
-	if hashAggs != nil && preferHash {
+	if len(hashAggs) > 0 && preferHash {
 		return hashAggs, true, nil
 	}
 	streamAggs := getStreamAggs(la, prop)
-	if streamAggs != nil && preferStream {
+	if len(streamAggs) > 0 && preferStream {
 		return streamAggs, true, nil
 	}
 	aggs := append(hashAggs, streamAggs...)

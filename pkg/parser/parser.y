@@ -683,6 +683,7 @@ import (
 	than                       "THAN"
 	tikvImporter               "TIKV_IMPORTER"
 	timeType                   "TIME"
+	timeout                    "TIMEOUT"
 	timestampType              "TIMESTAMP"
 	tokenIssuer                "TOKEN_ISSUER"
 	tpcc                       "TPCC"
@@ -768,6 +769,7 @@ import (
 	ioWriteBandwidth      "IO_WRITE_BANDWIDTH"
 	jsonArrayagg          "JSON_ARRAYAGG"
 	jsonObjectAgg         "JSON_OBJECTAGG"
+	jsonSumCrc32          "JSON_SUM_CRC32"
 	leader                "LEADER"
 	leaderConstraints     "LEADER_CONSTRAINTS"
 	learner               "LEARNER"
@@ -1009,6 +1011,7 @@ import (
 	BinlogStmt                 "Binlog base64 statement"
 	BRIEStmt                   "BACKUP or RESTORE statement"
 	CalibrateResourceStmt      "CALIBRATE RESOURCE statement"
+	CancelDistributionJobStmt  "CANCEL DISTRIBUTION JOB statement"
 	CommitStmt                 "COMMIT statement"
 	CreateTableStmt            "CREATE TABLE statement"
 	CreateViewStmt             "CREATE VIEW  statement"
@@ -3236,7 +3239,7 @@ FlashbackDatabaseStmt:
  *  Distribute Table Statement
  *
  *  Example:
- *      DISTRIBUTE TABLE table_name Partitions(p0,p1) Engine = tikv Rule=leader;
+ *      DISTRIBUTE TABLE table_name Partitions(p0,p1)  Rule= `leader-scatter` Engine = `tikv` timeout = `30m`;
  *
  *******************************************************************/
 DistributeTableStmt:
@@ -3247,6 +3250,24 @@ DistributeTableStmt:
 			PartitionNames: $4.([]ast.CIStr),
 			Rule:           ast.NewCIStr($7),
 			Engine:         ast.NewCIStr($10),
+		}
+	}
+|	"DISTRIBUTE" "TABLE" TableName PartitionNameListOpt "RULE" EqOrAssignmentEq Identifier "ENGINE" EqOrAssignmentEq Identifier "TIMEOUT" EqOrAssignmentEq Identifier
+	{
+		$$ = &ast.DistributeTableStmt{
+			Table:          $3.(*ast.TableName),
+			PartitionNames: $4.([]ast.CIStr),
+			Rule:           ast.NewCIStr($7),
+			Engine:         ast.NewCIStr($10),
+			Timeout:        ast.NewCIStr($13),
+		}
+	}
+
+CancelDistributionJobStmt:
+	"CANCEL" "DISTRIBUTION" "JOB" Int64Num
+	{
+		$$ = &ast.CancelDistributionJobStmt{
+			JobID: $4.(int64),
 		}
 	}
 
@@ -7026,6 +7047,7 @@ UnReservedKeyword:
 |	"TEXT"
 |	"THAN"
 |	"TIME" %prec lowerThanStringLitToken
+|	"TIMEOUT"
 |	"TIMESTAMP" %prec lowerThanStringLitToken
 |	"TRACE"
 |	"TRANSACTION"
@@ -7444,6 +7466,7 @@ NotKeywordToken:
 |	"FLASHBACK"
 |	"JSON_OBJECTAGG"
 |	"JSON_ARRAYAGG"
+|	"JSON_SUM_CRC32"
 |	"TLS"
 |	"FOLLOWER"
 |	"FOLLOWERS"
@@ -8158,6 +8181,30 @@ SimpleExpr:
 			Expr:            $3,
 			Tp:              tp,
 			FunctionType:    ast.CastFunction,
+			ExplicitCharSet: explicitCharset,
+		}
+	}
+|	jsonSumCrc32 '(' Expression "AS" CastType "ARRAY" ')'
+	{
+		/* Copied from CAST function, except that ARRAY is enforced to be true */
+		tp := $5.(*types.FieldType)
+		defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimalForCast(tp.GetType())
+		if tp.GetFlen() == types.UnspecifiedLength {
+			tp.SetFlen(defaultFlen)
+		}
+		if tp.GetDecimal() == types.UnspecifiedLength {
+			tp.SetDecimal(defaultDecimal)
+		}
+		tp.SetArray(true)
+		explicitCharset := parser.explicitCharset
+		if !explicitCharset && tp.GetCharset() != charset.CharsetBin {
+			tp.SetCharset(charset.CharsetUTF8MB4)
+			tp.SetCollate(charset.CollationUTF8MB4)
+		}
+		parser.explicitCharset = false
+		$$ = &ast.JSONSumCrc32Expr{
+			Expr:            $3,
+			Tp:              tp,
 			ExplicitCharSet: explicitCharset,
 		}
 	}
@@ -12561,6 +12608,7 @@ Statement:
 |	ExecuteStmt
 |	ExplainStmt
 |	CalibrateResourceStmt
+|	CancelDistributionJobStmt
 |	CreateDatabaseStmt
 |	CreateIndexStmt
 |	CreateTableStmt
