@@ -96,6 +96,8 @@ func GetTiDBInfo() string {
 	)
 	if kerneltype.IsNextGen() {
 		info += "\nKernel Type: Next Generation"
+	} else {
+		info += "\nKernel Type: Classic"
 	}
 	return info
 }
