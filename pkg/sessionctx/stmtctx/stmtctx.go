@@ -1094,11 +1094,11 @@ func (sc *StatementContext) CopyMuForCallProcedure(srcCtx *StatementContext) {
 	srcCtx.mu.message = sc.mu.message
 	srcCtx.WarnHandler.SetWarnings(sc.GetWarnings())
 	//
-	d := srcCtx.SyncExecDetails.GetExecDetails()
-	sc.SyncExecDetails.Reset()
-	sc.SyncExecDetails.MergeExecDetails(&d, nil)
-	sc.MemTracker = srcCtx.MemTracker
-	sc.DiskTracker = srcCtx.DiskTracker
+	d := sc.SyncExecDetails.GetExecDetails()
+	srcCtx.SyncExecDetails.Reset()
+	srcCtx.SyncExecDetails.MergeExecDetails(&d, nil)
+	srcCtx.MemTracker = sc.MemTracker
+	srcCtx.DiskTracker = sc.DiskTracker
 }
 
 // ResetForRetry resets the changed states during execution.

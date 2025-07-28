@@ -12,6 +12,8 @@ import (
 	"github.com/pingcap/tidb/pkg/store/gcworker"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
+	pdgc "github.com/tikv/pd/client/clients/gc"
 )
 
 func setEnableLogHistoryStatus(enable bool) {
@@ -70,6 +72,14 @@ func TestTickGCSysTable(t *testing.T) {
 	))
 }
 
+type mockPDClient struct {
+	pd.Client
+}
+
+func (m mockPDClient) GetGCInternalController(uint32) pdgc.InternalController {
+	return nil
+}
+
 func TestTickGCSysTableAfterInterval(t *testing.T) {
 	// create mock store
 	store := testkit.CreateMockStore(t)
@@ -81,7 +91,7 @@ func TestTickGCSysTableAfterInterval(t *testing.T) {
 	setLoginHistoryRetainDuration(0)
 
 	// create gcworker
-	gw, err := gcworker.NewGCWorker(store, nil)
+	gw, err := gcworker.NewGCWorker(store, mockPDClient{})
 	require.NoError(t, err)
 
 	// TickGCSysTable firstly.
