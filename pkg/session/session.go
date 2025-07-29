@@ -3603,7 +3603,6 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	if err != nil {
 		return nil, err
 	}
-	ver = getStoreBootstrapVersionWithCache(store)
 	verEE := getStoreEEBootstrapVersionWithCache(store)
 	startMode := ddl.Normal
 	if ver < currentBootstrapVersion || verEE < currentEEBootstrapVersion {

@@ -53,7 +53,6 @@ func getGoroutineStacks() string {
 	return string(buf)
 }
 
-// SetupSignalHandler setup signal handler for TiDB Server
 // SetupUSR1Handler sets up a signal handler for SIGUSR1.
 // When SIGUSR1 is received, it dumps the current goroutine stack to the log, it's
 // useful for debugging issue when the server hasn't started yet or stuck on showdown.

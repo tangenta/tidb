@@ -2199,7 +2199,7 @@ func TestTableRegionsExtractor(t *testing.T) {
 
 	parser := parser.New()
 	for _, ca := range cases {
-		logicalMemTable := getLogicalMemTable(t, dom, se, parser, ca.sql)
+		logicalMemTable, _ := getLogicalMemTable(t, dom, se, parser, ca.sql)
 		require.NotNil(t, logicalMemTable.Extractor, "Extractor should not be nil for SQL: %s", ca.sql)
 
 		tre, ok := logicalMemTable.Extractor.(*plannercore.TableRegionsExtractor)
