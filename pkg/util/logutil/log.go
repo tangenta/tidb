@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/tracing"
+	"github.com/pingcap/tidb/pkg/util/versioninfo"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -134,7 +135,9 @@ func InitLogger(cfg *LogConfig, opts ...zap.Option) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.ReplaceGlobals(gl, props)
+	if !versioninfo.TiDBXMode {
+		log.ReplaceGlobals(gl, props)
+	}
 	// pingcap/log doesn't support DisableErrorVerbose for json format log.
 	if cfg.Config.Format == jsonLogFormat || !cfg.Config.DisableErrorVerbose {
 		errVerboseLogger = gl
@@ -147,6 +150,9 @@ func InitLogger(cfg *LogConfig, opts ...zap.Option) error {
 		}
 		errVerboseLogger = logger
 	}
+	AppLogger = gl
+	SlowQueryLogger = gl
+	GeneralLogger = gl
 
 	// init dedicated logger for slow query log,
 	// we should use same writeSyncer when filenames are equal.
@@ -172,6 +178,11 @@ func InitLogger(cfg *LogConfig, opts ...zap.Option) error {
 
 	initGRPCLogger(gl)
 	tikv.SetLogContextKey(CtxLogKey)
+
+	if setAppLoggerFunc != nil {
+		setAppLoggerFunc(gl)
+	}
+
 	return nil
 }
 
@@ -204,24 +215,37 @@ func ReplaceLogger(cfg *LogConfig, opts ...zap.Option) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.ReplaceGlobals(gl, props)
+	if !versioninfo.TiDBXMode {
+		log.ReplaceGlobals(gl, props)
+	}
+	AppLogger = gl
+	SlowQueryLogger = gl
+	GeneralLogger = gl
 
 	cfgJSON, err := json.Marshal(&cfg.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	SlowQueryLogger, _, err = newSlowQueryLogger(cfg)
-	if err != nil {
-		return errors.Trace(err)
+	if len(cfg.SlowQueryFile) > 0 {
+		SlowQueryLogger, _, err = newSlowQueryLogger(cfg)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	GeneralLogger, _, err = newGeneralLogger(cfg)
-	if err != nil {
-		return errors.Trace(err)
+	if len(cfg.GeneralLogFile) > 0 {
+		GeneralLogger, _, err = newGeneralLogger(cfg)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	log.S().Infof("replaced global logger with config: %s", string(cfgJSON))
+	if setAppLoggerFunc != nil {
+		setAppLoggerFunc(gl)
+	}
+
+	BgLogger().Info("replaced global logger", zap.String("config", string(cfgJSON)))
 
 	return nil
 }
@@ -242,19 +266,25 @@ type ctxLogKeyType struct{}
 // public for test usage.
 var CtxLogKey = ctxLogKeyType{}
 
+// AppLogger is used for fusion mode
+var AppLogger *zap.Logger
+
 // Logger gets a contextual logger from current context.
 // contextual logger will output common fields from context.
 func Logger(ctx context.Context) *zap.Logger {
 	if ctxlogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); ok {
 		return ctxlogger
 	}
-	return log.L()
+	return BgLogger()
 }
 
 // BgLogger is alias of `logutil.BgLogger()`. It's initialized in tidb-server's
 // main function. Don't use it in `init` or equivalent functions otherwise it
 // will print to stdout.
 func BgLogger() *zap.Logger {
+	if AppLogger != nil {
+		return AppLogger
+	}
 	return log.L().With()
 }
 
@@ -271,7 +301,7 @@ func ErrVerboseLogger() *zap.Logger {
 // LoggerWithTraceInfo attaches fields from trace info to logger
 func LoggerWithTraceInfo(logger *zap.Logger, info *tracing.TraceInfo) *zap.Logger {
 	if logger == nil {
-		logger = log.L()
+		logger = BgLogger()
 	}
 
 	if fields := fieldsFromTraceInfo(info); len(fields) > 0 {
@@ -330,7 +360,7 @@ func WithTraceLogger(ctx context.Context, info *tracing.TraceInfo) context.Conte
 	if ctxLogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); ok {
 		logger = ctxLogger
 	} else {
-		logger = log.L()
+		logger = BgLogger()
 	}
 	return context.WithValue(ctx, CtxLogKey, wrapTraceLogger(ctx, info, logger))
 }
@@ -376,7 +406,7 @@ func WithFields(ctx context.Context, fields ...zap.Field) context.Context {
 	if ctxLogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); ok {
 		logger = ctxLogger
 	} else {
-		logger = log.L()
+		logger = BgLogger()
 	}
 
 	if len(fields) > 0 {
