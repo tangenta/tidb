@@ -1179,6 +1179,9 @@ func upgrade(s sessiontypes.Session) {
 	for _, upgrade := range bootstrapEEVersion {
 		upgrade(s, verEE)
 	}
+	for _, upgrade := range bootstrapEEVersion {
+		upgrade(s, verEE)
+	}
 	if isNull {
 		upgradeToVer99After(s)
 	}

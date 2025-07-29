@@ -2193,7 +2193,7 @@ func (e *memtableRetriever) setDataForTableRegions(ctx context.Context, sctx ses
 		return errors.New("Information about table regions can be gotten only when the storage is splittable")
 	}
 
-	is := sctx.GetDomainInfoSchema().(infoschema.InfoSchema)
+	is := sctx.GetLatestInfoSchema().(infoschema.InfoSchema)
 	setTableRegionsByName := func(schemaName, tableName ast.CIStr) {
 		if util.IsMemOrSysDB(schemaName.L) {
 			return

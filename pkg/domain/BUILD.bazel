@@ -75,6 +75,7 @@ go_library(
         "//pkg/statistics/handle/util",
         "//pkg/statistics/util",
         "//pkg/store",
+        "//pkg/store/helper",
         "//pkg/ttl/ttlworker",
         "//pkg/types",
         "//pkg/util",
