@@ -1144,7 +1144,7 @@ func (b *builtinTiDBEncodeRecordKeySig) Clone() builtinFunc {
 
 // evalString evals a builtinTiDBEncodeRecordKeySig.
 func (b *builtinTiDBEncodeRecordKeySig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
-	is, err := b.GetDomainInfoSchema(ctx)
+	is, err := b.GetLatestInfoSchema(ctx)
 	if err != nil {
 		return "", true, err
 	}
@@ -1216,7 +1216,7 @@ func (b *builtinTiDBEncodeIndexKeySig) Clone() builtinFunc {
 
 // evalString evals a builtinTiDBEncodeIndexKeySig.
 func (b *builtinTiDBEncodeIndexKeySig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
-	is, err := b.GetDomainInfoSchema(ctx)
+	is, err := b.GetLatestInfoSchema(ctx)
 	if err != nil {
 		return "", true, err
 	}
@@ -1292,7 +1292,7 @@ func (b *builtinTiDBDecodeKeySig) evalString(ctx EvalContext, row chunk.Row) (st
 	if isNull || err != nil {
 		return "", isNull, err
 	}
-	is, err := b.GetDomainInfoSchema(ctx)
+	is, err := b.GetLatestInfoSchema(ctx)
 	if err != nil {
 		return "", true, err
 	}

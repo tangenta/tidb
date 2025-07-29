@@ -1666,9 +1666,10 @@ const (
 	DefTiDBEnableSharedLockPromotion                  = false
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
 	DefTiDBEnableLabelSecurity                        = false
-	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0
+	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0.0
 	DefTiDBAccelerateUserCreationUpdate               = false
 	DefTiDBEnableTSValidation                         = true
+	DefTiDBLoadBindingTimeout                         = 200
 )
 
 // Process global variables.
@@ -1799,11 +1800,13 @@ var (
 	EnableLoginHistory           = atomic.NewBool(DefTiDBEnableLoginHistory)
 	LoginHistoryRetainDuration   = atomic.NewDuration(DefTiDBLoginHistoryRetainDuration)
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
-	StoredProgramCacheSize       = atomic.NewInt64(DefStoredProgramCacheSize)
-	TiDBEnableSPAstReuse         = atomic.NewBool(true)
-	TiDBEnableProcedureValue     = atomic.NewBool(DefTiDBEnableProcedure)
-	AutomaticSPPrivileges        = atomic.NewBool(true)
-	EnableDutySeparationMode     = atomic.NewBool(DefTiDBEnableDutySeparationMode)
+
+	CircuitBreakerPDMetadataErrorRateThresholdPct = atomic.NewFloat64(0.0)
+	StoredProgramCacheSize                        = atomic.NewInt64(DefStoredProgramCacheSize)
+	TiDBEnableSPAstReuse                          = atomic.NewBool(true)
+	TiDBEnableProcedureValue                      = atomic.NewBool(DefTiDBEnableProcedure)
+	AutomaticSPPrivileges                         = atomic.NewBool(true)
+	EnableDutySeparationMode                      = atomic.NewBool(DefTiDBEnableDutySeparationMode)
 )
 
 func serverMemoryLimitDefaultValue() string {

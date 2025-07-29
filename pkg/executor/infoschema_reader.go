@@ -2125,7 +2125,7 @@ func (e *memtableRetriever) setDataForTiKVRegionStatus(ctx context.Context, sctx
 	}
 	requestByTableRange := false
 	var allRegionsInfo *pd.RegionsInfo
-	is := sctx.GetDomainInfoSchema().(infoschema.InfoSchema)
+	is := sctx.GetLatestInfoSchema().(infoschema.InfoSchema)
 	if e.extractor != nil {
 		extractor, ok := e.extractor.(*plannercore.TiKVRegionStatusExtractor)
 		if ok && len(extractor.GetTablesID()) > 0 {
@@ -2193,7 +2193,7 @@ func (e *memtableRetriever) setDataForTableRegions(ctx context.Context, sctx ses
 		return errors.New("Information about table regions can be gotten only when the storage is splittable")
 	}
 
-	is := sctx.GetDomainInfoSchema().(infoschema.InfoSchema)
+	is := sctx.GetLatestInfoSchema().(infoschema.InfoSchema)
 	setTableRegionsByName := func(schemaName, tableName ast.CIStr) {
 		if util.IsMemOrSysDB(schemaName.L) {
 			return
