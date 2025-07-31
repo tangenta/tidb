@@ -1267,7 +1267,7 @@ const (
 	TiDBEnableLabelSecurity = "tidb_enable_label_security"
 	// TiDBCircuitBreakerPDMetadataErrorRateThresholdPct variable is used to set percent of errors to trip the circuit breaker for get region calls to PD
 	// https://github.com/tikv/rfcs/blob/master/text/0115-circuit-breaker.md
-	TiDBCircuitBreakerPDMetadataErrorRateThresholdPct = "tidb_cb_pd_metadata_error_rate_threshold_pct"
+	TiDBCircuitBreakerPDMetadataErrorRateThresholdRatio = "tidb_cb_pd_metadata_error_rate_threshold_ratio"
 
 	// TiDBEnableTSValidation controls whether to enable the timestamp validation in client-go.
 	TiDBEnableTSValidation = "tidb_enable_ts_validation"
@@ -1665,6 +1665,7 @@ const (
 	DefOptEnableProjectionPushDown                    = true
 	DefTiDBEnableSharedLockPromotion                  = false
 	DefTiDBTSOClientRPCMode                           = TSOClientRPCModeDefault
+	DefTiDBCircuitBreakerPDMetaErrorRateRatio         = 0.0
 	DefTiDBEnableLabelSecurity                        = false
 	DefTiDBCircuitBreakerPDMetaErrorRatePct           = 0.0
 	DefTiDBAccelerateUserCreationUpdate               = false
@@ -1801,12 +1802,13 @@ var (
 	LoginHistoryRetainDuration   = atomic.NewDuration(DefTiDBLoginHistoryRetainDuration)
 	AccelerateUserCreationUpdate = atomic.NewBool(DefTiDBAccelerateUserCreationUpdate)
 
-	CircuitBreakerPDMetadataErrorRateThresholdPct = atomic.NewFloat64(0.0)
-	StoredProgramCacheSize                        = atomic.NewInt64(DefStoredProgramCacheSize)
-	TiDBEnableSPAstReuse                          = atomic.NewBool(true)
-	TiDBEnableProcedureValue                      = atomic.NewBool(DefTiDBEnableProcedure)
-	AutomaticSPPrivileges                         = atomic.NewBool(true)
-	EnableDutySeparationMode                      = atomic.NewBool(DefTiDBEnableDutySeparationMode)
+	CircuitBreakerPDMetadataErrorRateThresholdRatio = atomic.NewFloat64(0.0)
+
+	StoredProgramCacheSize   = atomic.NewInt64(DefStoredProgramCacheSize)
+	TiDBEnableSPAstReuse     = atomic.NewBool(true)
+	TiDBEnableProcedureValue = atomic.NewBool(DefTiDBEnableProcedure)
+	AutomaticSPPrivileges    = atomic.NewBool(true)
+	EnableDutySeparationMode = atomic.NewBool(DefTiDBEnableDutySeparationMode)
 )
 
 func serverMemoryLimitDefaultValue() string {

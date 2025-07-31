@@ -869,6 +869,9 @@ type SessionVars struct {
 	// InRestrictedSQL indicates if the session is handling restricted SQL execution.
 	InRestrictedSQL bool
 
+	// InExplainExplore indicates if this statement is under EXPLAIN EXPLORE.
+	InExplainExplore bool
+
 	// SnapshotTS is used for reading history data. For simplicity, SnapshotTS only supports distsql request.
 	SnapshotTS uint64
 
@@ -2318,6 +2321,8 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		EnableRedactLog:               vardef.DefTiDBRedactLog,
 		EnableWindowFunction:          vardef.DefEnableWindowFunction,
 		CostModelVersion:              vardef.DefTiDBCostModelVer,
+		OptimizerEnableNAAJ:           vardef.DefTiDBEnableNAAJ,
+		OptOrderingIdxSelRatio:        vardef.DefTiDBOptOrderingIdxSelRatio,
 		inCallProcedure: struct {
 			inCall bool
 			num    int

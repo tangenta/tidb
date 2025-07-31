@@ -326,7 +326,7 @@ func RunTiDBServer(args []string) {
 
 	exited := make(chan struct{})
 	if !versioninfo.TiDBXMode {
-		signal.SetupSignalHandler(func(_ os.Signal) {
+		signal.SetupSignalHandler(func() {
 			svr.Close()
 			resourcemanager.InstanceResourceManager.Stop()
 			cleanup(svr, storage, dom)
@@ -404,7 +404,7 @@ func setCPUAffinity() {
 }
 
 func registerStores() {
-	err := kvstore.Register(config.StoreTypeTiKV, driver.TiKVDriver{})
+	err := kvstore.Register(config.StoreTypeTiKV, &driver.TiKVDriver{})
 	terror.MustNil(err)
 	err = kvstore.Register(config.StoreTypeMockTiKV, mockstore.MockTiKVDriver{})
 	terror.MustNil(err)

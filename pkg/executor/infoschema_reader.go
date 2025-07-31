@@ -4074,9 +4074,9 @@ func (e *memtableRetriever) setDataFromRunawayWatches(sctx sessionctx.Context) e
 
 // used in resource_groups
 const (
-	burstableModeratedStr = "YES(MODERATED)"
-	burstableUnlimitedStr = "YES(UNLIMITED)"
-	burstdisableStr       = "NO"
+	burstableModeratedStr = "MODERATED"
+	burstableUnlimitedStr = "UNLIMITED"
+	burstdisableStr       = "OFF"
 	unlimitedFillRate     = "UNLIMITED"
 )
 
