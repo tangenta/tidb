@@ -485,8 +485,9 @@ func (p *PhysicalIndexMergeReader) ResolveIndices() (err error) {
 	return nil
 }
 
-// ResolveIndices implements Plan interface.
-func (p *PhysicalSelection) ResolveIndices() (err error) {
+// resolveIndices4PhysicalSelection implements Plan interface.
+func resolveIndices4PhysicalSelection(pp base.PhysicalPlan) (err error) {
+	p := pp.(*physicalop.PhysicalSelection)
 	err = p.BasePhysicalPlan.ResolveIndices()
 	if err != nil {
 		return err
@@ -726,8 +727,9 @@ func resolveIndexForInlineProjection(p *physicalop.PhysicalSchemaProducer) error
 	return nil
 }
 
-// ResolveIndices implements Plan interface.
-func (p *PhysicalTopN) ResolveIndices() (err error) {
+// resolveIndices4PhysicalTopN implements Plan interface.
+func resolveIndices4PhysicalTopN(pp base.PhysicalPlan) (err error) {
+	p := pp.(*physicalop.PhysicalTopN)
 	err = p.PhysicalSchemaProducer.ResolveIndices()
 	if err != nil {
 		return err
@@ -751,8 +753,9 @@ func (p *PhysicalTopN) ResolveIndices() (err error) {
 	return
 }
 
-// ResolveIndices implements Plan interface.
-func (p *PhysicalLimit) ResolveIndices() (err error) {
+// resolveIndices4PhysicalLimit implements Plan interface.
+func resolveIndices4PhysicalLimit(pp base.PhysicalPlan) (err error) {
+	p := pp.(*physicalop.PhysicalLimit)
 	err = p.BasePhysicalPlan.ResolveIndices()
 	if err != nil {
 		return err

@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/pkg/domain/infosync"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/auth"
@@ -362,10 +363,10 @@ var tableIDMap = map[string]int64{
 	TableKeyspaceMeta:                    autoid.InformationSchemaDBID + 100,
 
 	// PingKaiDB tables.
-	TableUserLoginHistory: autoid.InformationSchemaDBID + 5000,
-	ClusterTableAuditLog:  autoid.InformationSchemaDBID + 5001,
-	TableAuditLog:         autoid.InformationSchemaDBID + 5002,
-	TableRegions:          autoid.InformationSchemaDBID + 5003,
+	TableUserLoginHistory: autoid.InformationSchemaDBID + 0 + 5000,
+	ClusterTableAuditLog:  autoid.InformationSchemaDBID + 1 + 5001,
+	TableAuditLog:         autoid.InformationSchemaDBID + 2 + 5002,
+	TableRegions:          autoid.InformationSchemaDBID + 3 + 5003,
 }
 
 // columnInfo represents the basic column information of all kinds of INFORMATION_SCHEMA tables
@@ -1585,6 +1586,7 @@ var tableTableTiFlashTablesCols = []columnInfo{
 	{name: "TIDB_TABLE", tp: mysql.TypeVarchar, size: 64},
 	{name: "TABLE_ID", tp: mysql.TypeLonglong, size: 21},
 	{name: "IS_TOMBSTONE", tp: mysql.TypeLonglong, size: 21},
+	{name: "COLUMN_COUNT", tp: mysql.TypeLonglong, size: 21},
 	{name: "SEGMENT_COUNT", tp: mysql.TypeLonglong, size: 21},
 	{name: "TOTAL_ROWS", tp: mysql.TypeLonglong, size: 21},
 	{name: "TOTAL_SIZE", tp: mysql.TypeLonglong, size: 21},
@@ -1593,6 +1595,7 @@ var tableTableTiFlashTablesCols = []columnInfo{
 	{name: "DELTA_RATE_SEGMENTS", tp: mysql.TypeDouble, size: 64},
 	{name: "DELTA_PLACED_RATE", tp: mysql.TypeDouble, size: 64},
 	{name: "DELTA_CACHE_SIZE", tp: mysql.TypeLonglong, size: 21},
+	{name: "DELTA_CACHE_ALLOC_SIZE", tp: mysql.TypeLonglong, size: 21},
 	{name: "DELTA_CACHE_RATE", tp: mysql.TypeDouble, size: 64},
 	{name: "DELTA_CACHE_WASTED_RATE", tp: mysql.TypeDouble, size: 64},
 	{name: "DELTA_INDEX_SIZE", tp: mysql.TypeLonglong, size: 21},
@@ -1660,6 +1663,7 @@ var tableTableTiFlashSegmentsCols = []columnInfo{
 	{name: "DELTA_PERSISTED_COLUMN_FILES", tp: mysql.TypeLonglong, size: 21},
 	{name: "DELTA_PERSISTED_DELETE_RANGES", tp: mysql.TypeLonglong, size: 21},
 	{name: "DELTA_CACHE_SIZE", tp: mysql.TypeLonglong, size: 21},
+	{name: "DELTA_CACHE_ALLOC_SIZE", tp: mysql.TypeLonglong, size: 21},
 	{name: "DELTA_INDEX_SIZE", tp: mysql.TypeLonglong, size: 21},
 	{name: "STABLE_PAGE_ID", tp: mysql.TypeLonglong, size: 21},
 	{name: "STABLE_ROWS", tp: mysql.TypeLonglong, size: 21},
@@ -1944,7 +1948,7 @@ var tableKeyspaceMetaCols = []columnInfo{
 // The returned nil indicates that sharding information is not suitable for the table(for example, when the table is a View).
 // This function is exported for unit test.
 func GetShardingInfo(dbInfo ast.CIStr, tableInfo *model.TableInfo) any {
-	if tableInfo == nil || tableInfo.IsView() || util.IsMemOrSysDB(dbInfo.L) {
+	if tableInfo == nil || tableInfo.IsView() || metadef.IsMemOrSysDB(dbInfo.L) {
 		return nil
 	}
 	shardingInfo := "NOT_SHARDED"
@@ -2605,7 +2609,7 @@ func createInfoSchemaTable(_ autoid.Allocators, _ func() (pools.Resource, error)
 		columns[i] = table.ToColumn(col)
 	}
 	tp := table.VirtualTable
-	if IsClusterTableByName(util.InformationSchemaName.L, meta.Name.L) {
+	if IsClusterTableByName(metadef.InformationSchemaName.L, meta.Name.L) {
 		tp = table.ClusterTable
 	}
 	return &infoschemaTable{meta: meta, cols: columns, tp: tp}, nil

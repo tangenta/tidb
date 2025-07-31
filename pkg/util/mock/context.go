@@ -373,6 +373,11 @@ func (c *Context) GetSQLServer() sqlsvrapi.Server {
 	return c.dom.(sqlsvrapi.Server)
 }
 
+// IsCrossKS implements sessionctx.Context IsCrossKS interface.
+func (*Context) IsCrossKS() bool {
+	return false
+}
+
 // GetSchemaValidator implements sessionctx.Context GetSchemaValidator interface.
 func (c *Context) GetSchemaValidator() validatorapi.Validator {
 	return c.schValidator
@@ -382,6 +387,9 @@ func (c *Context) GetSchemaValidator() validatorapi.Validator {
 func (*Context) GetBuiltinFunctionUsage() map[string]uint32 {
 	return make(map[string]uint32)
 }
+
+// BuiltinFunctionUsageInc implements sessionctx.Context.
+func (*Context) BuiltinFunctionUsageInc(_ string) {}
 
 // GetGlobalSysVar implements GlobalVarAccessor GetGlobalSysVar interface.
 func (*Context) GetGlobalSysVar(_ sessionctx.Context, name string) (string, error) {
