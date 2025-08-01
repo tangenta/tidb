@@ -853,7 +853,7 @@ func setupFineGrainedShuffleInternal(ctx context.Context, sctx base.PlanContext,
 	case *physicalop.PhysicalSelection:
 		helper.plans = append(helper.plans, &x.BasePhysicalPlan)
 		setupFineGrainedShuffleInternal(ctx, sctx, x.Children()[0], helper, streamCountInfo, tiflashServerCountInfo)
-	case *PhysicalProjection:
+	case *physicalop.PhysicalProjection:
 		helper.plans = append(helper.plans, &x.BasePhysicalPlan)
 		setupFineGrainedShuffleInternal(ctx, sctx, x.Children()[0], helper, streamCountInfo, tiflashServerCountInfo)
 	case *PhysicalExchangeReceiver:
@@ -1182,7 +1182,7 @@ func avoidColumnEvaluatorForProjBelowUnion(p base.PhysicalPlan) base.PhysicalPla
 		x, ok := p.(*physicalop.PhysicalUnionAll)
 		if ok {
 			for _, child := range x.Children() {
-				if proj, ok := child.(*PhysicalProjection); ok {
+				if proj, ok := child.(*physicalop.PhysicalProjection); ok {
 					proj.AvoidColumnEvaluator = true
 				}
 			}
@@ -1197,7 +1197,7 @@ func eliminateUnionScanAndLock(sctx base.PlanContext, p base.PhysicalPlan) base.
 	var pointGet *PointGetPlan
 	var batchPointGet *BatchPointGetPlan
 	var physLock *PhysicalLock
-	var unionScan *PhysicalUnionScan
+	var unionScan *physicalop.PhysicalUnionScan
 	iteratePhysicalPlan(p, func(p base.PhysicalPlan) bool {
 		if len(p.Children()) > 1 {
 			return false
@@ -1209,7 +1209,7 @@ func eliminateUnionScanAndLock(sctx base.PlanContext, p base.PhysicalPlan) base.
 			batchPointGet = x
 		case *PhysicalLock:
 			physLock = x
-		case *PhysicalUnionScan:
+		case *physicalop.PhysicalUnionScan:
 			unionScan = x
 		}
 		return true

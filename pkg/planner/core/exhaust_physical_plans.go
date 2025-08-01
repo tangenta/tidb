@@ -64,7 +64,7 @@ func exhaustPhysicalPlans4LogicalUnionScan(lp base.LogicalPlan, prop *property.P
 	}
 	// here we just pass down the keep order property to the child.
 	// cuz, in union scan exec, it will feel the underlying tableReader or indexReader to get the keepOrder.
-	us := PhysicalUnionScan{
+	us := physicalop.PhysicalUnionScan{
 		Conditions: p.Conditions,
 		HandleCols: p.HandleCols,
 	}.Init(p.SCtx(), p.StatsInfo(), p.QueryBlockOffset(), childProp)
@@ -1647,7 +1647,7 @@ func constructInnerProj(prop *property.PhysicalProperty, proj *logicalop.Logical
 	if proj == nil {
 		return child
 	}
-	physicalProj := PhysicalProjection{
+	physicalProj := physicalop.PhysicalProjection{
 		Exprs:            proj.Exprs,
 		CalculateNoDelay: proj.CalculateNoDelay,
 	}.Init(proj.SCtx(), proj.StatsInfo(), proj.QueryBlockOffset(), prop)
@@ -1661,7 +1661,7 @@ func constructInnerUnionScan(prop *property.PhysicalProperty, us *logicalop.Logi
 	}
 	// Use `reader.StatsInfo()` instead of `us.StatsInfo()` because it should be more accurate. No need to specify
 	// childrenReqProps now since we have got reader already.
-	physicalUnionScan := PhysicalUnionScan{
+	physicalUnionScan := physicalop.PhysicalUnionScan{
 		Conditions: us.Conditions,
 		HandleCols: us.HandleCols,
 	}.Init(us.SCtx(), childPlan.StatsInfo(), us.QueryBlockOffset(), prop)
@@ -3232,7 +3232,7 @@ func exhaustPhysicalPlans4LogicalProjection(super base.LogicalPlan, prop *proper
 	ret := make([]base.PhysicalPlan, 0, len(newProps))
 	newProps = admitIndexJoinProps(newProps, prop)
 	for _, newProp := range newProps {
-		proj := PhysicalProjection{
+		proj := physicalop.PhysicalProjection{
 			Exprs:            p.Exprs,
 			CalculateNoDelay: p.CalculateNoDelay,
 		}.Init(ctx, p.StatsInfo().ScaleByExpectCnt(prop.ExpectedCnt), p.QueryBlockOffset(), newProp)
@@ -3386,15 +3386,6 @@ func getGEAndLogicalApply(super base.LogicalPlan) (ge *memo.GroupExpression, app
 // exhaustPhysicalPlans4LogicalApply generates the physical plan for a logical apply.
 func exhaustPhysicalPlans4LogicalApply(super base.LogicalPlan, prop *property.PhysicalProperty) ([]base.PhysicalPlan, bool, error) {
 	ge, la := getGEAndLogicalApply(super)
-	defer func() {
-		r := recover()
-		if r != nil {
-			fmt.Println(1)
-		}
-	}()
-	if ge != nil {
-		fmt.Println(1)
-	}
 	_, _, schema0, _ := getJoinChildStatsAndSchema(ge, la)
 	if !prop.AllColsFromSchema(schema0) || prop.IsFlashProp() { // for convenient, we don't pass through any prop
 		la.SCtx().GetSessionVars().RaiseWarningWhenMPPEnforced(

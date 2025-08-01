@@ -1337,7 +1337,7 @@ func GetDDLInfo(s sessionctx.Context) (*Info, error) {
 
 func get2JobsFromTable(sess *sess.Session) (generalJob, reorgJob *model.Job, err error) {
 	ctx := context.Background()
-	jobs, err := getJobsBySQL(ctx, sess, JobTable, "not reorg order by job_id limit 1")
+	jobs, err := getJobsBySQL(ctx, sess, "not reorg order by job_id limit 1")
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -1345,7 +1345,7 @@ func get2JobsFromTable(sess *sess.Session) (generalJob, reorgJob *model.Job, err
 	if len(jobs) != 0 {
 		generalJob = jobs[0]
 	}
-	jobs, err = getJobsBySQL(ctx, sess, JobTable, "reorg order by job_id limit 1")
+	jobs, err = getJobsBySQL(ctx, sess, "reorg order by job_id limit 1")
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -1449,7 +1449,7 @@ func processJobs(
 		if err != nil {
 			return nil, err
 		}
-		jobs, err := getJobsBySQL(ctx, ns, JobTable, fmt.Sprintf("job_id in (%s) order by job_id", strings.Join(idsStr, ", ")))
+		jobs, err := getJobsBySQL(ctx, ns, fmt.Sprintf("job_id in (%s) order by job_id", strings.Join(idsStr, ", ")))
 		if err != nil {
 			ns.Rollback()
 			return nil, err
@@ -1555,10 +1555,9 @@ func processAllJobs(
 	var limit = 100
 	for {
 		var jobs []*model.Job
-		jobs, err = getJobsBySQL(ctx, ns, JobTable,
-			fmt.Sprintf("job_id >= %s order by job_id asc limit %s",
-				strconv.FormatInt(jobID, 10),
-				strconv.FormatInt(int64(limit), 10)))
+		jobs, err = getJobsBySQL(ctx, ns, fmt.Sprintf("job_id >= %s order by job_id asc limit %s",
+			strconv.FormatInt(jobID, 10),
+			strconv.FormatInt(int64(limit), 10)))
 		if err != nil {
 			ns.Rollback()
 			return nil, err
@@ -1610,7 +1609,7 @@ func ResumeAllJobsBySystem(se sessionctx.Context) (map[int64]error, error) {
 
 // GetAllDDLJobs get all DDL jobs and sorts jobs by job.ID.
 func GetAllDDLJobs(ctx context.Context, se sessionctx.Context) ([]*model.Job, error) {
-	return getJobsBySQL(ctx, sess.NewSession(se), JobTable, "1 order by job_id")
+	return getJobsBySQL(ctx, sess.NewSession(se), "1 order by job_id")
 }
 
 // IterAllDDLJobs will iterates running DDL jobs first, return directly if `finishFn` return true or error,

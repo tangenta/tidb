@@ -84,7 +84,6 @@ go_library(
         "//pkg/ttl/ttlworker",
         "//pkg/types",
         "//pkg/util",
-        "//pkg/util/cgroup",
         "//pkg/util/chunk",
         "//pkg/util/context",
         "//pkg/util/cpu",
