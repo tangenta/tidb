@@ -403,7 +403,7 @@ type SyncExecDetails struct {
 
 // MergeExecDetails merges a single region execution details into self, used to print
 // the information in slow query log.
-func (s *SyncExecDetails) MergeExecDetails(commitDetails *util.CommitDetails) {
+func (s *SyncExecDetails) MergeExecDetails(details *ExecDetails, commitDetails *util.CommitDetails) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if commitDetails != nil {
@@ -1012,6 +1012,8 @@ const (
 	TpFKCascadeRuntimeStats
 	// TpRURuntimeStats is the tp for RURuntimeStats
 	TpRURuntimeStats
+	// TpAuditLogRuntimeStat is the tp for TpAuditLogRuntimeStat
+	TpAuditLogRuntimeStat
 )
 
 // RuntimeStats is used to express the executor runtime information.

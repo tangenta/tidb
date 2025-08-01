@@ -52,6 +52,9 @@ func (op *PhysicalTableScan) CloneForPlanCache(newCtx base.PlanContext) (base.Pl
 	if op.UsedColumnarIndexes != nil {
 		return nil, false
 	}
+	if op.TableSplit != nil {
+		return nil, false
+	}
 	return cloned, true
 }
 
@@ -158,6 +161,9 @@ func (op *PhysicalTableReader) CloneForPlanCache(newCtx base.PlanContext) (base.
 	if op.TableScanAndPartitionInfos != nil {
 		return nil, false
 	}
+	if op.TableSplit != nil {
+		return nil, false
+	}
 	return cloned, true
 }
 
@@ -208,6 +214,10 @@ func (op *PointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Plan, b
 	cloned.IdxColLens = make([]int, len(op.IdxColLens))
 	copy(cloned.IdxColLens, op.IdxColLens)
 	cloned.AccessConditions = cloneExpressionsForPlanCache(op.AccessConditions, nil)
+	cloned.unfold = make([]bool, len(op.unfold))
+	copy(cloned.unfold, op.unfold)
+	cloned.colsInWhereClause = make([]string, len(op.colsInWhereClause))
+	copy(cloned.colsInWhereClause, op.colsInWhereClause)
 	cloned.accessCols = cloneColumnsForPlanCache(op.accessCols, nil)
 	return cloned, true
 }
@@ -233,6 +243,10 @@ func (op *BatchPointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Pl
 	copy(cloned.IdxColLens, op.IdxColLens)
 	cloned.PartitionIdxs = make([]int, len(op.PartitionIdxs))
 	copy(cloned.PartitionIdxs, op.PartitionIdxs)
+	cloned.unfold = make([]bool, len(op.unfold))
+	copy(cloned.unfold, op.unfold)
+	cloned.colsInWhereClause = make([]string, len(op.colsInWhereClause))
+	copy(cloned.colsInWhereClause, op.colsInWhereClause)
 	cloned.accessCols = cloneColumnsForPlanCache(op.accessCols, nil)
 	return cloned, true
 }
