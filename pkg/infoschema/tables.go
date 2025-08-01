@@ -361,12 +361,6 @@ var tableIDMap = map[string]int64{
 	TableTiDBStatementsStats:             autoid.InformationSchemaDBID + 98,
 	ClusterTableTiDBStatementsStats:      autoid.InformationSchemaDBID + 99,
 	TableKeyspaceMeta:                    autoid.InformationSchemaDBID + 100,
-
-	// PingKaiDB tables.
-	TableUserLoginHistory: autoid.InformationSchemaDBID + 0 + 5000,
-	ClusterTableAuditLog:  autoid.InformationSchemaDBID + 1 + 5001,
-	TableAuditLog:         autoid.InformationSchemaDBID + 2 + 5002,
-	TableRegions:          autoid.InformationSchemaDBID + 3 + 5003,
 }
 
 // columnInfo represents the basic column information of all kinds of INFORMATION_SCHEMA tables
