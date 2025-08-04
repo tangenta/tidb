@@ -1555,6 +1555,7 @@ func constructDS2TableScanTask(
 		isPartition:     ds.PartitionDefIdx != nil,
 		tblCols:         ds.TblCols,
 		tblColHists:     ds.TblColHists,
+		TableSplit:      ds.TableSplit,
 	}.Init(ds.SCtx(), ds.QueryBlockOffset())
 	ts.SetSchema(ds.Schema().Clone())
 	if rowCount <= 0 {
@@ -1798,6 +1799,7 @@ func constructDS2IndexScanTask(
 			physicalTableID: ds.PhysicalTableID,
 			tblCols:         ds.TblCols,
 			tblColHists:     ds.TblColHists,
+			TableSplit:      ds.TableSplit,
 		}.Init(ds.SCtx(), ds.QueryBlockOffset())
 		ts.SetSchema(is.dataSourceSchema.Clone())
 		if ds.TableInfo.IsCommonHandle {
