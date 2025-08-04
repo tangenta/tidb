@@ -26,10 +26,10 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/privilege/conn"
+	"github.com/pingcap/tidb/pkg/session/sessmgr"
 	"github.com/pingcap/tidb/pkg/session/txninfo"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/sessionstates"
-	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
 )
 
@@ -69,7 +69,7 @@ type Session interface {
 	SetTLSState(*tls.ConnectionState)
 	SetTLCPState(*tlcp.ConnectionState)
 	SetCollation(coID int) error
-	SetSessionManager(util.SessionManager)
+	SetSessionManager(sessmgr.Manager)
 	Close()
 	Auth(user *auth.UserIdentity, auth, salt []byte, authConn conn.AuthConn) error
 	AuthWithoutVerification(ctx context.Context, user *auth.UserIdentity) bool

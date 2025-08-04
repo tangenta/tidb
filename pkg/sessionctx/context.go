@@ -27,11 +27,11 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/planner/planctx"
 	"github.com/pingcap/tidb/pkg/session/cursor"
+	"github.com/pingcap/tidb/pkg/session/sessmgr"
 	"github.com/pingcap/tidb/pkg/sessionctx/sessionstates"
 	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/statistics/handle/usage/indexusage"
 	"github.com/pingcap/tidb/pkg/table/tblctx"
-	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/sli"
 	"github.com/pingcap/tidb/pkg/util/topsql/stmtstats"
 	"github.com/tikv/client-go/v2/oracle"
@@ -135,7 +135,7 @@ type Context interface {
 	// GetStmtStats returns stmtstats.StatementStats owned by implementation.
 	GetStmtStats() *stmtstats.StatementStats
 	// ShowProcess returns ProcessInfo running in current Context
-	ShowProcess() *util.ProcessInfo
+	ShowProcess() *sessmgr.ProcessInfo
 	// GetAdvisoryLock acquires an advisory lock (aka GET_LOCK()).
 	GetAdvisoryLock(string, int64) error
 	// IsUsedAdvisoryLock checks for existing locks (aka IS_USED_LOCK()).
