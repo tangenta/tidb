@@ -16,6 +16,7 @@ package expression
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -287,8 +288,7 @@ func (b *builtinInIntSig) buildHashMapForConstArgs(ctx BuildContext) error {
 func (b *builtinInIntSig) Clone() builtinFunc {
 	newSig := &builtinInIntSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig
@@ -417,8 +417,7 @@ func (b *builtinInStringSig) buildHashMapForConstArgs(ctx BuildContext) error {
 func (b *builtinInStringSig) Clone() builtinFunc {
 	newSig := &builtinInStringSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig
@@ -525,8 +524,7 @@ func (b *builtinInRealSig) buildHashMapForConstArgs(ctx BuildContext) error {
 func (b *builtinInRealSig) Clone() builtinFunc {
 	newSig := &builtinInRealSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig
@@ -637,8 +635,7 @@ func (b *builtinInDecimalSig) buildHashMapForConstArgs(ctx BuildContext) error {
 func (b *builtinInDecimalSig) Clone() builtinFunc {
 	newSig := &builtinInDecimalSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig
@@ -749,8 +746,7 @@ func (b *builtinInTimeSig) buildHashMapForConstArgs(ctx BuildContext) error {
 func (b *builtinInTimeSig) Clone() builtinFunc {
 	newSig := &builtinInTimeSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig
@@ -855,8 +851,7 @@ func (b *builtinInDurationSig) buildHashMapForConstArgs(ctx BuildContext) error 
 func (b *builtinInDurationSig) Clone() builtinFunc {
 	newSig := &builtinInDurationSig{}
 	newSig.cloneFrom(&b.baseBuiltinFunc)
-	newSig.nonConstArgsIdx = make([]int, len(b.nonConstArgsIdx))
-	copy(newSig.nonConstArgsIdx, b.nonConstArgsIdx)
+	newSig.nonConstArgsIdx = slices.Clone(b.nonConstArgsIdx)
 	newSig.hashSet = b.hashSet
 	newSig.hasNull = b.hasNull
 	return newSig

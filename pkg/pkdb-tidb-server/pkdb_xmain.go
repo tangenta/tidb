@@ -24,7 +24,8 @@ import (
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/executor/mppcoordmanager"
-	"github.com/pingcap/tidb/pkg/extension"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/whitelist"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
@@ -283,9 +284,14 @@ func RunTiDBServer(args []string) {
 		terror.MustNil(err)
 		checkTempStorageQuota()
 	}
-	setupLog()
-	memory.InitMemoryHook()
-	setupExtensions()
+	err = setupLog()
+	terror.MustNil(err)
+	// register extensions
+	audit.Register()
+
+	err = memory.InitMemoryHook()
+	terror.MustNil(err)
+	whitelist.Register()
 	setupStmtSummary()
 
 	err = cpuprofile.StartCPUProfiler()
@@ -344,7 +350,7 @@ func RunTiDBServer(args []string) {
 			close(exited)
 		}
 	}
-	topsql.SetupTopSQL(keyspace.GetKeyspaceIDBySettings(), svr)
+	topsql.SetupTopSQL(keyspace.GetKeyspaceNameBytesBySettings(), svr)
 	terror.MustNil(svr.Run(dom))
 	<-exited
 	syncLog()
@@ -729,11 +735,11 @@ func setGlobalVars() {
 			zap.String("lease", schemaLeaseDuration.String()))
 		schemaLeaseDuration = config.DefSchemaLease
 	}
-	session.SetSchemaLease(schemaLeaseDuration)
+	vardef.SetSchemaLease(schemaLeaseDuration)
 	statsLeaseDuration := parseDuration(cfg.Performance.StatsLease)
-	session.SetStatsLease(statsLeaseDuration)
+	vardef.SetStatsLease(statsLeaseDuration)
 	planReplayerGCLease := parseDuration(cfg.Performance.PlanReplayerGCLease)
-	session.SetPlanReplayerGCLease(planReplayerGCLease)
+	vardef.SetPlanReplayerGCLease(planReplayerGCLease)
 	bindinfo.Lease = parseDuration(cfg.Performance.BindInfoLease)
 	statistics.RatioOfPseudoEstimate.Store(cfg.Performance.PseudoEstimateRatio)
 	if cfg.SplitTable {
@@ -843,23 +849,16 @@ func setGlobalVars() {
 	}
 }
 
-func setupLog() {
+func setupLog() error {
 	cfg := config.GetGlobalConfig()
 	err := logutil.InitLogger(cfg.Log.ToLogConfig(), keyspace.WrapZapcoreWithKeyspace())
-	terror.MustNil(err)
+	if err != nil {
+		return err
+	}
 
 	// trigger internal http(s) client init.
 	util.InternalHTTPClient()
-}
-
-func setupExtensions() *extension.Extensions {
-	err := extension.Setup()
-	terror.MustNil(err)
-
-	extensions, err := extension.GetExtensions()
-	terror.MustNil(err)
-
-	return extensions
+	return nil
 }
 
 func printInfo() {

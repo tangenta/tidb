@@ -383,7 +383,7 @@ type columnInfo struct {
 	enumElems []string
 }
 
-func buildColumnInfo(col columnInfo) *model.ColumnInfo {
+func buildColumnInfo(colID int64, col columnInfo) *model.ColumnInfo {
 	mCharset := charset.CharsetBin
 	mCollation := charset.CharsetBin
 	if col.tp == mysql.TypeVarchar || col.tp == mysql.TypeMediumBlob || col.tp == mysql.TypeBlob || col.tp == mysql.TypeLongBlob || col.tp == mysql.TypeEnum {
@@ -408,6 +408,7 @@ func buildColumnInfo(col columnInfo) *model.ColumnInfo {
 	fieldType.SetFlag(col.flag)
 	fieldType.SetElems(col.enumElems)
 	return &model.ColumnInfo{
+		ID:           colID,
 		Name:         ast.NewCIStr(col.name),
 		FieldType:    fieldType,
 		State:        model.StatePublic,
@@ -446,7 +447,7 @@ func buildTableMeta(tableName string, cs []columnInfo) *model.TableInfo {
 				tblInfo.Indices = primaryIndices
 			}
 		}
-		cols = append(cols, buildColumnInfo(c))
+		cols = append(cols, buildColumnInfo(int64(offset), c))
 	}
 	for i, col := range cols {
 		col.Offset = i
