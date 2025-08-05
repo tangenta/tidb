@@ -15,6 +15,8 @@
 package core
 
 import (
+	"slices"
+
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
 	"github.com/pingcap/tidb/pkg/types"
@@ -219,6 +221,8 @@ func FastClonePointGetForPlanCache(newCtx base.PlanContext, src, dst *PointGetPl
 	dst.outputNames = src.outputNames
 	dst.LockWaitTime = src.LockWaitTime
 	dst.Columns = src.Columns
+	dst.unfold = slices.Clone(src.unfold)
+	dst.colsInWhereClause = slices.Clone(src.colsInWhereClause)
 
 	// remaining fields are unnecessary to clone:
 	// cost, planCostInit, planCost, planCostVer2, accessCols

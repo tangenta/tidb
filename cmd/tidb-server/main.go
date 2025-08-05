@@ -40,6 +40,8 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/mppcoordmanager"
 	"github.com/pingcap/tidb/pkg/extension"
 	_ "github.com/pingcap/tidb/pkg/extension/_import"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/whitelist"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
@@ -338,11 +340,12 @@ func main() {
 	}
 	err = setupLog()
 	terror.MustNil(err)
+	// register extensions
+	audit.Register()
 
 	err = memory.InitMemoryHook()
 	terror.MustNil(err)
-	_, err = setupExtensions()
-	terror.MustNil(err)
+	whitelist.Register()
 	setupStmtSummary()
 
 	err = cpuprofile.StartCPUProfiler()
