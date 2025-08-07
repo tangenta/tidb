@@ -3302,6 +3302,15 @@ func addPushedDownSelection4PhysicalTableScan(ts *physicalop.PhysicalTableScan, 
 	}
 }
 
+func (ts *PhysicalTableScan) getScanRowSize() float64 {
+	if ts.StoreType == kv.TiKV {
+		return cardinality.GetTableAvgRowSize(ts.SCtx(), ts.tblColHists, ts.tblCols, ts.StoreType, true)
+	}
+	// If `ts.handleCol` is nil, then the schema of tableScan doesn't have handle column.
+	// This logic can be ensured in column pruning.
+	return cardinality.GetTableAvgRowSize(ts.SCtx(), ts.tblColHists, ts.Schema().Columns, ts.StoreType, ts.HandleCols != nil)
+}
+
 func getOriginalPhysicalIndexScan(ds *logicalop.DataSource, prop *property.PhysicalProperty, path *util.AccessPath, isMatchProp bool, isSingleScan bool) *PhysicalIndexScan {
 	idx := path.Index
 	is := PhysicalIndexScan{

@@ -35,10 +35,12 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/planner/util/coreusage"
 	"github.com/pingcap/tidb/pkg/planner/util/optimizetrace"
+	"github.com/pingcap/tidb/pkg/planner/util/tablesampler"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/statistics"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/ranger"
@@ -134,6 +136,9 @@ type PhysicalTableReader struct {
 	PlanPartInfo *physicalop.PhysPlanPartInfo
 	// Used by MPP, because MPP plan may contain join/union/union all, it is possible that a physical table reader contains more than 1 table scan
 	TableScanAndPartitionInfos []physicalop.TableScanAndPartitionInfo `plan-cache-clone:"must-nil"`
+
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
 }
 
 // LoadTableStats loads the stats of the table read by this plan.
@@ -224,6 +229,7 @@ func GetPhysicalTableReader(sg *logicalop.TiKVSingleGather, schema *expression.S
 		Columns:        sg.Source.TblCols,
 		ColumnNames:    sg.Source.OutputNames(),
 	}
+	reader.TableSplit = sg.Source.TableSplit
 	reader.SetStats(stats)
 	reader.SetSchema(schema)
 	reader.SetChildrenReqProps(props)
@@ -780,6 +786,171 @@ func AddExtraPhysTblIDColumn(sctx base.PlanContext, columns []*model.ColumnInfo,
 		ID:       model.ExtraPhysTblID,
 	})
 	return columns, schema, true
+}
+
+// PhysicalTableScan represents a table scan plan.
+type PhysicalTableScan struct {
+	physicalop.PhysicalSchemaProducer
+
+	// AccessCondition is used to calculate range.
+	AccessCondition []expression.Expression
+	filterCondition []expression.Expression
+	// LateMaterializationFilterCondition is used to record the filter conditions
+	// that are pushed down to table scan from selection by late materialization.
+	LateMaterializationFilterCondition []expression.Expression
+	lateMaterializationSelectivity     float64
+
+	Table   *model.TableInfo    `plan-cache-clone:"shallow"`
+	Columns []*model.ColumnInfo `plan-cache-clone:"shallow"`
+	DBName  ast.CIStr           `plan-cache-clone:"shallow"`
+	Ranges  []*ranger.Range     `plan-cache-clone:"shallow"`
+
+	TableAsName *ast.CIStr `plan-cache-clone:"shallow"`
+
+	physicalTableID int64
+
+	rangeInfo string
+
+	// HandleIdx is the index of handle, which is only used for admin check table.
+	HandleIdx  []int
+	HandleCols util.HandleCols
+
+	StoreType kv.StoreType
+
+	IsMPPOrBatchCop bool // Used for tiflash PartitionTableScan.
+
+	// The table scan may be a partition, rather than a real table.
+	// TODO: clean up this field. After we support dynamic partitioning, table scan
+	// works on the whole partition table, and `isPartition` is not used.
+	isPartition bool
+	// KeepOrder is true, if sort data by scanning pkcol,
+	KeepOrder bool
+	Desc      bool
+	// ByItems only for partition table with orderBy + pushedLimit
+	ByItems []*util.ByItems
+
+	PlanPartInfo *physicalop.PhysPlanPartInfo
+
+	SampleInfo *tablesampler.TableSampleInfo `plan-cache-clone:"must-nil"`
+
+	// required by cost model
+	// tblCols and tblColHists contains all columns before pruning, which are used to calculate row-size
+	tblCols     []*expression.Column       `plan-cache-clone:"shallow"`
+	tblColHists *statistics.HistColl       `plan-cache-clone:"shallow"`
+	prop        *property.PhysicalProperty `plan-cache-clone:"shallow"`
+
+	// constColsByCond records the constant part of the index columns caused by the access conds.
+	// e.g. the index is (a, b, c) and there's filter a = 1 and b = 2, then the column a and b are const part.
+	// it's for indexMerge's tableScan only.
+	constColsByCond []bool
+
+	// usedStatsInfo records stats status of this physical table.
+	// It's for printing stats related information when display execution plan.
+	usedStatsInfo *stmtctx.UsedStatsInfoForTable `plan-cache-clone:"shallow"`
+
+	// for runtime filter
+	runtimeFilterList []*physicalop.RuntimeFilter `plan-cache-clone:"must-nil"` // plan with runtime filter is not cached
+	maxWaitTimeMs     int
+
+	// UsedColumnarIndexes is used to store the used columnar index for the table scan.
+	UsedColumnarIndexes []*ColumnarIndexExtra `plan-cache-clone:"must-nil"` // MPP plan should not be cached.
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
+}
+
+// ColumnarIndexExtra is the extra information for columnar index.
+type ColumnarIndexExtra struct {
+	// Note: Even if IndexInfo is not nil, it doesn't mean the index will be used
+	// because optimizer will explore all available vector indexes and fill them
+	// in IndexInfo, and later invalid plans are filtered out according to a topper executor.
+	IndexInfo *model.IndexInfo
+
+	// Not nil if there is an ColumnarIndex used.
+	QueryInfo *tipb.ColumnarIndexInfo
+}
+
+// Clone implements op.PhysicalPlan interface.
+func (ts *PhysicalTableScan) Clone(newCtx base.PlanContext) (base.PhysicalPlan, error) {
+	clonedScan := new(PhysicalTableScan)
+	*clonedScan = *ts
+	clonedScan.SetSCtx(newCtx)
+	prod, err := ts.PhysicalSchemaProducer.CloneWithSelf(newCtx, clonedScan)
+	if err != nil {
+		return nil, err
+	}
+	clonedScan.PhysicalSchemaProducer = *prod
+	clonedScan.AccessCondition = util.CloneExprs(ts.AccessCondition)
+	clonedScan.filterCondition = util.CloneExprs(ts.filterCondition)
+	clonedScan.LateMaterializationFilterCondition = util.CloneExprs(ts.LateMaterializationFilterCondition)
+	if ts.Table != nil {
+		clonedScan.Table = ts.Table.Clone()
+	}
+	clonedScan.Columns = util.CloneColInfos(ts.Columns)
+	clonedScan.Ranges = util.CloneRanges(ts.Ranges)
+	clonedScan.TableAsName = ts.TableAsName
+	clonedScan.rangeInfo = ts.rangeInfo
+	clonedScan.runtimeFilterList = make([]*physicalop.RuntimeFilter, 0, len(ts.runtimeFilterList))
+	for _, rf := range ts.runtimeFilterList {
+		clonedRF := rf.Clone()
+		clonedScan.runtimeFilterList = append(clonedScan.runtimeFilterList, clonedRF)
+	}
+	clonedScan.UsedColumnarIndexes = make([]*ColumnarIndexExtra, 0, len(ts.UsedColumnarIndexes))
+	for _, colIdx := range ts.UsedColumnarIndexes {
+		colIdxClone := *colIdx
+		clonedScan.UsedColumnarIndexes = append(clonedScan.UsedColumnarIndexes, &colIdxClone)
+	}
+	return clonedScan, nil
+}
+
+// ExtractCorrelatedCols implements op.PhysicalPlan interface.
+func (ts *PhysicalTableScan) ExtractCorrelatedCols() []*expression.CorrelatedColumn {
+	corCols := make([]*expression.CorrelatedColumn, 0, len(ts.AccessCondition)+len(ts.LateMaterializationFilterCondition))
+	for _, expr := range ts.AccessCondition {
+		corCols = append(corCols, expression.ExtractCorColumns(expr)...)
+	}
+	for _, expr := range ts.LateMaterializationFilterCondition {
+		corCols = append(corCols, expression.ExtractCorColumns(expr)...)
+	}
+	return corCols
+}
+
+// IsPartition returns true and partition ID if it's actually a partition.
+func (ts *PhysicalTableScan) IsPartition() (bool, int64) {
+	return ts.isPartition, ts.physicalTableID
+}
+
+// ResolveCorrelatedColumns resolves the correlated columns in range access.
+// We already limit range mem usage when building ranges in optimizer phase, so we don't need and shouldn't limit range
+// mem usage when rebuilding ranges during the execution phase.
+func (ts *PhysicalTableScan) ResolveCorrelatedColumns() ([]*ranger.Range, error) {
+	access := ts.AccessCondition
+	ctx := ts.SCtx()
+	if ts.Table.IsCommonHandle {
+		pkIdx := tables.FindPrimaryIndex(ts.Table)
+		idxCols, idxColLens := expression.IndexInfo2PrefixCols(ts.Columns, ts.Schema().Columns, pkIdx)
+		for _, cond := range access {
+			newCond, err := expression.SubstituteCorCol2Constant(ctx.GetExprCtx(), cond)
+			if err != nil {
+				return nil, err
+			}
+			access = append(access, newCond)
+		}
+		// All of access conditions must be used to build ranges, so we don't limit range memory usage.
+		res, err := ranger.DetachCondAndBuildRangeForIndex(ctx.GetRangerCtx(), access, idxCols, idxColLens, 0)
+		if err != nil {
+			return nil, err
+		}
+		ts.Ranges = res.Ranges
+	} else {
+		var err error
+		pkTP := ts.Table.GetPkColInfo().FieldType
+		// All of access conditions must be used to build ranges, so we don't limit range memory usage.
+		ts.Ranges, _, _, err = ranger.BuildTableRange(access, ctx.GetRangerCtx(), &pkTP, 0)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ts.Ranges, nil
 }
 
 // ExpandVirtualColumn expands the virtual column's dependent columns to ts's schema and column.
