@@ -16,13 +16,12 @@ package core
 
 import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 )
 
 // Trace represents a trace plan.
 type Trace struct {
-	physicalop.SimpleSchemaProducer
+	baseSchemaProducer
 
 	StmtNode   ast.StmtNode
 	ResolveCtx *resolve.Context

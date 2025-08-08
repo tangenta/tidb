@@ -23,8 +23,6 @@ var (
 	_ StmtNode = &DropStatsStmt{}
 	_ StmtNode = &LoadStatsStmt{}
 	_ StmtNode = &RefreshStatsStmt{}
-	_ StmtNode = &LockStatsStmt{}
-	_ StmtNode = &UnlockStatsStmt{}
 )
 
 // AnalyzeTableStmt is used to create table statistics.

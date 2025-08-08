@@ -37,7 +37,7 @@ func ExtractNotNullFromConds(conditions []expression.Expression, p base.LogicalP
 	// As a result,	`a` will be extracted as not-null column to abound the FDSet.
 	notnullColsUniqueIDs := intset.NewFastIntSet()
 	for _, condition := range conditions {
-		cols := expression.ExtractColumnsMapFromExpressions(nil, condition)
+		cols := expression.ExtractColumnsFromExpressions([]expression.Expression{condition}, nil)
 		if len(cols) == 0 {
 			continue
 		}

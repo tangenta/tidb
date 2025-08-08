@@ -895,13 +895,17 @@ func (p *LogicalJoin) ExtractFDForOuterJoin(equivFromApply [][]intset.FastIntSet
 	var opt funcdep.ArgOpts
 	if equivAcrossNum > 0 {
 		// find the equivalence FD across left and right cols.
-		outerConditionUniqueIDs := intset.NewFastIntSet()
+		var outConditionCols []*expression.Column
 		if len(outerCondition) != 0 {
-			expression.ExtractColumnsSetFromExpressions(&outerConditionUniqueIDs, nil, outerCondition...)
+			outConditionCols = append(outConditionCols, expression.ExtractColumnsFromExpressions(outerCondition, nil)...)
 		}
 		if len(p.OtherConditions) != 0 {
 			// other condition may contain right side cols, it doesn't affect the judgement of intersection of non-left-equiv cols.
-			expression.ExtractColumnsSetFromExpressions(&outerConditionUniqueIDs, nil, p.OtherConditions...)
+			outConditionCols = append(outConditionCols, expression.ExtractColumnsFromExpressions(p.OtherConditions, nil)...)
+		}
+		outerConditionUniqueIDs := intset.NewFastIntSet()
+		for _, col := range outConditionCols {
+			outerConditionUniqueIDs.Insert(int(col.UniqueID))
 		}
 		// judge whether left filters is on non-left-equiv cols.
 		if outerConditionUniqueIDs.Intersects(outerCols.Difference(equivOuterUniqueIDs)) {

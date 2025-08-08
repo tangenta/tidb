@@ -95,7 +95,6 @@ func (m *MockGlobalServerInfoManager) getServerInfo(id string, serverIDGetter fu
 			StatusPort:     cfg.Status.StatusPort,
 			Lease:          cfg.Lease,
 			StartTimestamp: time.Now().Unix(),
-			Keyspace:       config.GetGlobalKeyspaceName(),
 			ServerIDGetter: serverIDGetter,
 		},
 		DynamicInfo: serverinfo.DynamicInfo{

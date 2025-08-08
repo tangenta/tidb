@@ -567,8 +567,8 @@ func isPhysicalPlanCacheable(sctx base.PlanContext, p base.PhysicalPlan, paramNu
 		if underIndexMerge && x.isFullScan() {
 			return false, "IndexMerge plan with full-scan is un-cacheable"
 		}
-	case *physicalop.PhysicalTableScan:
-		if underIndexMerge && x.IsFullScan() {
+	case *PhysicalTableScan:
+		if underIndexMerge && x.isFullScan() {
 			return false, "IndexMerge plan with full-scan is un-cacheable"
 		}
 	case *PhysicalApply:
