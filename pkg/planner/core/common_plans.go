@@ -54,26 +54,26 @@ import (
 
 // ShowDDL is for showing DDL information.
 type ShowDDL struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 }
 
 // ShowSlow is for showing slow queries.
 type ShowSlow struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	*ast.ShowSlow
 }
 
 // ShowDDLJobQueries is for showing DDL job queries sql.
 type ShowDDLJobQueries struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	JobIDs []int64
 }
 
 // ShowDDLJobQueriesWithRange is for showing DDL job queries sql with specified limit and offset.
 type ShowDDLJobQueriesWithRange struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Limit  uint64
 	Offset uint64
@@ -81,13 +81,13 @@ type ShowDDLJobQueriesWithRange struct {
 
 // ShowNextRowID is for showing the next global row ID.
 type ShowNextRowID struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	TableName *ast.TableName
 }
 
 // CheckTable is used for checking table data, built from the 'admin check table' statement.
 type CheckTable struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	DBName             string
 	Table              table.Table
@@ -98,7 +98,7 @@ type CheckTable struct {
 
 // RecoverIndex is used for backfilling corrupted index data.
 type RecoverIndex struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table     *resolve.TableNameW
 	IndexName string
@@ -106,7 +106,7 @@ type RecoverIndex struct {
 
 // CleanupIndex is used to delete dangling index data.
 type CleanupIndex struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table     *resolve.TableNameW
 	IndexName string
@@ -114,7 +114,7 @@ type CleanupIndex struct {
 
 // CheckIndexRange is used for checking index data, output the index values that handle within begin and end.
 type CheckIndexRange struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table     *ast.TableName
 	IndexName string
@@ -124,28 +124,28 @@ type CheckIndexRange struct {
 
 // ChecksumTable is used for calculating table checksum, built from the `admin checksum table` statement.
 type ChecksumTable struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Tables []*resolve.TableNameW
 }
 
 // CancelDDLJobs represents a cancel DDL jobs plan.
 type CancelDDLJobs struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	JobIDs []int64
 }
 
 // PauseDDLJobs indicates a plan to pause the Running DDL Jobs.
 type PauseDDLJobs struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	JobIDs []int64
 }
 
 // ResumeDDLJobs indicates a plan to resume the Paused DDL Jobs.
 type ResumeDDLJobs struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	JobIDs []int64
 }
@@ -173,7 +173,7 @@ type AlterDDLJobOpt struct {
 
 // AlterDDLJob is the plan of admin alter ddl job
 type AlterDDLJob struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	JobID   int64
 	Options []*AlterDDLJobOpt
@@ -181,17 +181,17 @@ type AlterDDLJob struct {
 
 // WorkloadRepoCreate is the plan of admin create workload snapshot.
 type WorkloadRepoCreate struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 }
 
 // ReloadExprPushdownBlacklist reloads the data from expr_pushdown_blacklist table.
 type ReloadExprPushdownBlacklist struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 }
 
 // ReloadOptRuleBlacklist reloads the data from opt_rule_blacklist table.
 type ReloadOptRuleBlacklist struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 }
 
 // AdminPluginsAction indicate action will be taken on plugins.
@@ -206,20 +206,14 @@ const (
 
 // AdminPlugins administrates tidb plugins.
 type AdminPlugins struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	Action  AdminPluginsAction
 	Plugins []string
 }
 
-// Change represents a change plan.
-type Change struct {
-	baseSchemaProducer
-	*ast.ChangeStmt
-}
-
 // Prepare represents prepare plan.
 type Prepare struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Name    string
 	SQLText string
@@ -227,7 +221,7 @@ type Prepare struct {
 
 // Execute represents prepare plan.
 type Execute struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Name     string
 	Params   []expression.Expression
@@ -262,21 +256,21 @@ func isGetVarBinaryLiteral(sctx base.PlanContext, expr expression.Expression) (r
 
 // Deallocate represents deallocate plan.
 type Deallocate struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Name string
 }
 
 // Set represents a plan for set stmt.
 type Set struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	VarAssigns []*expression.VarAssignment
 }
 
 // SetConfig represents a plan for set config stmt.
 type SetConfig struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Type     string
 	Instance string
@@ -286,7 +280,7 @@ type SetConfig struct {
 
 // RecommendIndexPlan represents a plan for recommend index stmt.
 type RecommendIndexPlan struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Action   string
 	SQL      string
@@ -320,7 +314,7 @@ const (
 // One SQLBindPlan can be either global or session, and can only contain one type of operation, but can contain multiple
 // operations of that type.
 type SQLBindPlan struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	IsGlobal  bool
 	SQLBindOp SQLBindOpType
@@ -344,7 +338,7 @@ type SQLBindOpDetail struct {
 
 // Simple represents a simple statement plan which doesn't need any optimization.
 type Simple struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Statement ast.StmtNode
 
@@ -365,7 +359,7 @@ func (s *Simple) MemoryUsage() (sum int64) {
 		return
 	}
 
-	sum = s.baseSchemaProducer.MemoryUsage() + size.SizeOfInterface + size.SizeOfBool + size.SizeOfUint64
+	sum = s.SimpleSchemaProducer.MemoryUsage() + size.SizeOfInterface + size.SizeOfBool + size.SizeOfUint64
 	return
 }
 
@@ -419,7 +413,7 @@ func (i *InsertGeneratedColumns) MemoryUsage() (sum int64) {
 
 // Insert represents an insert plan.
 type Insert struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table         table.Table        `plan-cache-clone:"shallow"`
 	tableSchema   *expression.Schema `plan-cache-clone:"shallow"`
@@ -460,7 +454,7 @@ func (p *Insert) MemoryUsage() (sum int64) {
 		return
 	}
 
-	sum = p.baseSchemaProducer.MemoryUsage() + size.SizeOfInterface + size.SizeOfSlice*7 + int64(cap(p.tableColNames)+
+	sum = p.SimpleSchemaProducer.MemoryUsage() + size.SizeOfInterface + size.SizeOfSlice*7 + int64(cap(p.tableColNames)+
 		cap(p.Columns)+cap(p.OnDuplicate)+cap(p.names4OnDuplicate)+cap(p.FKChecks))*size.SizeOfPointer +
 		p.GenCols.MemoryUsage() + size.SizeOfInterface + size.SizeOfBool*4 + size.SizeOfInt
 	if p.tableSchema != nil {
@@ -497,7 +491,7 @@ func (p *Insert) MemoryUsage() (sum int64) {
 
 // Update represents Update plan.
 type Update struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	OrderedList []*expression.Assignment
 
@@ -535,7 +529,7 @@ func (p *Update) MemoryUsage() (sum int64) {
 		return
 	}
 
-	sum = p.baseSchemaProducer.MemoryUsage() + size.SizeOfSlice*3 + int64(cap(p.OrderedList))*size.SizeOfPointer +
+	sum = p.SimpleSchemaProducer.MemoryUsage() + size.SizeOfSlice*3 + int64(cap(p.OrderedList))*size.SizeOfPointer +
 		size.SizeOfBool + size.SizeOfInt + size.SizeOfInterface + int64(cap(p.PartitionedTable))*size.SizeOfInterface +
 		int64(len(p.tblID2Table))*(size.SizeOfInt64+size.SizeOfInterface)
 	if p.SelectPlan != nil {
@@ -559,7 +553,7 @@ func (p *Update) MemoryUsage() (sum int64) {
 
 // Delete represents a delete plan.
 type Delete struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	IsMultiTable bool
 
@@ -579,7 +573,7 @@ func (p *Delete) MemoryUsage() (sum int64) {
 		return
 	}
 
-	sum = p.baseSchemaProducer.MemoryUsage() + size.SizeOfBool + size.SizeOfInterface + size.SizeOfSlice
+	sum = p.SimpleSchemaProducer.MemoryUsage() + size.SizeOfBool + size.SizeOfInterface + size.SizeOfSlice
 	if p.SelectPlan != nil {
 		sum += p.SelectPlan.MemoryUsage()
 	}
@@ -629,7 +623,7 @@ type AnalyzeIndexTask struct {
 
 // Analyze represents an analyze plan
 type Analyze struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	ColTasks []AnalyzeColumnsTask
 	IdxTasks []AnalyzeIndexTask
@@ -640,7 +634,7 @@ type Analyze struct {
 
 // LoadData represents a loaddata plan.
 type LoadData struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	FileLocRef  ast.FileLocRefTp
 	OnDuplicate ast.OnDuplicateKeyHandlingType
@@ -669,7 +663,7 @@ type LoadDataOpt struct {
 
 // ImportInto represents a ingest into plan.
 type ImportInto struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table              *resolve.TableNameW
 	ColumnAssignments  []*ast.Assignment
@@ -686,28 +680,28 @@ type ImportInto struct {
 
 // LoadStats represents a load stats plan.
 type LoadStats struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Path string
 }
 
 // LockStats represents a lock stats for table
 type LockStats struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Tables []*ast.TableName
 }
 
 // UnlockStats represents a unlock stats for table
 type UnlockStats struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Tables []*ast.TableName
 }
 
 // PlanReplayer represents a plan replayer plan.
 type PlanReplayer struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	ExecStmt          ast.StmtNode
 	Analyze           bool
 	Load              bool
@@ -722,7 +716,7 @@ type PlanReplayer struct {
 
 // Traffic represents a traffic plan.
 type Traffic struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	OpType  ast.TrafficOpType
 	Options []*ast.TrafficOption
 	Dir     string
@@ -730,7 +724,7 @@ type Traffic struct {
 
 // DistributeTable represents a distribute table plan.
 type DistributeTable struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	TableInfo      *model.TableInfo
 	PartitionNames []ast.CIStr
 	Engine         string
@@ -740,7 +734,7 @@ type DistributeTable struct {
 
 // SplitRegion represents a split regions plan.
 type SplitRegion struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	TableInfo      *model.TableInfo
 	PartitionNames []ast.CIStr
@@ -753,7 +747,7 @@ type SplitRegion struct {
 
 // SplitRegionStatus represents a split regions status plan.
 type SplitRegionStatus struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Table     table.Table
 	IndexInfo *model.IndexInfo
@@ -761,7 +755,7 @@ type SplitRegionStatus struct {
 
 // CompactTable represents a "ALTER TABLE [NAME] COMPACT ..." plan.
 type CompactTable struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	ReplicaKind    ast.CompactReplicaKind
 	TableInfo      *model.TableInfo
@@ -770,14 +764,14 @@ type CompactTable struct {
 
 // DDL represents a DDL statement plan.
 type DDL struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	Statement ast.DDLNode
 }
 
 // SelectInto represents a select-into plan.
 type SelectInto struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	TargetPlan base.Plan
 	IntoOpt    *ast.SelectIntoOption
@@ -861,7 +855,7 @@ func JSONToString(j []*ExplainInfoForEncode) (string, error) {
 
 // Explain represents a explain plan.
 type Explain struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 
 	TargetPlan       base.Plan
 	Format           string
@@ -957,7 +951,7 @@ func (e *Explain) prepareSchema() error {
 		cwn.Append(buildColumnWithName("", fieldName, mysql.TypeString, mysql.MaxBlobWidth))
 	}
 	e.SetSchema(cwn.col2Schema())
-	e.names = cwn.names
+	e.SetOutputNames(cwn.names)
 	return nil
 }
 
@@ -1377,7 +1371,8 @@ func binaryOpTreeFromFlatOps(explainCtx base.PlanContext, ops FlatPlanTree, brie
 		for i, op := range ops {
 			operators[i].BriefName = op.ExplainID().String()
 			switch op.Origin.(type) {
-			case *PhysicalTableReader, *PhysicalIndexReader, *PhysicalHashJoin, *physicalop.PhysicalIndexJoin, *PhysicalIndexHashJoin, *physicalop.PhysicalMergeJoin:
+			case *PhysicalTableReader, *PhysicalIndexReader, *physicalop.PhysicalHashJoin,
+				*physicalop.PhysicalIndexJoin, *physicalop.PhysicalIndexHashJoin, *physicalop.PhysicalMergeJoin:
 				operators[i].BriefOperatorInfo = op.Origin.ExplainInfo()
 			}
 		}
@@ -1576,7 +1571,7 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(vars *variable.SessionVars, p base.
 		indexScan := v.IndexPlans[0].(*PhysicalIndexScan)
 		return indexScan.IsPointGetByUniqueKey(vars.StmtCtx.TypeCtx())
 	case *PhysicalTableReader:
-		tableScan, ok := v.TablePlans[0].(*PhysicalTableScan)
+		tableScan, ok := v.TablePlans[0].(*physicalop.PhysicalTableScan)
 		if !ok {
 			return false
 		}
@@ -1617,25 +1612,25 @@ func IsAutoCommitTxn(vars *variable.SessionVars) bool {
 
 // AdminShowBDRRole represents a show bdr role plan.
 type AdminShowBDRRole struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 }
 
 // CreateProcedure create procedure plan
 type CreateProcedure struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	CreateProcedureInfo ast.StmtNode
 	is                  infoschema.InfoSchema
 }
 
 // DropProcedure drop procedure plan
 type DropProcedure struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	Procedure *ast.DropProcedureStmt
 }
 
 // CallStmt call plan
 type CallStmt struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	Callstmt        *ast.CallStmt
 	Is              infoschema.InfoSchema
 	ProcedureSQLMod string
@@ -1647,7 +1642,7 @@ type CallStmt struct {
 
 // AlterProcedure alter procedure plan
 type AlterProcedure struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	Procedure *ast.AlterProcedureStmt
 }
 
@@ -1659,7 +1654,7 @@ type SignalInfo struct {
 
 // Signal create procedure plan
 type Signal struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	SQLState   string
 	SignalCons []*SignalInfo
 }
@@ -1693,7 +1688,7 @@ type DiagnosticsCondition struct {
 
 // GetDiagnostics creates procedure plan
 type GetDiagnostics struct {
-	baseSchemaProducer
+	physicalop.SimpleSchemaProducer
 	Area       int
 	Statements []*DiagnosticsStatement
 	Con        *DiagnosticsCondition
