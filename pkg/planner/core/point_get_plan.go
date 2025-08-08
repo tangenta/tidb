@@ -448,7 +448,7 @@ func (p *PointGetPlan) PrunePartitions(sctx sessionctx.Context) (bool, error) {
 // BatchPointGetPlan represents a physical plan which contains a bunch of
 // keys reference the same table and use the same `unique key`
 type BatchPointGetPlan struct {
-	physicalop.SimpleSchemaProducer
+	baseSchemaProducer
 
 	// probeParents records the IndexJoins and Applys with this operator in their inner children.
 	// Please see comments in PhysicalPlan for details.
@@ -620,17 +620,17 @@ func (*BatchPointGetPlan) SetChild(_ int, _ base.PhysicalPlan) {}
 
 // ResolveIndices resolves the indices for columns. After doing this, the columns can evaluate the rows by their indices.
 func (p *BatchPointGetPlan) ResolveIndices() error {
-	return resolveIndicesForVirtualColumn(p.Schema().Columns, p.Schema())
+	return resolveIndicesForVirtualColumn(p.schema.Columns, p.schema)
 }
 
 // OutputNames returns the outputting names of each column.
 func (p *BatchPointGetPlan) OutputNames() types.NameSlice {
-	return p.SimpleSchemaProducer.OutputNames()
+	return p.names
 }
 
 // SetOutputNames sets the outputting name by the given slice.
 func (p *BatchPointGetPlan) SetOutputNames(names types.NameSlice) {
-	p.SimpleSchemaProducer.SetOutputNames(names)
+	p.names = names
 }
 
 // AppendChildCandidate implements PhysicalPlan interface.
@@ -644,7 +644,7 @@ func (p *BatchPointGetPlan) MemoryUsage() (sum int64) {
 		return
 	}
 
-	sum = emptyBatchPointGetPlanSize + p.SimpleSchemaProducer.MemoryUsage() + int64(len(p.dbName)) +
+	sum = emptyBatchPointGetPlanSize + p.baseSchemaProducer.MemoryUsage() + int64(len(p.dbName)) +
 		int64(cap(p.IdxColLens)+cap(p.PartitionIdxs))*size.SizeOfInt + int64(cap(p.Handles))*size.SizeOfInterface +
 		int64(cap(p.HandleParams)+cap(p.IndexColTypes)+cap(p.IdxCols)+cap(p.Columns)+cap(p.accessCols))*size.SizeOfPointer
 	if p.HandleType != nil {
@@ -966,7 +966,7 @@ func TryFastPlan(ctx base.PlanContext, node *resolve.NodeW) (p base.Plan) {
 		// Try to convert the `SELECT a, b, c FROM t WHERE (a, b, c) in ((1, 2, 4), (1, 3, 5))` to
 		// `PhysicalUnionAll` which children are `PointGet` if exists an unique key (a, b, c) in table `t`
 		if fp := tryWhereIn2BatchPointGet(ctx, x, node.GetResolveContext()); fp != nil {
-			visitInfos := getVisitInfo(userName, hostName, fp.dbName, fp.TblInfo.Name.L, fp.OutputNames(), fp.unfold, fp.colsInWhereClause)
+			visitInfos := getVisitInfo(userName, hostName, fp.dbName, fp.TblInfo.Name.L, fp.names, fp.unfold, fp.colsInWhereClause)
 			failpoint.Inject("point-get-visit-info", func(val failpoint.Value) {
 				if val.(bool) {
 					pointGetVisitInfo4Test = visitInfos
@@ -2208,7 +2208,7 @@ func buildPointUpdatePlan(ctx base.PlanContext, pointPlan base.PhysicalPlan, dbN
 		VirtualAssignmentsOffset:  len(orderedList),
 		IgnoreError:               updateStmt.IgnoreErr,
 	}.Init(ctx)
-	updatePlan.SetOutputNames(pointPlan.OutputNames())
+	updatePlan.names = pointPlan.OutputNames()
 	is := ctx.GetInfoSchema().(infoschema.InfoSchema)
 	t, _ := is.TableByID(context.Background(), tbl.ID)
 	updatePlan.tblID2Table = map[int64]table.Table{

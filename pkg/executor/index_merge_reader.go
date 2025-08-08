@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	plannercore "github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
-	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 	plannerutil "github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/table"
@@ -99,7 +98,7 @@ type IndexMergeReaderExecutor struct {
 	tableRequest *tipb.DAGRequest
 
 	keepOrder   bool
-	pushedLimit *physicalop.PushedDownLimit
+	pushedLimit *plannercore.PushedDownLimit
 	byItems     []*plannerutil.ByItems
 
 	// columns are only required by union scan.
@@ -223,7 +222,7 @@ func (e *IndexMergeReaderExecutor) rebuildRangeForCorCol() (err error) {
 			switch x := plan[0].(type) {
 			case *plannercore.PhysicalIndexScan:
 				e.ranges[i], err = rebuildIndexRanges(e.Ctx().GetExprCtx(), e.Ctx().GetRangerCtx(), x, x.IdxCols, x.IdxColLens)
-			case *physicalop.PhysicalTableScan:
+			case *plannercore.PhysicalTableScan:
 				e.ranges[i], err = x.ResolveCorrelatedColumns()
 			default:
 				err = errors.Errorf("unsupported plan type %T", plan[0])
@@ -467,7 +466,7 @@ func (e *IndexMergeReaderExecutor) startPartialIndexWorker(ctx context.Context, 
 }
 
 func (e *IndexMergeReaderExecutor) startPartialTableWorker(ctx context.Context, exitCh <-chan struct{}, fetchCh chan<- *indexMergeTableTask, workID int) error {
-	ts := e.partialPlans[workID][0].(*physicalop.PhysicalTableScan)
+	ts := e.partialPlans[workID][0].(*plannercore.PhysicalTableScan)
 
 	tbls := make([]table.Table, 0, 1)
 	if e.partitionTableMode && len(e.byItems) == 0 {
@@ -621,7 +620,7 @@ type partialTableWorker struct {
 	prunedPartitions   []table.PhysicalTable
 	byItems            []*plannerutil.ByItems
 	scannedKeys        uint64
-	pushedLimit        *physicalop.PushedDownLimit
+	pushedLimit        *plannercore.PushedDownLimit
 }
 
 // needPartitionHandle indicates whether we need create a partitionHandle or not.
@@ -932,7 +931,7 @@ func (e *IndexMergeReaderExecutor) Close() error {
 	if e.indexUsageReporter != nil {
 		for _, p := range e.partialPlans {
 			switch p := p[0].(type) {
-			case *physicalop.PhysicalTableScan:
+			case *plannercore.PhysicalTableScan:
 				e.indexUsageReporter.ReportCopIndexUsageForHandle(e.table, p.ID())
 			case *plannercore.PhysicalIndexScan:
 				e.indexUsageReporter.ReportCopIndexUsageForTable(e.table, p.Index.ID, p.ID())
@@ -1045,7 +1044,7 @@ func (w *indexMergeProcessWorker) pruneTableWorkerTaskIdxRows(task *indexMergeTa
 		return
 	}
 	// IndexScan no need to prune retChk, Columns required by byItems are always first.
-	if plan, ok := w.indexMerge.partialPlans[task.partialPlanID][0].(*physicalop.PhysicalTableScan); ok {
+	if plan, ok := w.indexMerge.partialPlans[task.partialPlanID][0].(*plannercore.PhysicalTableScan); ok {
 		prune := make([]int, 0, len(w.indexMerge.byItems))
 		for _, item := range plan.ByItems {
 			c, _ := item.Expr.(*expression.Column)
@@ -1172,7 +1171,7 @@ func (w *indexMergeProcessWorker) fetchLoopUnionWithOrderBy(ctx context.Context,
 	}
 }
 
-func pushedLimitCountingDown(pushedLimit *physicalop.PushedDownLimit, handles []kv.Handle) (next bool, res []kv.Handle) {
+func pushedLimitCountingDown(pushedLimit *plannercore.PushedDownLimit, handles []kv.Handle) (next bool, res []kv.Handle) {
 	fhsLen := uint64(len(handles))
 	// The number of handles is less than the offset, discard all handles.
 	if fhsLen <= pushedLimit.Offset {
@@ -1202,7 +1201,7 @@ func (w *indexMergeProcessWorker) fetchLoopUnion(ctx context.Context, fetchCh <-
 	defer close(workCh)
 	failpoint.Inject("testIndexMergePanicProcessWorkerUnion", nil)
 
-	var pushedLimit *physicalop.PushedDownLimit
+	var pushedLimit *plannercore.PushedDownLimit
 	if w.indexMerge.pushedLimit != nil {
 		pushedLimit = w.indexMerge.pushedLimit.Clone()
 	}
@@ -1301,7 +1300,7 @@ func (w *indexMergeProcessWorker) fetchLoopUnion(ctx context.Context, fetchCh <-
 // intersectionCollectWorker is used to dispatch index-merge-table-task to original workCh and resultCh.
 // a kind of interceptor to control the pushed down limit restriction. (should be no performance impact)
 type intersectionCollectWorker struct {
-	pushedLimit *physicalop.PushedDownLimit
+	pushedLimit *plannercore.PushedDownLimit
 	collectCh   chan *indexMergeTableTask
 	limitDone   chan struct{}
 }
@@ -1675,7 +1674,7 @@ type partialIndexWorker struct {
 	prunedPartitions   []table.PhysicalTable
 	byItems            []*plannerutil.ByItems
 	scannedKeys        uint64
-	pushedLimit        *physicalop.PushedDownLimit
+	pushedLimit        *plannercore.PushedDownLimit
 	dagPB              *tipb.DAGRequest
 	plan               []base.PhysicalPlan
 }

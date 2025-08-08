@@ -142,18 +142,17 @@ func (p *PhysicalIndexScan) GetPlanCostVer2(taskType property.TaskType, option *
 	return p.PlanCostVer2, nil
 }
 
-// getPlanCostVer24PhysicalTableScan returns the plan-cost of this sub-plan, which is:
+// GetPlanCostVer2 returns the plan-cost of this sub-plan, which is:
 // plan-cost = rows * log2(row-size) * scan-factor
 // log2(row-size) is from experiments.
-func getPlanCostVer24PhysicalTableScan(pp base.PhysicalPlan, taskType property.TaskType, option *optimizetrace.PlanCostOption, isChildOfINL ...bool) (costusage.CostVer2, error) {
-	p := pp.(*physicalop.PhysicalTableScan)
+func (p *PhysicalTableScan) GetPlanCostVer2(taskType property.TaskType, option *optimizetrace.PlanCostOption, isChildOfINL ...bool) (costusage.CostVer2, error) {
 	if p.PlanCostInit && !hasCostFlag(option.CostFlag, costusage.CostFlagRecalculate) {
 		return p.PlanCostVer2, nil
 	}
 
 	var columns []*expression.Column
 	if p.StoreType == kv.TiKV { // Assume all columns for TiKV
-		columns = p.TblCols
+		columns = p.tblCols
 	} else { // TiFlash
 		columns = p.Schema().Columns
 	}
@@ -210,7 +209,7 @@ func getPlanCostVer24PhysicalTableScan(pp base.PhysicalPlan, taskType property.T
 		// And for small tables, len(p.LateMaterializationFilterCondition) always equal to 0, so do
 		cols := expression.ExtractColumnsFromExpressions(p.LateMaterializationFilterCondition, nil)
 		lmRowSize := getAvgRowSize(p.StatsInfo(), cols)
-		totalRowCount := rows/p.LateMaterializationSelectivity + TiFlashStartupRowPenalty
+		totalRowCount := rows/p.lateMaterializationSelectivity + TiFlashStartupRowPenalty
 		p.PlanCostVer2 = costusage.NewCostVer2(option, scanFactor,
 			totalRowCount*max(math.Log2(lmRowSize), 0)*scanFactor.Value,
 			func() string {
@@ -595,10 +594,9 @@ func (p *PhysicalStreamAgg) GetPlanCostVer2(taskType property.TaskType, option *
 	return p.PlanCostVer2, nil
 }
 
-// getPlanCostVer24PhysicalHashAgg returns the plan-cost of this sub-plan, which is:
+// GetPlanCostVer2 returns the plan-cost of this sub-plan, which is:
 // plan-cost = child-cost + (agg-cost + group-cost + hash-build-cost + hash-probe-cost) / concurrency
-func getPlanCostVer24PhysicalHashAgg(pp base.PhysicalPlan, taskType property.TaskType, option *optimizetrace.PlanCostOption, isChildOfINL ...bool) (costusage.CostVer2, error) {
-	p := pp.(*physicalop.PhysicalHashAgg)
+func (p *PhysicalHashAgg) GetPlanCostVer2(taskType property.TaskType, option *optimizetrace.PlanCostOption, isChildOfINL ...bool) (costusage.CostVer2, error) {
 	if p.PlanCostInit && !hasCostFlag(option.CostFlag, costusage.CostFlagRecalculate) {
 		return p.PlanCostVer2, nil
 	}
@@ -665,12 +663,11 @@ func getPlanCostVer24PhysicalMergeJoin(pp base.PhysicalPlan, taskType property.T
 	return p.PlanCostVer2, nil
 }
 
-// getPlanCostVer24PhysicalHashJoin returns the plan-cost of this sub-plan, which is:
+// GetPlanCostVer2 returns the plan-cost of this sub-plan, which is:
 // plan-cost = build-child-cost + probe-child-cost +
 // build-hash-cost + build-filter-cost +
 // (probe-filter-cost + probe-hash-cost) / concurrency
-func getPlanCostVer24PhysicalHashJoin(pp base.PhysicalPlan, taskType property.TaskType, option *optimizetrace.PlanCostOption) (costusage.CostVer2, error) {
-	p := pp.(*physicalop.PhysicalHashJoin)
+func (p *PhysicalHashJoin) GetPlanCostVer2(taskType property.TaskType, option *optimizetrace.PlanCostOption, _ ...bool) (costusage.CostVer2, error) {
 	if p.PlanCostInit && !hasCostFlag(option.CostFlag, costusage.CostFlagRecalculate) {
 		return p.PlanCostVer2, nil
 	}
@@ -794,6 +791,11 @@ func getIndexJoinCostVer24PhysicalIndexJoin(pp base.PhysicalPlan, taskType prope
 }
 
 // GetPlanCostVer2 implements PhysicalPlan interface.
+func (p *PhysicalIndexHashJoin) GetPlanCostVer2(taskType property.TaskType, option *optimizetrace.PlanCostOption, _ ...bool) (costusage.CostVer2, error) {
+	return utilfuncp.GetIndexJoinCostVer24PhysicalIndexJoin(&p.PhysicalIndexJoin, taskType, option, 1)
+}
+
+// GetPlanCostVer2 implements PhysicalPlan interface.
 func (p *PhysicalIndexMergeJoin) GetPlanCostVer2(taskType property.TaskType, option *optimizetrace.PlanCostOption, _ ...bool) (costusage.CostVer2, error) {
 	return utilfuncp.GetIndexJoinCostVer24PhysicalIndexJoin(&p.PhysicalIndexJoin, taskType, option, 2)
 }
@@ -912,7 +914,7 @@ func (p *BatchPointGetPlan) GetPlanCostVer2(taskType property.TaskType, option *
 		return costusage.ZeroCostVer2, nil
 	}
 	rows := getCardinality(p, option.CostFlag)
-	rowSize := getAvgRowSize(p.StatsInfo(), p.Schema().Columns)
+	rowSize := getAvgRowSize(p.StatsInfo(), p.schema.Columns)
 	netFactor := getTaskNetFactorVer2(p, taskType)
 
 	p.planCostVer2 = netCostVer2(option, rows, rowSize, netFactor)
@@ -1033,15 +1035,15 @@ func doubleReadCostVer2(option *optimizetrace.PlanCostOption, numTasks float64, 
 		func() string { return fmt.Sprintf("doubleRead(tasks(%v)*%v)", numTasks, requestFactor) })
 }
 
-func getTableScanPenalty(p *physicalop.PhysicalTableScan, rows float64) (rowPenalty float64) {
+func getTableScanPenalty(p *PhysicalTableScan, rows float64) (rowPenalty float64) {
 	// Apply cost penalty for full scans that carry high risk of underestimation. Exclude those
 	// that are the child of an index scan or child is TableRangeScan
-	if len(p.RangeInfo) > 0 {
+	if len(p.rangeInfo) > 0 {
 		return float64(0)
 	}
 	sessionVars := p.SCtx().GetSessionVars()
 	allowPreferRangeScan := sessionVars.GetAllowPreferRangeScan()
-	tblColHists := p.TblColHists
+	tblColHists := p.tblColHists
 	originalRows := int64(tblColHists.GetAnalyzeRowCount())
 
 	// hasUnreliableStats is a check for pseudo or zero stats
@@ -1172,7 +1174,7 @@ func getTaskScanFactorVer2(p base.PhysicalPlan, storeType kv.StoreType, taskType
 		if indexScan, ok := p.(*PhysicalIndexScan); ok {
 			desc = indexScan.Desc
 		}
-		if tableScan, ok := p.(*physicalop.PhysicalTableScan); ok {
+		if tableScan, ok := p.(*PhysicalTableScan); ok {
 			desc = tableScan.Desc
 		}
 		if desc {
@@ -1221,7 +1223,7 @@ func getTableInfo(p base.PhysicalPlan) *model.TableInfo {
 			return getTableInfo(x.tablePlan)
 		}
 		return getTableInfo(x.partialPlans[0])
-	case *physicalop.PhysicalTableScan:
+	case *PhysicalTableScan:
 		return x.Table
 	case *PhysicalIndexScan:
 		return x.Table

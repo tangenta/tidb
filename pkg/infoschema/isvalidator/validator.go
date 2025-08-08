@@ -43,7 +43,6 @@ type validator struct {
 	restartSchemaVer   int64
 	latestSchemaExpire time.Time
 	// deltaSchemaInfos is a queue that maintain the history of changes.
-	// it's ordered by schema version in ascending order.
 	deltaSchemaInfos []deltaSchemaInfo
 }
 
@@ -143,9 +142,6 @@ func (v *validator) isRelatedTablesChanged(currVer int64, tableIDs []int64) bool
 	}
 	newerDeltas := v.findNewerDeltas(currVer)
 	if len(newerDeltas) == len(v.deltaSchemaInfos) {
-		// we only save the latest N schema changes, so if we enter this branch,
-		// we cannot determine whether the table is changed or not, as the delta
-		// might be evicted.
 		metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorCacheMiss).Inc()
 		logutil.BgLogger().Info("the schema version is much older than the latest version", zap.Int64("currVer", currVer),
 			zap.Int64("latestSchemaVer", v.latestSchemaVer), zap.Reflect("deltas", newerDeltas))
@@ -191,9 +187,8 @@ func (v *validator) findNewerDeltas(currVer int64) []deltaSchemaInfo {
 	return q[pos:]
 }
 
-// Check checks schema validity, returns true if it's safe to commit using the
-// schemaVer and related tables at txnTS.
-func (v *validator) Check(txnTS uint64, schemaVer int64, relatedPhysicalTableIDs []int64, needCheckSchemaByDelta bool) (*transaction.RelatedSchemaChange, validatorapi.Result) {
+// Check checks schema validity, returns true if use schemaVer and related tables at txnTS is legal.
+func (v *validator) Check(txnTS uint64, schemaVer int64, relatedPhysicalTableIDs []int64, needCheckSchema bool) (*transaction.RelatedSchemaChange, validatorapi.Result) {
 	v.mux.RLock()
 	defer v.mux.RUnlock()
 	if !v.isStarted {
@@ -209,31 +204,18 @@ func (v *validator) Check(txnTS uint64, schemaVer int64, relatedPhysicalTableIDs
 
 	// Schema changed, result decided by whether related tables change.
 	if schemaVer < v.latestSchemaVer {
-		// When a transaction executes a DDL and got an error, it should manually
-		// call this method to check if it is caused by schema change.
-		// And then it will pass a nil for relatedPhysicalTableIDs to indicate
-		// just check schema version.
-		// When a transaction only contains DML on temporary tables,
-		// relatedPhysicalTableIDs is also [].
+		// When a transaction executes a DDL and got an error, it should manually call this method to check if it is caused by schema change.
+		// And then it will pass a nil for relatedPhysicalTableIDs to indicate just check schema version.
+		// When a transaction only contains DML on temporary tables, relatedPhysicalTableIDs is [].
 		if relatedPhysicalTableIDs == nil {
 			logutil.BgLogger().Info("the related physical table ID is empty", zap.Int64("schemaVer", schemaVer),
 				zap.Int64("latestSchemaVer", v.latestSchemaVer))
 			return nil, validatorapi.ResultFail
 		}
 
-		// needCheckSchemaByDelta is always false when MDL enabled, and vice
-		// versa.
-		// when MDL is enabled, if there are DDL running for the related tables,
-		// DDL will wait the txn to finishes before move to next step, so there
-		// is no need to check through schema delta.
-		//
-		// below EnableMDL check is for the case that MDL is switching to on/off
-		// during the txn.
-		// When switch MDL from off to on, needCheckSchemaByDelta of the old txn
-		// is true, we need to check by schema delta.
-		// When switch MDL from on to off, the needCheckSchemaByDelta is false,
-		// and EnableMDL is also false, so we still need to check by schema delta.
-		if needCheckSchemaByDelta || !vardef.EnableMDL.Load() {
+		// When disabling MDL -> enabling MDL, the old transaction's needCheckSchema is true, we need to check it.
+		// When enabling MDL -> disabling MDL, the old transaction's needCheckSchema is false, so still need to check it, and variable EnableMDL is false now.
+		if needCheckSchema || !vardef.EnableMDL.Load() {
 			changed := v.isRelatedTablesChanged(schemaVer, relatedPhysicalTableIDs)
 			if changed {
 				return nil, validatorapi.ResultFail

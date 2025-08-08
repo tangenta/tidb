@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/util/cdcutil"
 	"github.com/pingcap/tidb/pkg/util/dbterror/exeerrors"
+	"github.com/pingcap/tidb/pkg/util/etcd"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -125,12 +126,12 @@ func TestCheckRequirements(t *testing.T) {
 		embedEtcd.Close()
 	})
 	backup := importer.GetEtcdClient
-	importer.GetEtcdClient = func() (*clientv3.Client, error) {
+	importer.GetEtcdClient = func() (*etcd.Client, error) {
 		etcdCli, err := clientv3.New(clientv3.Config{
 			Endpoints: []string{clientAddr},
 		})
 		require.NoError(t, err)
-		return etcdCli, nil
+		return etcd.NewClient(etcdCli, ""), nil
 	}
 	t.Cleanup(func() {
 		importer.GetEtcdClient = backup

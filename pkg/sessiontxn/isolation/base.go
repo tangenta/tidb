@@ -590,10 +590,10 @@ func (p *baseTxnContextProvider) SetOptionsBeforeCommit(
 		}
 		physicalTableIDs = append(physicalTableIDs, id)
 	}
-	needCheckSchemaByDelta := true
+	needCheckSchema := true
 	// Set this option for 2 phase commit to validate schema lease.
 	if sessVars.TxnCtx != nil {
-		needCheckSchemaByDelta = !sessVars.TxnCtx.EnableMDL
+		needCheckSchema = !sessVars.TxnCtx.EnableMDL
 	}
 
 	// TODO: refactor SetOption usage to avoid race risk, should detect it in test.
@@ -605,7 +605,7 @@ func (p *baseTxnContextProvider) SetOptionsBeforeCommit(
 			p.sctx.GetSchemaValidator(),
 			p.GetTxnInfoSchema().SchemaMetaVersion(),
 			physicalTableIDs,
-			needCheckSchemaByDelta,
+			needCheckSchema,
 		),
 	)
 

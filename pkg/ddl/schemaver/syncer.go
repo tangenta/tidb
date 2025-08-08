@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/pkg/ddl/logutil"
 	"github.com/pingcap/tidb/pkg/ddl/util"
 	"github.com/pingcap/tidb/pkg/domain/infosync"
-	"github.com/pingcap/tidb/pkg/domain/serverinfo"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	tidbutil "github.com/pingcap/tidb/pkg/util"
@@ -82,9 +81,7 @@ type Syncer interface {
 	Restart(ctx context.Context) error
 	// WaitVersionSynced wait until all servers' current schema version are equal
 	// or greater than latestVer.
-	// If checkAssumedSvr is true, it will check and wait the assumed keyspace
-	// servers too. it's only used on nextgen where MDL is always enabled.
-	WaitVersionSynced(ctx context.Context, jobID int64, latestVer int64, checkAssumedSvr bool) error
+	WaitVersionSynced(ctx context.Context, jobID int64, latestVer int64) error
 	// SyncJobSchemaVerLoop syncs the schema versions on all TiDB nodes for DDL jobs.
 	SyncJobSchemaVerLoop(ctx context.Context)
 	// Close ends Syncer.
@@ -323,7 +320,7 @@ func (s *etcdSyncer) removeSelfVersionPath() error {
 }
 
 // WaitVersionSynced implements Syncer.WaitVersionSynced interface.
-func (s *etcdSyncer) WaitVersionSynced(ctx context.Context, jobID int64, latestVer int64, checkAssumedSvr bool) error {
+func (s *etcdSyncer) WaitVersionSynced(ctx context.Context, jobID int64, latestVer int64) error {
 	startTime := time.Now()
 	if !vardef.EnableMDL.Load() {
 		time.Sleep(CheckVersFirstWaitTime)
@@ -349,7 +346,7 @@ func (s *etcdSyncer) WaitVersionSynced(ctx context.Context, jobID int64, latestV
 		}
 
 		if vardef.EnableMDL.Load() {
-			serverInfos, err := infosync.GetServersForISSync(ctx, checkAssumedSvr)
+			serverInfos, err := infosync.GetAllServerInfo(ctx)
 			if err != nil {
 				return err
 			}
@@ -364,11 +361,11 @@ func (s *etcdSyncer) WaitVersionSynced(ctx context.Context, jobID int64, latestV
 					if info.StartTimestamp > serverInfos[id].StartTimestamp {
 						// Replace it.
 						delete(updatedMap, id)
-						updatedMap[info.ID] = getSvrInfoForLog(info)
+						updatedMap[info.ID] = fmt.Sprintf("instance ip %s, port %d, id %s", info.IP, info.Port, info.ID)
 						instance2id[instance] = info.ID
 					}
 				} else {
-					updatedMap[info.ID] = getSvrInfoForLog(info)
+					updatedMap[info.ID] = fmt.Sprintf("instance ip %s, port %d, id %s", info.IP, info.Port, info.ID)
 					instance2id[instance] = info.ID
 				}
 			}
@@ -589,11 +586,4 @@ func (s *etcdSyncer) Close() {
 	if err != nil {
 		logutil.DDLLogger().Error("remove self version path failed", zap.Error(err))
 	}
-}
-
-func getSvrInfoForLog(info *serverinfo.ServerInfo) string {
-	if info.IsAssumed() {
-		return fmt.Sprintf("instance ip %s, port %d, id %s, origin keyspace %s", info.IP, info.Port, info.ID, info.Keyspace)
-	}
-	return fmt.Sprintf("instance ip %s, port %d, id %s", info.IP, info.Port, info.ID)
 }

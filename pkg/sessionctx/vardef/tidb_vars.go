@@ -1089,7 +1089,6 @@ const (
 	// In test, we disable it by default. See GlobalSystemVariableInitialValue for details.
 	TiDBEnableAutoAnalyze = "tidb_enable_auto_analyze"
 	// TiDBEnableAutoAnalyzePriorityQueue determines whether TiDB executes automatic analysis with priority queue.
-	// DEPRECATED: This variable is deprecated, please do not use this variable.
 	TiDBEnableAutoAnalyzePriorityQueue = "tidb_enable_auto_analyze_priority_queue"
 	// TiDBMemOOMAction indicates what operation TiDB perform when a single SQL statement exceeds
 	// the memory quota specified by tidb_mem_quota_query and cannot be spilled to disk.

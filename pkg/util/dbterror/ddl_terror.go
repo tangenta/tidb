@@ -543,5 +543,4 @@ var ReorgRetryableErrCodes = map[uint16]struct{}{
 var ReorgRetryableErrMsgs = []string{
 	"context deadline exceeded",
 	"requested lease not found",
-	"mvcc: required revision has been compacted",
 }

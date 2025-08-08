@@ -42,7 +42,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	plannercore "github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
-	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 	"github.com/pingcap/tidb/pkg/planner/planctx"
 	plannerutil "github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -500,7 +499,7 @@ type IndexLookUpExecutor struct {
 	idxCols         []*expression.Column
 	colLens         []int
 	// PushedLimit is used to skip the preceding and tailing handles when Limit is sunk into IndexLookUpReader.
-	PushedLimit *physicalop.PushedDownLimit
+	PushedLimit *plannercore.PushedDownLimit
 
 	stats *IndexLookUpRunTimeStats
 
@@ -1024,7 +1023,7 @@ type indexWorker struct {
 	// checkIndexValue is used to check the consistency of the index data.
 	*checkIndexValue
 	// PushedLimit is used to skip the preceding and tailing handles when Limit is sunk into IndexLookUpReader.
-	PushedLimit *physicalop.PushedDownLimit
+	PushedLimit *plannercore.PushedDownLimit
 	// scannedKeys indicates how many keys be scanned
 	scannedKeys uint64
 }

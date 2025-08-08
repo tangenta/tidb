@@ -62,7 +62,7 @@ var (
 
 func buildHashAggExecutor(ctx sessionctx.Context, src exec.Executor, schema *expression.Schema,
 	aggFuncs []*aggregation.AggFuncDesc, groupItems []expression.Expression) exec.Executor {
-	plan := new(physicalop.PhysicalHashAgg)
+	plan := new(core.PhysicalHashAgg)
 	plan.AggFuncs = aggFuncs
 	plan.GroupByItems = groupItems
 	plan.SetSchema(schema)

@@ -487,7 +487,7 @@ func generateRuntimeFilter(sctx base.PlanContext, plan base.PhysicalPlan) {
 	logutil.BgLogger().Debug("Start runtime filter generator")
 	rfGenerator := &RuntimeFilterGenerator{
 		rfIDGenerator:      &util.IDGenerator{},
-		columnUniqueIDToRF: map[int64][]*physicalop.RuntimeFilter{},
+		columnUniqueIDToRF: map[int64][]*RuntimeFilter{},
 		parentPhysicalPlan: plan,
 	}
 	startRFGenerator := time.Now()
@@ -541,8 +541,8 @@ func countStarRewriteInternal(plan base.PhysicalPlan) {
 	// match pattern any agg(count(constant)) -> tablefullscan(tiflash)
 	var physicalAgg *physicalop.BasePhysicalAgg
 	switch x := plan.(type) {
-	case *physicalop.PhysicalHashAgg:
-		physicalAgg = x.GetPointer()
+	case *PhysicalHashAgg:
+		physicalAgg = x.getPointer()
 	case *PhysicalStreamAgg:
 		physicalAgg = x.getPointer()
 	default:
@@ -559,8 +559,8 @@ func countStarRewriteInternal(plan base.PhysicalPlan) {
 			return
 		}
 	}
-	physicalTableScan, ok := physicalAgg.Children()[0].(*physicalop.PhysicalTableScan)
-	if !ok || !physicalTableScan.IsFullScan() || physicalTableScan.StoreType != kv.TiFlash || len(physicalTableScan.Schema().Columns) != 1 {
+	physicalTableScan, ok := physicalAgg.Children()[0].(*PhysicalTableScan)
+	if !ok || !physicalTableScan.isFullScan() || physicalTableScan.StoreType != kv.TiFlash || len(physicalTableScan.Schema().Columns) != 1 {
 		return
 	}
 	// rewrite datasource and agg args
@@ -569,7 +569,7 @@ func countStarRewriteInternal(plan base.PhysicalPlan) {
 
 // rewriteTableScanAndAggArgs Pick the narrowest and not null column from table
 // If there is no not null column in Data Source, the row_id or pk column will be retained
-func rewriteTableScanAndAggArgs(physicalTableScan *physicalop.PhysicalTableScan, aggFuncs []*aggregation.AggFuncDesc) {
+func rewriteTableScanAndAggArgs(physicalTableScan *PhysicalTableScan, aggFuncs []*aggregation.AggFuncDesc) {
 	var resultColumnInfo *model.ColumnInfo
 	var resultColumn *expression.Column
 
@@ -860,12 +860,12 @@ func setupFineGrainedShuffleInternal(ctx context.Context, sctx base.PlanContext,
 	case *PhysicalExchangeReceiver:
 		helper.plans = append(helper.plans, &x.BasePhysicalPlan)
 		setupFineGrainedShuffleInternal(ctx, sctx, x.Children()[0], helper, streamCountInfo, tiflashServerCountInfo)
-	case *physicalop.PhysicalHashAgg:
+	case *PhysicalHashAgg:
 		// Todo: allow hash aggregation's output still benefits from fine grained shuffle
 		aggHelper := fineGrainedShuffleHelper{shuffleTarget: hashAgg, plans: []*physicalop.BasePhysicalPlan{}}
 		aggHelper.plans = append(aggHelper.plans, &x.BasePhysicalPlan)
 		setupFineGrainedShuffleInternal(ctx, sctx, x.Children()[0], &aggHelper, streamCountInfo, tiflashServerCountInfo)
-	case *physicalop.PhysicalHashJoin:
+	case *PhysicalHashJoin:
 		child0 := x.Children()[0]
 		child1 := x.Children()[1]
 		buildChild := child0
@@ -952,7 +952,7 @@ func setupFineGrainedShuffleInternal(ctx context.Context, sctx base.PlanContext,
 func propagateProbeParents(plan base.PhysicalPlan, probeParents []base.PhysicalPlan) {
 	plan.SetProbeParents(probeParents)
 	switch x := plan.(type) {
-	case *PhysicalApply, *physicalop.PhysicalIndexJoin, *physicalop.PhysicalIndexHashJoin, *PhysicalIndexMergeJoin:
+	case *PhysicalApply, *physicalop.PhysicalIndexJoin, *PhysicalIndexHashJoin, *PhysicalIndexMergeJoin:
 		if join, ok := plan.(interface{ GetInnerChildIdx() int }); ok {
 			propagateProbeParents(plan.Children()[1-join.GetInnerChildIdx()], probeParents)
 

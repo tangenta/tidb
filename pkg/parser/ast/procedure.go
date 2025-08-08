@@ -60,7 +60,6 @@ var (
 
 	_ ProcedureCharacteristic = &ProcedureComment{}
 	_ ProcedureCharacteristic = &ProcedureSecurity{}
-	_ ErrNode                 = &ProcedureErrorState{}
 )
 
 // param info.
