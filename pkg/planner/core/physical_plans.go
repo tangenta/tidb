@@ -22,9 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/pkg/executor/join/joinversion"
 	"github.com/pingcap/tidb/pkg/expression"
-	"github.com/pingcap/tidb/pkg/expression/aggregation"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -42,10 +40,8 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/statistics"
-	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/intest"
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/ranger"
 	"github.com/pingcap/tidb/pkg/util/size"
@@ -68,48 +64,31 @@ var (
 	_ base.PhysicalPlan = &physicalop.PhysicalLock{}
 	_ base.PhysicalPlan = &physicalop.PhysicalLimit{}
 	_ base.PhysicalPlan = &PhysicalIndexScan{}
-	_ base.PhysicalPlan = &PhysicalTableScan{}
+	_ base.PhysicalPlan = &physicalop.PhysicalTableScan{}
 	_ base.PhysicalPlan = &PhysicalTableReader{}
 	_ base.PhysicalPlan = &PhysicalIndexReader{}
 	_ base.PhysicalPlan = &PhysicalIndexLookUpReader{}
 	_ base.PhysicalPlan = &PhysicalIndexMergeReader{}
-	_ base.PhysicalPlan = &PhysicalHashAgg{}
+	_ base.PhysicalPlan = &physicalop.PhysicalHashAgg{}
 	_ base.PhysicalPlan = &PhysicalStreamAgg{}
 	_ base.PhysicalPlan = &PhysicalApply{}
 	_ base.PhysicalPlan = &physicalop.PhysicalIndexJoin{}
-	_ base.PhysicalPlan = &PhysicalHashJoin{}
+	_ base.PhysicalPlan = &physicalop.PhysicalHashJoin{}
 	_ base.PhysicalPlan = &physicalop.PhysicalMergeJoin{}
 	_ base.PhysicalPlan = &physicalop.PhysicalUnionScan{}
 	_ base.PhysicalPlan = &physicalop.PhysicalWindow{}
 	_ base.PhysicalPlan = &physicalop.PhysicalShuffle{}
 	_ base.PhysicalPlan = &physicalop.PhysicalShuffleReceiverStub{}
 	_ base.PhysicalPlan = &BatchPointGetPlan{}
-	_ base.PhysicalPlan = &PhysicalTableSample{}
+	_ base.PhysicalPlan = &physicalop.PhysicalTableSample{}
+	_ base.PhysicalPlan = &physicalop.PhysicalSequence{}
 
-	_ PhysicalJoin = &PhysicalHashJoin{}
+	_ PhysicalJoin = &physicalop.PhysicalHashJoin{}
 	_ PhysicalJoin = &physicalop.PhysicalMergeJoin{}
 	_ PhysicalJoin = &physicalop.PhysicalIndexJoin{}
-	_ PhysicalJoin = &PhysicalIndexHashJoin{}
+	_ PhysicalJoin = &physicalop.PhysicalIndexHashJoin{}
 	_ PhysicalJoin = &PhysicalIndexMergeJoin{}
 )
-
-type tableScanAndPartitionInfo struct {
-	tableScan        *PhysicalTableScan
-	physPlanPartInfo *PhysPlanPartInfo
-}
-
-// MemoryUsage return the memory usage of tableScanAndPartitionInfo
-func (t *tableScanAndPartitionInfo) MemoryUsage() (sum int64) {
-	if t == nil {
-		return
-	}
-
-	sum += t.physPlanPartInfo.MemoryUsage()
-	if t.tableScan != nil {
-		sum += t.tableScan.MemoryUsage()
-	}
-	return
-}
 
 // ReadReqType is the read request type of the operator. Currently, only PhysicalTableReader uses this.
 type ReadReqType uint8
@@ -154,9 +133,9 @@ type PhysicalTableReader struct {
 	IsCommonHandle bool
 
 	// Used by partition table.
-	PlanPartInfo *PhysPlanPartInfo
+	PlanPartInfo *physicalop.PhysPlanPartInfo
 	// Used by MPP, because MPP plan may contain join/union/union all, it is possible that a physical table reader contains more than 1 table scan
-	TableScanAndPartitionInfos []tableScanAndPartitionInfo `plan-cache-clone:"must-nil"`
+	TableScanAndPartitionInfos []physicalop.TableScanAndPartitionInfo `plan-cache-clone:"must-nil"`
 
 	// TableSplit is a split (range) of the table to read.
 	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
@@ -164,52 +143,8 @@ type PhysicalTableReader struct {
 
 // LoadTableStats loads the stats of the table read by this plan.
 func (p *PhysicalTableReader) LoadTableStats(ctx sessionctx.Context) {
-	ts := p.TablePlans[0].(*PhysicalTableScan)
-	loadTableStats(ctx, ts.Table, ts.physicalTableID)
-}
-
-// PhysPlanPartInfo indicates partition helper info in physical plan.
-type PhysPlanPartInfo struct {
-	PruningConds   []expression.Expression
-	PartitionNames []ast.CIStr
-	Columns        []*expression.Column
-	ColumnNames    types.NameSlice
-}
-
-const emptyPartitionInfoSize = int64(unsafe.Sizeof(PhysPlanPartInfo{}))
-
-func (pi *PhysPlanPartInfo) cloneForPlanCache() *PhysPlanPartInfo {
-	if pi == nil {
-		return nil
-	}
-	cloned := new(PhysPlanPartInfo)
-	cloned.PruningConds = cloneExpressionsForPlanCache(pi.PruningConds, nil)
-	cloned.PartitionNames = pi.PartitionNames
-	cloned.Columns = cloneColumnsForPlanCache(pi.Columns, nil)
-	cloned.ColumnNames = pi.ColumnNames
-	return cloned
-}
-
-// MemoryUsage return the memory usage of PhysPlanPartInfo
-func (pi *PhysPlanPartInfo) MemoryUsage() (sum int64) {
-	if pi == nil {
-		return
-	}
-
-	sum = emptyPartitionInfoSize
-	for _, cond := range pi.PruningConds {
-		sum += cond.MemoryUsage()
-	}
-	for _, cis := range pi.PartitionNames {
-		sum += cis.MemoryUsage()
-	}
-	for _, col := range pi.Columns {
-		sum += col.MemoryUsage()
-	}
-	for _, colName := range pi.ColumnNames {
-		sum += colName.MemoryUsage()
-	}
-	return
+	ts := p.TablePlans[0].(*physicalop.PhysicalTableScan)
+	loadTableStats(ctx, ts.Table, ts.PhysicalTableID)
 }
 
 // SetTablePlanForTest sets tablePlan field for test usage only
@@ -223,10 +158,10 @@ func (p *PhysicalTableReader) GetTablePlan() base.PhysicalPlan {
 }
 
 // GetTableScans exports the tableScan that contained in tablePlans.
-func (p *PhysicalTableReader) GetTableScans() []*PhysicalTableScan {
-	tableScans := make([]*PhysicalTableScan, 0, 1)
+func (p *PhysicalTableReader) GetTableScans() []*physicalop.PhysicalTableScan {
+	tableScans := make([]*physicalop.PhysicalTableScan, 0, 1)
 	for _, tablePlan := range p.TablePlans {
-		tableScan, ok := tablePlan.(*PhysicalTableScan)
+		tableScan, ok := tablePlan.(*physicalop.PhysicalTableScan)
 		if ok {
 			tableScans = append(tableScans, tableScan)
 		}
@@ -235,7 +170,7 @@ func (p *PhysicalTableReader) GetTableScans() []*PhysicalTableScan {
 }
 
 // GetTableScan exports the tableScan that contained in tablePlans and return error when the count of table scan != 1.
-func (p *PhysicalTableReader) GetTableScan() (*PhysicalTableScan, error) {
+func (p *PhysicalTableReader) GetTableScan() (*physicalop.PhysicalTableScan, error) {
 	tableScans := p.GetTableScans()
 	if len(tableScans) != 1 {
 		return nil, errors.New("the count of table scan != 1")
@@ -267,7 +202,7 @@ func (p *PhysicalTableReader) MemoryUsage() (sum int64) {
 
 // setMppOrBatchCopForTableScan set IsMPPOrBatchCop for all TableScan.
 func setMppOrBatchCopForTableScan(curPlan base.PhysicalPlan) {
-	if ts, ok := curPlan.(*PhysicalTableScan); ok {
+	if ts, ok := curPlan.(*physicalop.PhysicalTableScan); ok {
 		ts.IsMPPOrBatchCop = true
 	}
 	children := curPlan.Children()
@@ -288,7 +223,7 @@ func GetPhysicalIndexReader(sg *logicalop.TiKVSingleGather, schema *expression.S
 // GetPhysicalTableReader returns PhysicalTableReader for logical TiKVSingleGather.
 func GetPhysicalTableReader(sg *logicalop.TiKVSingleGather, schema *expression.Schema, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalTableReader {
 	reader := PhysicalTableReader{}.Init(sg.SCtx(), sg.QueryBlockOffset())
-	reader.PlanPartInfo = &PhysPlanPartInfo{
+	reader.PlanPartInfo = &physicalop.PhysPlanPartInfo{
 		PruningConds:   sg.Source.AllConds,
 		PartitionNames: sg.Source.PartitionNames,
 		Columns:        sg.Source.TblCols,
@@ -362,7 +297,7 @@ type PhysicalIndexReader struct {
 	OutputColumns []*expression.Column
 
 	// Used by partition table.
-	PlanPartInfo *PhysPlanPartInfo
+	PlanPartInfo *physicalop.PhysPlanPartInfo
 }
 
 // Clone implements op.PhysicalPlan interface.
@@ -389,7 +324,7 @@ func (p *PhysicalIndexReader) SetSchema(_ *expression.Schema) {
 	if p.indexPlan != nil {
 		p.IndexPlans = flattenPushDownPlan(p.indexPlan)
 		switch p.indexPlan.(type) {
-		case *PhysicalHashAgg, *PhysicalStreamAgg, *physicalop.PhysicalProjection:
+		case *physicalop.PhysicalHashAgg, *PhysicalStreamAgg, *physicalop.PhysicalProjection:
 			p.PhysicalSchemaProducer.SetSchema(p.indexPlan.Schema())
 		default:
 			is := p.IndexPlans[0].(*PhysicalIndexScan)
@@ -456,33 +391,6 @@ func (p *PhysicalIndexReader) LoadTableStats(ctx sessionctx.Context) {
 	loadTableStats(ctx, is.Table, is.physicalTableID)
 }
 
-// PushedDownLimit is the limit operator pushed down into PhysicalIndexLookUpReader.
-type PushedDownLimit struct {
-	Offset uint64
-	Count  uint64
-}
-
-// Clone clones this pushed-down list.
-func (p *PushedDownLimit) Clone() *PushedDownLimit {
-	if p == nil {
-		return nil
-	}
-	cloned := new(PushedDownLimit)
-	*cloned = *p
-	return cloned
-}
-
-const pushedDownLimitSize = size.SizeOfUint64 * 2
-
-// MemoryUsage return the memory usage of PushedDownLimit
-func (p *PushedDownLimit) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	return pushedDownLimitSize
-}
-
 // PhysicalIndexLookUpReader is the index look up reader in tidb. It's used in case of double reading.
 type PhysicalIndexLookUpReader struct {
 	physicalop.PhysicalSchemaProducer
@@ -497,12 +405,12 @@ type PhysicalIndexLookUpReader struct {
 
 	ExtraHandleCol *expression.Column
 	// PushedLimit is used to avoid unnecessary table scan tasks of IndexLookUpReader.
-	PushedLimit *PushedDownLimit
+	PushedLimit *physicalop.PushedDownLimit
 
 	CommonHandleCols []*expression.Column
 
 	// Used by partition table.
-	PlanPartInfo *PhysPlanPartInfo
+	PlanPartInfo *physicalop.PhysPlanPartInfo
 
 	// required by cost calculation
 	expectedCnt uint64
@@ -619,8 +527,8 @@ func (p *PhysicalIndexLookUpReader) MemoryUsage() (sum int64) {
 
 // LoadTableStats preloads the stats data for the physical table
 func (p *PhysicalIndexLookUpReader) LoadTableStats(ctx sessionctx.Context) {
-	ts := p.TablePlans[0].(*PhysicalTableScan)
-	loadTableStats(ctx, ts.Table, ts.physicalTableID)
+	ts := p.TablePlans[0].(*physicalop.PhysicalTableScan)
+	loadTableStats(ctx, ts.Table, ts.PhysicalTableID)
 }
 
 // PhysicalIndexMergeReader is the reader using multiple indexes in tidb.
@@ -634,7 +542,7 @@ type PhysicalIndexMergeReader struct {
 	AccessMVIndex bool
 
 	// PushedLimit is used to avoid unnecessary table scan tasks of IndexMergeReader.
-	PushedLimit *PushedDownLimit
+	PushedLimit *physicalop.PushedDownLimit
 	// ByItems is used to support sorting the handles returned by partialPlans.
 	ByItems []*util.ByItems
 
@@ -648,7 +556,7 @@ type PhysicalIndexMergeReader struct {
 	TablePlans []base.PhysicalPlan
 
 	// Used by partition table.
-	PlanPartInfo *PhysPlanPartInfo
+	PlanPartInfo *physicalop.PhysPlanPartInfo
 
 	KeepOrder bool
 
@@ -726,8 +634,8 @@ func (p *PhysicalIndexMergeReader) MemoryUsage() (sum int64) {
 
 // LoadTableStats preloads the stats data for the physical table
 func (p *PhysicalIndexMergeReader) LoadTableStats(ctx sessionctx.Context) {
-	ts := p.TablePlans[0].(*PhysicalTableScan)
-	loadTableStats(ctx, ts.Table, ts.physicalTableID)
+	ts := p.TablePlans[0].(*physicalop.PhysicalTableScan)
+	loadTableStats(ctx, ts.Table, ts.PhysicalTableID)
 }
 
 // PhysicalIndexScan represents an index scan plan.
@@ -921,7 +829,7 @@ type PhysicalTableScan struct {
 	// ByItems only for partition table with orderBy + pushedLimit
 	ByItems []*util.ByItems
 
-	PlanPartInfo *PhysPlanPartInfo
+	PlanPartInfo *physicalop.PhysPlanPartInfo
 
 	SampleInfo *tablesampler.TableSampleInfo `plan-cache-clone:"must-nil"`
 
@@ -941,12 +849,11 @@ type PhysicalTableScan struct {
 	usedStatsInfo *stmtctx.UsedStatsInfoForTable `plan-cache-clone:"shallow"`
 
 	// for runtime filter
-	runtimeFilterList []*RuntimeFilter `plan-cache-clone:"must-nil"` // plan with runtime filter is not cached
+	runtimeFilterList []*physicalop.RuntimeFilter `plan-cache-clone:"must-nil"` // plan with runtime filter is not cached
 	maxWaitTimeMs     int
 
 	// UsedColumnarIndexes is used to store the used columnar index for the table scan.
 	UsedColumnarIndexes []*ColumnarIndexExtra `plan-cache-clone:"must-nil"` // MPP plan should not be cached.
-
 	// TableSplit is a split (range) of the table to read.
 	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
 }
@@ -982,7 +889,7 @@ func (ts *PhysicalTableScan) Clone(newCtx base.PlanContext) (base.PhysicalPlan, 
 	clonedScan.Ranges = util.CloneRanges(ts.Ranges)
 	clonedScan.TableAsName = ts.TableAsName
 	clonedScan.rangeInfo = ts.rangeInfo
-	clonedScan.runtimeFilterList = make([]*RuntimeFilter, 0, len(ts.runtimeFilterList))
+	clonedScan.runtimeFilterList = make([]*physicalop.RuntimeFilter, 0, len(ts.runtimeFilterList))
 	for _, rf := range ts.runtimeFilterList {
 		clonedRF := rf.Clone()
 		clonedScan.runtimeFilterList = append(clonedScan.runtimeFilterList, clonedRF)
@@ -1101,47 +1008,9 @@ func expandVirtualColumn(schema *expression.Schema, copyColumn []*model.ColumnIn
 	return copyColumn
 }
 
-const emptyPhysicalTableScanSize = int64(unsafe.Sizeof(PhysicalTableScan{}))
-
-// MemoryUsage return the memory usage of PhysicalTableScan
-func (ts *PhysicalTableScan) MemoryUsage() (sum int64) {
-	if ts == nil {
-		return
-	}
-
-	sum = emptyPhysicalTableScanSize + ts.PhysicalSchemaProducer.MemoryUsage() + ts.DBName.MemoryUsage() +
-		int64(cap(ts.HandleIdx))*size.SizeOfInt + ts.PlanPartInfo.MemoryUsage() + int64(len(ts.rangeInfo))
-	if ts.TableAsName != nil {
-		sum += ts.TableAsName.MemoryUsage()
-	}
-	if ts.HandleCols != nil {
-		sum += ts.HandleCols.MemoryUsage()
-	}
-	if ts.prop != nil {
-		sum += ts.prop.MemoryUsage()
-	}
-	// slice memory usage
-	for _, cond := range ts.AccessCondition {
-		sum += cond.MemoryUsage()
-	}
-	for _, cond := range ts.filterCondition {
-		sum += cond.MemoryUsage()
-	}
-	for _, cond := range ts.LateMaterializationFilterCondition {
-		sum += cond.MemoryUsage()
-	}
-	for _, rang := range ts.Ranges {
-		sum += rang.MemUsage()
-	}
-	for _, col := range ts.tblCols {
-		sum += col.MemoryUsage()
-	}
-	return
-}
-
 // PhysicalApply represents apply plan, only used for subquery.
 type PhysicalApply struct {
-	PhysicalHashJoin
+	physicalop.PhysicalHashJoin
 
 	CanUseCache bool
 	Concurrency int
@@ -1161,7 +1030,7 @@ func (la *PhysicalApply) Clone(newCtx base.PlanContext) (base.PhysicalPlan, erro
 	if err != nil {
 		return nil, err
 	}
-	hj := base.(*PhysicalHashJoin)
+	hj := base.(*physicalop.PhysicalHashJoin)
 	cloned.PhysicalHashJoin = *hj
 	cloned.CanUseCache = la.CanUseCache
 	cloned.Concurrency = la.Concurrency
@@ -1202,162 +1071,6 @@ type PhysicalJoin interface {
 	GetJoinType() logicalop.JoinType
 }
 
-// PhysicalHashJoin represents hash join implementation of LogicalJoin.
-type PhysicalHashJoin struct {
-	physicalop.BasePhysicalJoin
-
-	Concurrency     uint
-	EqualConditions []*expression.ScalarFunction
-
-	// null aware equal conditions
-	NAEqualConditions []*expression.ScalarFunction
-
-	// use the outer table to build a hash table when the outer table is smaller.
-	UseOuterToBuild bool
-
-	// on which store the join executes.
-	storeTp        kv.StoreType
-	mppShuffleJoin bool
-
-	// for runtime filter
-	runtimeFilterList []*RuntimeFilter `plan-cache-clone:"must-nil"` // plan with runtime filter is not cached
-}
-
-// CanUseHashJoinV2 returns true if current join is supported by hash join v2
-func (p *PhysicalHashJoin) CanUseHashJoinV2() bool {
-	return canUseHashJoinV2(p.JoinType, p.LeftJoinKeys, p.IsNullEQ, p.LeftNAJoinKeys)
-}
-
-// CanTiFlashUseHashJoinV2 returns if current join is supported by hash join v2 in TiFlash
-func (p *PhysicalHashJoin) CanTiFlashUseHashJoinV2(sctx base.PlanContext) bool {
-	vars := sctx.GetSessionVars()
-	if !joinversion.IsOptimizedVersion(vars.TiFlashHashJoinVersion) {
-		return false
-	}
-	// spill is not supported yet
-	if vars.TiFlashMaxBytesBeforeExternalJoin > 0 || (vars.TiFlashMaxQueryMemoryPerNode > 0 && vars.TiFlashQuerySpillRatio > 0) {
-		return false
-	}
-	switch p.JoinType {
-	case logicalop.InnerJoin:
-		// null aware join is not supported yet
-		if len(p.LeftNAJoinKeys) > 0 {
-			return false
-		}
-		// cross join is not supported
-		if len(p.LeftJoinKeys) == 0 {
-			return false
-		}
-		// NullEQ is not supported yet
-		for _, value := range p.IsNullEQ {
-			if value {
-				return false
-			}
-		}
-		return true
-	default:
-		return false
-	}
-}
-
-// Clone implements op.PhysicalPlan interface.
-func (p *PhysicalHashJoin) Clone(newCtx base.PlanContext) (base.PhysicalPlan, error) {
-	cloned := new(PhysicalHashJoin)
-	cloned.SetSCtx(newCtx)
-	base, err := p.BasePhysicalJoin.CloneWithSelf(newCtx, cloned)
-	if err != nil {
-		return nil, err
-	}
-	cloned.BasePhysicalJoin = *base
-	cloned.Concurrency = p.Concurrency
-	cloned.UseOuterToBuild = p.UseOuterToBuild
-	for _, c := range p.EqualConditions {
-		cloned.EqualConditions = append(cloned.EqualConditions, c.Clone().(*expression.ScalarFunction))
-	}
-	for _, c := range p.NAEqualConditions {
-		cloned.NAEqualConditions = append(cloned.NAEqualConditions, c.Clone().(*expression.ScalarFunction))
-	}
-	for _, rf := range p.runtimeFilterList {
-		clonedRF := rf.Clone()
-		cloned.runtimeFilterList = append(cloned.runtimeFilterList, clonedRF)
-	}
-	return cloned, nil
-}
-
-// ExtractCorrelatedCols implements op.PhysicalPlan interface.
-func (p *PhysicalHashJoin) ExtractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := make([]*expression.CorrelatedColumn, 0, len(p.EqualConditions)+len(p.NAEqualConditions)+len(p.LeftConditions)+len(p.RightConditions)+len(p.OtherConditions))
-	for _, fun := range p.EqualConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.NAEqualConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.LeftConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.RightConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.OtherConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	return corCols
-}
-
-// MemoryUsage return the memory usage of PhysicalHashJoin
-func (p *PhysicalHashJoin) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	sum = p.BasePhysicalJoin.MemoryUsage() + size.SizeOfUint + size.SizeOfSlice + size.SizeOfBool*2 + size.SizeOfUint8
-
-	for _, expr := range p.EqualConditions {
-		sum += expr.MemoryUsage()
-	}
-	for _, expr := range p.NAEqualConditions {
-		sum += expr.MemoryUsage()
-	}
-	return
-}
-
-// RightIsBuildSide return true when right side is build side
-func (p *PhysicalHashJoin) RightIsBuildSide() bool {
-	if p.UseOuterToBuild {
-		return p.InnerChildIdx == 0
-	}
-	return p.InnerChildIdx != 0
-}
-
-// NewPhysicalHashJoin creates a new PhysicalHashJoin from LogicalJoin.
-func NewPhysicalHashJoin(p *logicalop.LogicalJoin, innerIdx int, useOuterToBuild bool, newStats *property.StatsInfo, prop ...*property.PhysicalProperty) *PhysicalHashJoin {
-	leftJoinKeys, rightJoinKeys, isNullEQ, _ := p.GetJoinKeys()
-	leftNAJoinKeys, rightNAJoinKeys := p.GetNAJoinKeys()
-	baseJoin := physicalop.BasePhysicalJoin{
-		LeftConditions:  p.LeftConditions,
-		RightConditions: p.RightConditions,
-		OtherConditions: p.OtherConditions,
-		LeftJoinKeys:    leftJoinKeys,
-		RightJoinKeys:   rightJoinKeys,
-		// NA join keys
-		LeftNAJoinKeys:  leftNAJoinKeys,
-		RightNAJoinKeys: rightNAJoinKeys,
-		IsNullEQ:        isNullEQ,
-		JoinType:        p.JoinType,
-		DefaultValues:   p.DefaultValues,
-		InnerChildIdx:   innerIdx,
-	}
-	hashJoin := PhysicalHashJoin{
-		BasePhysicalJoin:  baseJoin,
-		EqualConditions:   p.EqualConditions,
-		NAEqualConditions: p.NAEQConditions,
-		Concurrency:       uint(p.SCtx().GetSessionVars().HashJoinConcurrency()),
-		UseOuterToBuild:   useOuterToBuild,
-	}.Init(p.SCtx(), newStats, p.QueryBlockOffset(), prop...)
-	return hashJoin
-}
-
 // PhysicalIndexMergeJoin represents the plan of index look up merge join.
 type PhysicalIndexMergeJoin struct {
 	physicalop.PhysicalIndexJoin
@@ -1384,43 +1097,6 @@ func (p *PhysicalIndexMergeJoin) MemoryUsage() (sum int64) {
 	sum = p.PhysicalIndexJoin.MemoryUsage() + size.SizeOfSlice*3 + int64(cap(p.KeyOff2KeyOffOrderByIdx))*size.SizeOfInt +
 		int64(cap(p.CompareFuncs)+cap(p.OuterCompareFuncs))*size.SizeOfFunc + size.SizeOfBool*2
 	return
-}
-
-// PhysicalIndexHashJoin represents the plan of index look up hash join.
-type PhysicalIndexHashJoin struct {
-	physicalop.PhysicalIndexJoin
-	// KeepOuterOrder indicates whether keeping the output result order as the
-	// outer side.
-	KeepOuterOrder bool
-}
-
-// Clone implements op.PhysicalPlan interface.
-func (p *PhysicalIndexHashJoin) Clone(newCtx base.PlanContext) (base.PhysicalPlan, error) {
-	cloned := new(PhysicalIndexHashJoin)
-	cloned.SetSCtx(newCtx)
-	base, err := p.BasePhysicalJoin.CloneWithSelf(newCtx, cloned)
-	if err != nil {
-		return nil, err
-	}
-	cloned.BasePhysicalJoin = *base
-	physicalIndexJoin, err := p.PhysicalIndexJoin.Clone(newCtx)
-	if err != nil {
-		return nil, err
-	}
-	indexJoin, ok := physicalIndexJoin.(*physicalop.PhysicalIndexJoin)
-	intest.Assert(ok)
-	cloned.PhysicalIndexJoin = *indexJoin
-	cloned.KeepOuterOrder = p.KeepOuterOrder
-	return cloned, nil
-}
-
-// MemoryUsage return the memory usage of PhysicalIndexHashJoin
-func (p *PhysicalIndexHashJoin) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	return p.PhysicalIndexJoin.MemoryUsage() + size.SizeOfBool
 }
 
 // PhysicalExchangeReceiver accepts connection and receives data passively.
@@ -1616,58 +1292,6 @@ func (p *PhysicalExchangeSender) AppendTargetTasks(tasks []*kv.MPPTask) {
 	p.TargetTasks = append(p.TargetTasks, tasks...)
 }
 
-// PhysicalHashAgg is hash operator of aggregate.
-type PhysicalHashAgg struct {
-	physicalop.BasePhysicalAgg
-	tiflashPreAggMode string
-}
-
-func (p *PhysicalHashAgg) getPointer() *physicalop.BasePhysicalAgg {
-	return &p.BasePhysicalAgg
-}
-
-// Clone implements op.PhysicalPlan interface.
-func (p *PhysicalHashAgg) Clone(newCtx base.PlanContext) (base.PhysicalPlan, error) {
-	cloned := new(PhysicalHashAgg)
-	cloned.SetSCtx(newCtx)
-	base, err := p.BasePhysicalAgg.CloneWithSelf(newCtx, cloned)
-	if err != nil {
-		return nil, err
-	}
-	cloned.BasePhysicalAgg = *base
-	cloned.tiflashPreAggMode = p.tiflashPreAggMode
-	return cloned, nil
-}
-
-// MemoryUsage return the memory usage of PhysicalHashAgg
-func (p *PhysicalHashAgg) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	return p.BasePhysicalAgg.MemoryUsage()
-}
-
-// NewPhysicalHashAgg creates a new PhysicalHashAgg from a LogicalAggregation.
-func NewPhysicalHashAgg(la *logicalop.LogicalAggregation, newStats *property.StatsInfo, prop *property.PhysicalProperty) *PhysicalHashAgg {
-	newGbyItems := make([]expression.Expression, len(la.GroupByItems))
-	copy(newGbyItems, la.GroupByItems)
-	newAggFuncs := make([]*aggregation.AggFuncDesc, len(la.AggFuncs))
-	// There's some places that rewrites the aggFunc in-place.
-	// I clone it first.
-	// It needs a well refactor to make sure that the physical optimize should not change the things of logical plan.
-	// It's bad for cascades
-	for i, aggFunc := range la.AggFuncs {
-		newAggFuncs[i] = aggFunc.Clone()
-	}
-	agg := &physicalop.BasePhysicalAgg{
-		GroupByItems: newGbyItems,
-		AggFuncs:     newAggFuncs,
-	}
-	hashAgg := agg.InitForHash(la.SCtx(), newStats, la.QueryBlockOffset(), nil, prop)
-	return hashAgg.(*PhysicalHashAgg)
-}
-
 // PhysicalStreamAgg is stream operator of aggregate.
 type PhysicalStreamAgg struct {
 	physicalop.BasePhysicalAgg
@@ -1727,45 +1351,11 @@ func CollectPlanStatsVersion(plan base.PhysicalPlan, statsInfos map[string]uint6
 		statsInfos = CollectPlanStatsVersion(copPlan.indexPlan, statsInfos)
 	case *PhysicalIndexScan:
 		statsInfos[copPlan.Table.Name.O] = copPlan.StatsInfo().StatsVersion
-	case *PhysicalTableScan:
+	case *physicalop.PhysicalTableScan:
 		statsInfos[copPlan.Table.Name.O] = copPlan.StatsInfo().StatsVersion
 	}
 
 	return statsInfos
-}
-
-// PhysicalShow represents a show plan.
-type PhysicalShow struct {
-	physicalop.PhysicalSchemaProducer
-
-	logicalop.ShowContents
-
-	Extractor base.ShowPredicateExtractor
-}
-
-// MemoryUsage return the memory usage of PhysicalShow
-func (p *PhysicalShow) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	sum = p.PhysicalSchemaProducer.MemoryUsage() + p.ShowContents.MemoryUsage() + size.SizeOfInterface
-	return
-}
-
-// PhysicalShowDDLJobs is for showing DDL job list.
-type PhysicalShowDDLJobs struct {
-	physicalop.PhysicalSchemaProducer
-
-	JobNumber int64
-}
-
-// MemoryUsage return the memory usage of PhysicalShowDDLJobs
-func (p *PhysicalShowDDLJobs) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-	return p.PhysicalSchemaProducer.MemoryUsage() + size.SizeOfInt64
 }
 
 // SafeClone clones this op.PhysicalPlan and handles its panic.
@@ -1776,16 +1366,6 @@ func SafeClone(sctx base.PlanContext, v base.PhysicalPlan) (_ base.PhysicalPlan,
 		}
 	}()
 	return v.Clone(sctx)
-}
-
-// PhysicalTableSample represents a table sample plan.
-// It returns the sample rows to its parent operand.
-type PhysicalTableSample struct {
-	physicalop.PhysicalSchemaProducer
-	TableSampleInfo *tablesampler.TableSampleInfo
-	TableInfo       table.Table
-	PhysicalTableID int64
-	Desc            bool
 }
 
 // PhysicalCTE is for CTE.
@@ -2011,53 +1591,4 @@ func appendChildCandidate(origin base.PhysicalPlan, pp base.PhysicalPlan, op *op
 	op.AppendCandidate(candidate)
 	pp.AppendChildCandidate(op)
 	op.GetTracer().Candidates[origin.ID()].AppendChildrenID(pp.ID())
-}
-
-// PhysicalSequence is the physical representation of LogicalSequence. Used to mark the CTE producers in the plan tree.
-type PhysicalSequence struct {
-	physicalop.PhysicalSchemaProducer
-}
-
-// MemoryUsage returns the memory usage of the PhysicalSequence.
-func (p *PhysicalSequence) MemoryUsage() (sum int64) {
-	if p == nil {
-		return
-	}
-
-	sum = p.PhysicalSchemaProducer.MemoryUsage()
-
-	return
-}
-
-// ExplainID overrides the ExplainID.
-func (p *PhysicalSequence) ExplainID(_ ...bool) fmt.Stringer {
-	return stringutil.MemoizeStr(func() string {
-		if p.SCtx() != nil && p.SCtx().GetSessionVars().StmtCtx.IgnoreExplainIDSuffix {
-			return p.TP()
-		}
-		return p.TP() + "_" + strconv.Itoa(p.ID())
-	})
-}
-
-// ExplainInfo overrides the ExplainInfo.
-func (*PhysicalSequence) ExplainInfo() string {
-	res := "Sequence Node"
-	return res
-}
-
-// Clone implements op.PhysicalPlan interface.
-func (p *PhysicalSequence) Clone(newCtx base.PlanContext) (base.PhysicalPlan, error) {
-	cloned := new(PhysicalSequence)
-	cloned.SetSCtx(newCtx)
-	base, err := p.PhysicalSchemaProducer.CloneWithSelf(newCtx, cloned)
-	if err != nil {
-		return nil, err
-	}
-	cloned.PhysicalSchemaProducer = *base
-	return cloned, nil
-}
-
-// Schema returns its last child(which is the main query tree)'s schema.
-func (p *PhysicalSequence) Schema() *expression.Schema {
-	return p.Children()[len(p.Children())-1].Schema()
 }
