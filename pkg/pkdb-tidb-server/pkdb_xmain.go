@@ -332,7 +332,7 @@ func RunTiDBServer(args []string) {
 
 	exited := make(chan struct{})
 	if !versioninfo.TiDBXMode {
-		signal.SetupSignalHandler(func() {
+		signal.SetupSignalHandler(func(os.Signal) {
 			svr.Close()
 			resourcemanager.InstanceResourceManager.Stop()
 			cleanup(svr, storage, dom)

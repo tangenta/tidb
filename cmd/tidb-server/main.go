@@ -394,7 +394,7 @@ func main() {
 	}
 
 	exited := make(chan struct{})
-	signal.SetupSignalHandler(func() {
+	signal.SetupSignalHandler(func(os.Signal) {
 		svr.Close()
 		resourcemanager.InstanceResourceManager.Stop()
 		cleanup(svr, storage, dom)
