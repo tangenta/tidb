@@ -46,6 +46,9 @@ const (
 	DefTiDBXEnableScheduleLeaderRule = false
 )
 
+// UnspecifiedServerID indicates the unspecified server id.
+const UnspecifiedServerID = 0
+
 // Process global variables.
 var (
 	EnableScheduleLeaderRule                = atomic.NewBool(DefTiDBXEnableScheduleLeaderRule)
