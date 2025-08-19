@@ -946,6 +946,7 @@ const (
 	ErrEngineAttributeNotSupported                           = 3981
 	ErrJSONInBooleanContext                                  = 3986
 	ErrTableWithoutPrimaryKey                                = 3750
+	ErrForeignKeyWithCreateAsSelect                          = 3978
 	// MariaDB errors.
 	ErrSPvarNonintegerType                  = 4008
 	ErrOnlyOneDefaultPartionAllowed         = 4030

@@ -1768,6 +1768,9 @@ type SessionVars struct {
 
 	// InternalSQLScanUserTable indicates whether to use user table for internal SQL. it will be used by TTL scan
 	InternalSQLScanUserTable bool
+
+	// CreateFromSelectUsingImport indicates whether to use import into to create table as select.
+	CreateFromSelectUsingImport bool
 }
 
 // ResetRelevantOptVarsAndFixes resets the relevant optimizer variables and fixes.

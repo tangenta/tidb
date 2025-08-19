@@ -32,6 +32,13 @@ var pkdbSysVars = []*SysVar{
 			return nil
 		},
 	},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBCreateFromSelectUsingImport, Value: BoolToOnOff(vardef.DefTiDBCreateFromSelectUsingImport), Type: vardef.TypeBool,
+		SetSession: func(s *SessionVars, val string) error {
+			s.CreateFromSelectUsingImport = TiDBOptOn(val)
+			return nil
+		},
+		IsHintUpdatableVerified: true,
+	},
 }
 
 // ServerStartupTime indicates the server's startup time as a Unix timestamp (seconds since the epoch).

@@ -20,6 +20,9 @@ const (
 	// TiDBEnableDutySeparationMode indicates if enable the mode of duty separation.
 	TiDBEnableDutySeparationMode = "tidb_enable_duty_separation_mode"
 
+	// TiDBCreateFromSelectUsingImport indicates whether to use import into to create table as select.
+	TiDBCreateFromSelectUsingImport = "tidb_create_from_select_using_import"
+
 	// fusion mode related variables
 
 	// TiDBXEnableScheduleLeaderRule indicates whether to enable region leader in one store.
@@ -32,13 +35,14 @@ const (
 
 // Default TiDB system variable values.
 const (
-	DefTiDBEnableLoginHistory         = false
-	DefTiDBLoginHistoryRetainDuration = time.Hour * 24 * 90 // default 90 days.
-	DefStoredProgramCacheSize         = 256
-	DefTiDBEnableProcedure            = false
-	DefTiDBEnableDutySeparationMode   = false
-	DefTiDBEnableUDVSubstitute        = false
-	DefTiDBEnableSPParamSubstitute    = false
+	DefTiDBEnableLoginHistory          = false
+	DefTiDBLoginHistoryRetainDuration  = time.Hour * 24 * 90 // default 90 days.
+	DefStoredProgramCacheSize          = 256
+	DefTiDBEnableProcedure             = false
+	DefTiDBEnableDutySeparationMode    = false
+	DefTiDBEnableUDVSubstitute         = false
+	DefTiDBEnableSPParamSubstitute     = false
+	DefTiDBCreateFromSelectUsingImport = false
 
 	// fusion mode related variables
 
