@@ -301,6 +301,7 @@ go_test(
         "//pkg/ddl/mock",
         "//pkg/ddl/placement",
         "//pkg/ddl/schematracker",
+        "//pkg/ddl/schemaver",
         "//pkg/ddl/serverstate",
         "//pkg/ddl/session",
         "//pkg/ddl/systable",

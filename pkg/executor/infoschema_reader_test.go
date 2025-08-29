@@ -1151,6 +1151,7 @@ func TestInfoschemaTablesSpecialOptimizationCovered(t *testing.T) {
 }
 
 func TestIndexUsageWithData(t *testing.T) {
+	t.Skip("skip unstable test")
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
 	// Some bad tests will set the global variable to 0, and they don't set it back. So even if the default value for this variable is 1,

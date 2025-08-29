@@ -8,6 +8,7 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/planner/util/coretestsdk"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/hint"
@@ -16,7 +17,7 @@ import (
 
 func TestNewVariableVars(t *testing.T) {
 	// variable test
-	builder, _ := NewPlanBuilder().Init(MockContext(), nil, &hint.QBHintHandler{})
+	builder, _ := NewPlanBuilder().Init(coretestsdk.MockContext(), nil, &hint.QBHintHandler{})
 	con := variable.NewProcedureContext(variable.BLOCKLABEL)
 	tp := types.NewFieldType(mysql.TypeInt24)
 	decl := &ast.ProcedureDecl{DeclNames: []string{"t1"}, DeclType: tp}
@@ -326,7 +327,7 @@ func TestProcedureNodePlan(t *testing.T) {
 	ctx := context.Background()
 	// base block test
 	block := &ast.ProcedureBlock{}
-	sctx := MockContext()
+	sctx := coretestsdk.MockContext()
 	builder, _ := NewPlanBuilder().Init(sctx, nil, &hint.QBHintHandler{})
 	err := builder.procedureNodePlan(ctx, block, "")
 	require.Nil(t, err)

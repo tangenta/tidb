@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/planner/property"
 	"github.com/pingcap/tidb/pkg/planner/util"
+	"github.com/pingcap/tidb/pkg/planner/util/coretestsdk"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
@@ -90,7 +91,7 @@ func TestAnalyzeBuildSucc(t *testing.T) {
 	}
 
 	p := parser.New()
-	is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+	is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 	for i, tt := range tests {
 		comment := fmt.Sprintf("The %v-th test failed", i)
 		tk.MustExec(fmt.Sprintf("set @@tidb_analyze_version=%v", tt.statsVer))
@@ -138,7 +139,7 @@ func TestAnalyzeSetRate(t *testing.T) {
 	}
 
 	p := parser.New()
-	is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+	is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 	for i, tt := range tests {
 		comment := fmt.Sprintf("The %v-th test failed", i)
 		stmt, err := p.ParseOneStmt(tt.sql, "", "")
@@ -178,7 +179,7 @@ func TestRequestTypeSupportedOff(t *testing.T) {
 		sql := "select * from t where a in (1, 10, 20)"
 		expect := "TableReader(Table(t))->Sel([in(test.t.a, 1, 10, 20)])"
 
-		is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+		is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 		stmt, err := parser.New().ParseOneStmt(sql, "", "")
 		require.NoError(t, err)
 		nodeW := resolve.NewNodeW(stmt)
@@ -203,7 +204,7 @@ func TestDoSubQuery(t *testing.T) {
 		}
 
 		p := parser.New()
-		is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+		is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 
 		for _, tt := range tests {
 			comment := fmt.Sprintf("for %s", tt.sql)
@@ -225,7 +226,7 @@ func TestIndexLookupCartesianJoin(t *testing.T) {
 	stmt, err := parser.New().ParseOneStmt("select /*+ TIDB_INLJ(t1, t2) */ * from t t1 join t t2", "", "")
 	require.NoError(t, err)
 
-	is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+	is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 	nodeW := resolve.NewNodeW(stmt)
 	p, _, err := planner.Optimize(context.TODO(), tk.Session(), nodeW, is)
 	require.NoError(t, err)
@@ -355,7 +356,7 @@ func TestHintAlias(t *testing.T) {
 		}
 		ctx := context.TODO()
 		p := parser.New()
-		is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+		is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 
 		for i, tt := range tests {
 			comment := fmt.Sprintf("case:%v sql1:%s sql2:%s", i, tt.sql1, tt.sql2)
@@ -395,7 +396,7 @@ func TestDAGPlanBuilderSplitAvg(t *testing.T) {
 		}
 
 		p := parser.New()
-		is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
+		is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable(), coretestsdk.MockUnsignedTable()})
 
 		for _, tt := range tests {
 			comment := fmt.Sprintf("for %s", tt.sql)
@@ -427,7 +428,7 @@ func testDAGPlanBuilderSplitAvg(t *testing.T, root base.PhysicalPlan) {
 					require.Equal(t, aggfunc.RetTp, agg.Schema().Columns[i].RetType)
 				}
 			}
-			if agg, ok := baseAgg.(*core.PhysicalStreamAgg); ok {
+			if agg, ok := baseAgg.(*physicalop.PhysicalStreamAgg); ok {
 				for i, aggfunc := range agg.AggFuncs {
 					require.Equal(t, aggfunc.RetTp, agg.Schema().Columns[i].RetType)
 				}
@@ -626,10 +627,10 @@ func TestExchangeSenderResolveIndices(t *testing.T) {
 	partitionCol1 := &property.MPPPartitionColumn{Col: &expression.Column{UniqueID: 4}}
 
 	// two exchange sender share the same MPPPartitionColumn
-	exchangeSender1 := &core.PhysicalExchangeSender{
+	exchangeSender1 := &physicalop.PhysicalExchangeSender{
 		HashCols: []*property.MPPPartitionColumn{partitionCol1},
 	}
-	exchangeSender2 := &core.PhysicalExchangeSender{
+	exchangeSender2 := &physicalop.PhysicalExchangeSender{
 		HashCols: []*property.MPPPartitionColumn{partitionCol1},
 	}
 
@@ -668,7 +669,7 @@ func TestBuiltInGetIntVarSigType(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
 	ctx := context.Background()
-	is := infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable()})
+	is := infoschema.MockInfoSchema([]*model.TableInfo{coretestsdk.MockSignedTable()})
 	sctx := tk.Session().(sessionctx.Context)
 	p := parser.New()
 

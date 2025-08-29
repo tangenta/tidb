@@ -230,6 +230,8 @@ const (
 	ShowCreateImportCommand = "SHOW CREATE IMPORT"
 	// ShowImportJobsCommand represents SHOW IMPORT JOBS statement
 	ShowImportJobsCommand = "SHOW IMPORT JOBS"
+	// ShowImportGroupsCommand represents SHOW IMPORT GROUPS statement
+	ShowImportGroupsCommand = "SHOW IMPORT GROUPS"
 	// ShowPlacementCommand represents SHOW PLACEMENT statement
 	ShowPlacementCommand = "SHOW PLACEMENT"
 	// ShowPlacementForDatabaseCommand represents SHOW PLACEMENT FOR DATABASE statement
@@ -809,6 +811,8 @@ func (n *ShowStmt) SEMCommand() string {
 		return ShowCreateImportCommand
 	case ShowImportJobs:
 		return ShowImportJobsCommand
+	case ShowImportGroups:
+		return ShowImportGroupsCommand
 	case ShowPlacement:
 		return ShowPlacementCommand
 	case ShowPlacementForDatabase:
