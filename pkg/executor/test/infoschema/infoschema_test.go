@@ -782,7 +782,7 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and table_name = "t3";`).Check(testkit.RowsWithSep("|",
 			"149 add index public 136 147 t3 synced",
-			"148 create tsable public 136 147 t3 synced",
+			"148 create table public 136 147 t3 synced",
 		))
 	} else {
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE

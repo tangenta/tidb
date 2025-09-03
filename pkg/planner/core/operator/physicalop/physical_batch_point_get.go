@@ -520,6 +520,10 @@ func (p *PointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Plan, bo
 	copy(cloned.IdxColLens, p.IdxColLens)
 	cloned.AccessConditions = utilfuncp.CloneExpressionsForPlanCache(p.AccessConditions, nil)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(p.accessCols, nil)
+	cloned.Unfold = make([]bool, len(p.Unfold))
+	copy(cloned.Unfold, p.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(p.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, p.ColsInWhereClause)
 	return cloned, true
 }
 
@@ -1109,5 +1113,9 @@ func (p *BatchPointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Pla
 	cloned.PartitionIdxs = make([]int, len(p.PartitionIdxs))
 	copy(cloned.PartitionIdxs, p.PartitionIdxs)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(p.accessCols, nil)
+	cloned.Unfold = make([]bool, len(p.Unfold))
+	copy(cloned.Unfold, p.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(p.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, p.ColsInWhereClause)
 	return cloned, true
 }

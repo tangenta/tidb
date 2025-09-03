@@ -180,7 +180,7 @@ func TestGetTargetNodeCpuCnt(t *testing.T) {
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/util/cpu/mockNumCpu", "return(8)")
 	targetNodeCPUCnt, err := importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeQuery, "")
 	require.NoError(t, err)
-	require.Equal(t, 10, targetNodeCPUCnt)
+	require.Equal(t, 8, targetNodeCPUCnt)
 
 	// invalid path
 	_, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, ":xx")
@@ -188,17 +188,17 @@ func TestGetTargetNodeCpuCnt(t *testing.T) {
 	// server disk import
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "/path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 10, targetNodeCPUCnt)
+	require.Equal(t, 8, targetNodeCPUCnt)
 	// disttask disabled
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "s3://path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 10, targetNodeCPUCnt)
+	require.Equal(t, 8, targetNodeCPUCnt)
 	// disttask enabled
 	tk.MustExec("set @@global.tidb_enable_dist_task = on;")
 
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "s3://path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 10, targetNodeCPUCnt)
+	require.Equal(t, 16, targetNodeCPUCnt)
 }
 
 func TestPostProcess(t *testing.T) {
