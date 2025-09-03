@@ -180,7 +180,7 @@ func TestGetTargetNodeCpuCnt(t *testing.T) {
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/util/cpu/mockNumCpu", "return(8)")
 	targetNodeCPUCnt, err := importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeQuery, "")
 	require.NoError(t, err)
-	require.Equal(t, 8, targetNodeCPUCnt)
+	require.Equal(t, 10, targetNodeCPUCnt)
 
 	// invalid path
 	_, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, ":xx")
@@ -188,17 +188,17 @@ func TestGetTargetNodeCpuCnt(t *testing.T) {
 	// server disk import
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "/path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 8, targetNodeCPUCnt)
+	require.Equal(t, 10, targetNodeCPUCnt)
 	// disttask disabled
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "s3://path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 8, targetNodeCPUCnt)
+	require.Equal(t, 10, targetNodeCPUCnt)
 	// disttask enabled
 	tk.MustExec("set @@global.tidb_enable_dist_task = on;")
 
 	targetNodeCPUCnt, err = importer.GetTargetNodeCPUCnt(ctx, importer.DataSourceTypeFile, "s3://path/to/xxx.csv")
 	require.NoError(t, err)
-	require.Equal(t, 16, targetNodeCPUCnt)
+	require.Equal(t, 10, targetNodeCPUCnt)
 }
 
 func TestPostProcess(t *testing.T) {
@@ -384,7 +384,7 @@ func TestProcessChunkWith(t *testing.T) {
 		checksumMap := checksum.GetInnerChecksums()
 		require.Len(t, checksumMap, 1)
 		if kerneltype.IsClassic() {
-			require.Equal(t, verify.MakeKVChecksumWithKeyspace(keyspace, 111, 3, 18171781844378606789),
+			require.Equal(t, verify.MakeKVChecksumWithKeyspace(keyspace, 111, 3, 16544599128991797345),
 				*checksumMap[verify.DataKVGroupID])
 		} else if kerneltype.IsNextGen() {
 			require.Equal(t, verify.MakeKVChecksumWithKeyspace(keyspace, 111+scanedRows*prefixLenForOneRow, 3, 9580998779111664884),

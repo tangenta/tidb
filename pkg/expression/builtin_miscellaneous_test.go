@@ -165,6 +165,16 @@ func TestUUID(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestUUIDShort(t *testing.T) {
+	ctx := createContext(t)
+	f, err := newFunctionForTest(ctx, ast.UUIDShort)
+	require.NoError(t, err)
+	_, err = f.Eval(ctx, chunk.Row{})
+	require.Error(t, err) // unknown sever id
+	_, err = funcs[ast.UUIDShort].getFunction(ctx, datumsToConstants(nil))
+	require.NoError(t, err)
+}
+
 func TestAnyValue(t *testing.T) {
 	ctx := createContext(t)
 	tbl := []struct {
