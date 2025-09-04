@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	plannercore "github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
 	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 	"github.com/pingcap/tidb/pkg/planner/planctx"
@@ -570,8 +569,8 @@ func buildVirtualColumnIndex(schema *expression.Schema, columns []*model.ColumnI
 		}
 	}
 	slices.SortFunc(virtualColumnIndex, func(i, j int) int {
-		return cmp.Compare(plannercore.FindColumnInfoByID(columns, schema.Columns[i].ID).Offset,
-			plannercore.FindColumnInfoByID(columns, schema.Columns[j].ID).Offset)
+		return cmp.Compare(model.FindColumnInfoByID(columns, schema.Columns[i].ID).Offset,
+			model.FindColumnInfoByID(columns, schema.Columns[j].ID).Offset)
 	})
 	return virtualColumnIndex
 }

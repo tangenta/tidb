@@ -202,10 +202,13 @@ func TestCreateTableAsSelect(t *testing.T) {
 }
 
 func TestCreateTableAsSelectPrivilege(t *testing.T) {
+	if !*realtikvtest.WithRealTiKV {
+		t.Skip("TiKV store only")
+	}
 	defer config.RestoreFunc()
-	require.True(t, *realtikvtest.WithRealTiKV)
 	config.UpdateGlobal(func(conf *config.Config) {
 		conf.Path = "127.0.0.1:2379"
+		conf.Experimental.EnableCreateTableAsSelect = true
 	})
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
