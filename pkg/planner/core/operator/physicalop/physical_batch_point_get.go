@@ -94,6 +94,12 @@ type PointGetPlan struct {
 	accessCols []*expression.Column
 
 	// NOTE: please update FastClonePointGetForPlanCache accordingly if you add new fields here.
+
+	// required by column privileges
+	// unfold indicates whether the FieldName in 'names' is unfolded from wildcard
+	Unfold []bool
+	// columns in the where clause should be check privilege
+	ColsInWhereClause []string
 }
 
 // Init initializes PointGetPlan.
@@ -514,6 +520,10 @@ func (p *PointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Plan, bo
 	copy(cloned.IdxColLens, p.IdxColLens)
 	cloned.AccessConditions = utilfuncp.CloneExpressionsForPlanCache(p.AccessConditions, nil)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(p.accessCols, nil)
+	cloned.Unfold = make([]bool, len(p.Unfold))
+	copy(cloned.Unfold, p.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(p.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, p.ColsInWhereClause)
 	return cloned, true
 }
 
@@ -561,6 +571,12 @@ type BatchPointGetPlan struct {
 	PlanCostVer2 costusage.CostVer2 `plan-cache-clone:"shallow"`
 	// accessCols represents actual columns the PointGet will access, which are used to calculate row-size
 	accessCols []*expression.Column
+
+	// required by column privileges
+	// unfold indicates whether the FieldName in 'names' is unfolded from wildcard
+	Unfold []bool
+	// columns in the where clause should be check privilege
+	ColsInWhereClause []string
 }
 
 // Init initializes BatchPointGetPlan.
@@ -1097,5 +1113,9 @@ func (p *BatchPointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Pla
 	cloned.PartitionIdxs = make([]int, len(p.PartitionIdxs))
 	copy(cloned.PartitionIdxs, p.PartitionIdxs)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(p.accessCols, nil)
+	cloned.Unfold = make([]bool, len(p.Unfold))
+	copy(cloned.Unfold, p.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(p.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, p.ColsInWhereClause)
 	return cloned, true
 }
