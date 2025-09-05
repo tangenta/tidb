@@ -100,7 +100,7 @@ func testConcurrentlyInitStats(t *testing.T) {
 		}
 	}
 	if kerneltype.IsClassic() {
-		require.Equal(t, int64(130), handle.GetMaxTidRecordForTest())
+		require.Equal(t, int64(152), handle.GetMaxTidRecordForTest())
 	} else {
 		// In next-gen, the table ID is different from classic because the system table IDs and the regular table IDs are different,
 		// so the next-gen table ID will be ahead of the classic table ID.
