@@ -5,6 +5,7 @@ go_test(
     timeout = "moderate",
     srcs = [
         "create_from_select_test.go",
+        "infoschema_test.go",
         "infoschema_v2_test.go",
         "main_test.go",
         "paging_test.go",
@@ -12,7 +13,7 @@ go_test(
     ],
     flaky = True,
     race = "on",
-    shard_count = 16,
+    shard_count = 17,
     deps = [
         "//pkg/config",
         "//pkg/errno",
