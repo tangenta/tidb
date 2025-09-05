@@ -1028,6 +1028,9 @@ type SessionVars struct {
 	// RiskRangeSkewRatio is used to control the ratio of skew that is applied to range predicates that fall within a single bucket or outside the histogram bucket range.
 	RiskRangeSkewRatio float64
 
+	// RiskScaleNDVSkewRatio controls the NDV estimation risk strategy for scaling NDV estimation.
+	RiskScaleNDVSkewRatio float64
+
 	// TiDBOptRiskGroupNDVSkewRatio controls the NDV estimation risk strategy for multi-column operations
 	// including GROUP BY, JOIN, and DISTINCT operations.
 	// When 0: uses conservative estimate (max of individual column NDVs, production default)
@@ -1138,6 +1141,9 @@ type SessionVars struct {
 
 	// EnablePipelinedWindowExec enables executing window functions in a pipelined manner.
 	EnablePipelinedWindowExec bool
+
+	// EnableNoDecorrelateInSelect enables the NO_DECORRELATE hint for subqueries in the select list.
+	EnableNoDecorrelateInSelect bool
 
 	// AllowProjectionPushDown enables pushdown projection on TiKV.
 	AllowProjectionPushDown bool
@@ -2230,8 +2236,10 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		BroadcastJoinThresholdSize:    vardef.DefBroadcastJoinThresholdSize,
 		BroadcastJoinThresholdCount:   vardef.DefBroadcastJoinThresholdCount,
 		OptimizerSelectivityLevel:     vardef.DefTiDBOptimizerSelectivityLevel,
+		RiskScaleNDVSkewRatio:         vardef.DefOptRiskScaleNDVSkewRatio,
 		RiskGroupNDVSkewRatio:         vardef.DefOptRiskGroupNDVSkewRatio,
 		EnableOuterJoinReorder:        vardef.DefTiDBEnableOuterJoinReorder,
+		EnableNoDecorrelateInSelect:   vardef.DefOptEnableNoDecorrelateInSelect,
 		RetryLimit:                    vardef.DefTiDBRetryLimit,
 		DisableTxnAutoRetry:           vardef.DefTiDBDisableTxnAutoRetry,
 		DDLReorgPriority:              kv.PriorityLow,
