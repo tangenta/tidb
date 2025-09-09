@@ -616,6 +616,7 @@ func TestDMLStmt(t *testing.T) {
 			WHERE stuff.value >= ALL (SELECT stuff.value
 			FROM stuff)`, true, "SELECT `stuff`.`id` FROM `stuff` WHERE `stuff`.`value`>=ALL (SELECT `stuff`.`value` FROM `stuff`)"},
 		{"BEGIN", true, "START TRANSACTION"},
+		{"BEGIN WORK", true, "START TRANSACTION"},
 		{"START TRANSACTION", true, "START TRANSACTION"},
 		// 45
 		{"COMMIT", true, "COMMIT"},
@@ -625,6 +626,7 @@ func TestDMLStmt(t *testing.T) {
 		{"COMMIT AND NO CHAIN RELEASE", true, "COMMIT RELEASE"},
 		{"COMMIT AND CHAIN NO RELEASE", true, "COMMIT AND CHAIN"},
 		{"COMMIT AND CHAIN RELEASE", false, ""},
+		{"COMMIT WORK", true, "COMMIT"},
 		{"ROLLBACK", true, "ROLLBACK"},
 		{"ROLLBACK AND NO CHAIN", true, "ROLLBACK"},
 		{"ROLLBACK NO RELEASE", true, "ROLLBACK"},
@@ -632,6 +634,7 @@ func TestDMLStmt(t *testing.T) {
 		{"ROLLBACK AND NO CHAIN RELEASE", true, "ROLLBACK RELEASE"},
 		{"ROLLBACK AND CHAIN NO RELEASE", true, "ROLLBACK AND CHAIN"},
 		{"ROLLBACK AND CHAIN RELEASE", false, ""},
+		{"ROLLBACK WORK", true, "ROLLBACK"},
 		{`BEGIN;
 			INSERT INTO foo VALUES (42, 3.14);
 			INSERT INTO foo VALUES (-1, 2.78);

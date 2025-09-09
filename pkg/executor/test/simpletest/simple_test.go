@@ -127,6 +127,39 @@ func TestTransaction(t *testing.T) {
 	tk.MustExec("create table txn2 (a int)")
 	tk.MustExec("rollback")
 	tk.MustQuery("select * from txn").Check(testkit.Rows("1", "2"))
+
+	// Test begin work syntax.
+	tk.MustExec("delete from txn")
+	tk.MustExec("begin work")
+	tk.MustExec("insert txn values (3)")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("3"))
+	tk.MustExec("rollback")
+	tk.MustQuery("select * from txn").Check(testkit.Rows())
+	tk.MustExec("begin work")
+	tk.MustExec("insert txn values (4)")
+	tk.MustExec("commit")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("4"))
+
+	// Test rollback work syntax
+	tk.MustExec("delete from txn")
+	tk.MustExec("begin")
+	tk.MustExec("insert txn value (5)")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("5"))
+	tk.MustExec("rollback work")
+	tk.MustQuery("select * from txn").Check(testkit.Rows())
+	tk.MustExec("begin")
+	tk.MustExec("insert txn value (6)")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("6"))
+
+	// Test commit work syntax
+	tk.MustExec("delete from txn")
+	tk.MustExec("begin")
+	tk.MustExec("insert txn value (7)")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("7"))
+	tk.MustExec("commit work")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("7"))
+	tk.MustExec("rollback")
+	tk.MustQuery("select * from txn").Check(testkit.Rows("7"))
 }
 
 func inTxn(ctx sessionctx.Context) bool {

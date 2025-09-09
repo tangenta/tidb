@@ -953,6 +953,7 @@ var tokenMap = map[string]int{
 	"WITH":                           with,
 	"WITHOUT":                        without,
 	"WRITE":                          write,
+	"WORK":                           work,
 	"WORKLOAD":                       workload,
 	"X509":                           x509,
 	"XOR":                            xor,

@@ -719,6 +719,7 @@ import (
 	weightString               "WEIGHT_STRING"
 	without                    "WITHOUT"
 	withSysTable               "WITH_SYS_TABLE"
+	work                       "WORK"
 	workload                   "WORKLOAD"
 	x509                       "X509"
 	yearType                   "YEAR"
@@ -3505,6 +3506,10 @@ BeginTransactionStmt:
 	{
 		$$ = &ast.BeginStmt{}
 	}
+|	"BEGIN" "WORK"
+	{
+		$$ = &ast.BeginStmt{}
+	}
 |	"BEGIN" "PESSIMISTIC"
 	{
 		$$ = &ast.BeginStmt{
@@ -3672,6 +3677,10 @@ ColumnNameOrUserVarListOptWithBrackets:
 
 CommitStmt:
 	"COMMIT"
+	{
+		$$ = &ast.CommitStmt{}
+	}
+|	"COMMIT" "WORK"
 	{
 		$$ = &ast.CommitStmt{}
 	}
@@ -7379,6 +7388,7 @@ UnReservedKeyword:
 |	"HANDLER"
 |	"FOUND"
 |	"CALIBRATE"
+|	"WORK"
 |	"WORKLOAD"
 |	"TPCC"
 |	"OLTP_READ_WRITE"
@@ -9494,6 +9504,10 @@ DeallocateSym:
 
 RollbackStmt:
 	"ROLLBACK"
+	{
+		$$ = &ast.RollbackStmt{}
+	}
+|	"ROLLBACK" "WORK"
 	{
 		$$ = &ast.RollbackStmt{}
 	}
