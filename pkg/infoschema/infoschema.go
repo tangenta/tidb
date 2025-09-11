@@ -485,7 +485,7 @@ func GetSequenceByName(is InfoSchema, schema, sequence ast.CIStr) (util.Sequence
 	return tbl.(util.SequenceTable), nil
 }
 
-func init() {
+func init2() {
 	// Initialize the information shema database and register the driver to `drivers`
 	dbID := autoid.InformationSchemaDBID
 	infoSchemaTables := make([]*model.TableInfo, 0, len(tableNameToColumns))

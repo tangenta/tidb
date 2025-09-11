@@ -80,6 +80,7 @@ func GetPhysicalTableReader(sg *logicalop.TiKVSingleGather, schema *expression.S
 		Columns:        sg.Source.TblCols,
 		ColumnNames:    sg.Source.OutputNames(),
 	}
+	reader.TableSplit = sg.Source.TableSplit
 	reader.SetStats(stats)
 	reader.SetSchema(schema)
 	reader.SetChildrenReqProps(props)
