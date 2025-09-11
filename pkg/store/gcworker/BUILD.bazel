@@ -61,6 +61,7 @@ go_test(
     shard_count = 28,
     deps = [
         "//pkg/config",
+        "//pkg/config/kerneltype",
         "//pkg/ddl/placement",
         "//pkg/ddl/util",
         "//pkg/domain",
