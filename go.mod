@@ -112,7 +112,6 @@ require (
 	github.com/spkg/bom v1.0.0
 	github.com/stathat/consistent v1.0.0
 	github.com/stretchr/testify v1.10.0
-	github.com/tdakkota/asciicheck v0.4.1
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2
 	github.com/tikv/client-go/v2 v2.0.8-0.20250828075934-b794d681774f
 	github.com/tikv/pd/client v0.0.0-20250703091733-dfd345b89500

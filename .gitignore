@@ -44,5 +44,6 @@ genkeyword
 test_coverage
 coverage.dat
 .specstory
+.golangci.bck.yml
 tidb-enterprise-utilities
 tidb-security-advanced
