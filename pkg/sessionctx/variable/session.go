@@ -1156,6 +1156,9 @@ type SessionVars struct {
 	// EnableNoDecorrelateInSelect enables the NO_DECORRELATE hint for subqueries in the select list.
 	EnableNoDecorrelateInSelect bool
 
+	// EnableSemiJoinRewrite enables the SEMI_JOIN_REWRITE hint for subqueries in the where clause.
+	EnableSemiJoinRewrite bool
+
 	// AllowProjectionPushDown enables pushdown projection on TiKV.
 	AllowProjectionPushDown bool
 
@@ -2253,6 +2256,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		CartesianJoinOrderThreshold:   vardef.DefOptCartesianJoinOrderThreshold,
 		EnableOuterJoinReorder:        vardef.DefTiDBEnableOuterJoinReorder,
 		EnableNoDecorrelateInSelect:   vardef.DefOptEnableNoDecorrelateInSelect,
+		EnableSemiJoinRewrite:         vardef.DefOptEnableSemiJoinRewrite,
 		RetryLimit:                    vardef.DefTiDBRetryLimit,
 		DisableTxnAutoRetry:           vardef.DefTiDBDisableTxnAutoRetry,
 		DDLReorgPriority:              kv.PriorityLow,

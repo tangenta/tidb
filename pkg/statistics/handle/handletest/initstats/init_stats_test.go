@@ -162,7 +162,7 @@ func testConcurrentlyInitStats(t *testing.T) {
 	} else {
 		// In next-gen, the table ID is different from classic because the system table IDs and the regular table IDs are different,
 		// so the next-gen table ID will be ahead of the classic table ID.
-		require.Equal(t, int64(23), handle.GetMaxTidRecordForTest())
+		require.Equal(t, int64(45), handle.GetMaxTidRecordForTest())
 	}
 }
 

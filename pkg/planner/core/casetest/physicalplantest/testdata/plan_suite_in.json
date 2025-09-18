@@ -642,6 +642,12 @@
     ]
   },
   {
+    "name": "TestLimitPushdown",
+    "cases": [
+        "select /*+ use_index(t1, c1) */ * from t1 order by c1 limit 200;"
+    ]
+  },
+  {
     "name": "TestParamSubstituteInSP",
     "cases": [
       "select b from t where a = pa",
