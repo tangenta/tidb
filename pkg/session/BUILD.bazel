@@ -180,6 +180,7 @@ go_test(
         "//pkg/meta/metadef",
         "//pkg/parser/ast",
         "//pkg/parser/auth",
+        "//pkg/parser/mysql",
         "//pkg/session/sessionapi",
         "//pkg/sessionctx",
         "//pkg/sessionctx/vardef",
