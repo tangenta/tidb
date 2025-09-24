@@ -1418,6 +1418,10 @@ func runSnapshotRestore(c context.Context, mgr *conn.Mgr, g glue.Glue, cmdName s
 		loadStatsPhysical = false
 	}
 	tables = client.CleanTablesIfTemporarySystemTablesRenamed(loadStatsPhysical, loadSysTablePhysical, tables)
+	preAllocRange, err := client.GetPreAllocedTableIDRange()
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	importModeSwitcher := restore.NewImportModeSwitcher(mgr.GetPDClient(), cfg.Config.SwitchModeInterval, mgr.GetTLSConfig())
 	var restoreSchedulersFunc pdutil.UndoFunc
@@ -1425,11 +1429,6 @@ func runSnapshotRestore(c context.Context, mgr *conn.Mgr, g glue.Glue, cmdName s
 	if (isFullRestore(cmdName) && !cfg.ExplicitFilter) || client.IsIncremental() {
 		restoreSchedulersFunc, schedulersConfig, err = restore.RestorePreWork(ctx, mgr, importModeSwitcher, cfg.Online, true)
 	} else {
-		var preAllocRange [2]int64
-		preAllocRange, err = client.GetPreAllocedTableIDRange()
-		if err != nil {
-			return errors.Trace(err)
-		}
 		if isPiTR && cfg.tableMappingManager != nil {
 			cfg.tableMappingManager.SetPreallocatedRange(preAllocRange[0], preAllocRange[1])
 		}
@@ -1658,6 +1657,7 @@ func runSnapshotRestore(c context.Context, mgr *conn.Mgr, g glue.Glue, cmdName s
 		}
 	}
 
+	compactProtectStartKey, compactProtectEndKey := encodeCompactAndCheckKey(mgr.GetStorage().GetCodec(), preAllocRange)
 	rtCtx := snapclient.RestoreTablesContext{
 		LogProgress:    cfg.LogProgress,
 		SplitSizeBytes: kvConfigs.MergeRegionSize.Value,
@@ -1671,6 +1671,9 @@ func runSnapshotRestore(c context.Context, mgr *conn.Mgr, g glue.Glue, cmdName s
 
 		CreatedTables:            createdTables,
 		CheckpointSetWithTableID: checkpointSetWithTableID,
+
+		CompactProtectStartKey: compactProtectStartKey,
+		CompactProtectEndKey:   compactProtectEndKey,
 
 		Glue: g,
 	}
@@ -2391,6 +2394,12 @@ func FilterDDLJobByRules(srcDDLJobs []*model.Job, rules ...DDLJobFilterRule) (ds
 	}
 
 	return
+}
+
+func encodeCompactAndCheckKey(codec tikv.Codec, preAlloced [2]int64) ([]byte, []byte) {
+	checkStartKey := tablecodec.EncodeTablePrefix(preAlloced[0])
+	checkEndKey := tablecodec.EncodeTablePrefix(preAlloced[1])
+	return codec.EncodeRange(checkStartKey, checkEndKey)
 }
 
 func rewriteKeyRanges(preAlloced [2]int64) [][2]kv.Key {

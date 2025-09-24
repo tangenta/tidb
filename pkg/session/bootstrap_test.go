@@ -2607,6 +2607,9 @@ func TestKeyspaceEtcdNamespace(t *testing.T) {
 }
 
 func TestNullKeyspaceEtcdNamespace(t *testing.T) {
+	if kerneltype.IsNextGen() {
+		t.Skip("next-gen kernel doesn't have the NULL keyspace concept")
+	}
 	makeStore(t, nil, false)
 }
 
