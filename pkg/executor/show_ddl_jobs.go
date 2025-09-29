@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/executor/internal/exec"
 	"github.com/pingcap/tidb/pkg/infoschema"
@@ -299,6 +300,10 @@ func (e *DDLJobRetriever) appendJobToChunk(req *chunk.Chunk, job *model.Job, che
 }
 
 func showCommentsFromJob(job *model.Job) string {
+	if kerneltype.IsNextGen() {
+		// The parameters are calculated automatically in next-gen TiDB.
+		return ""
+	}
 	m := job.ReorgMeta
 	if m == nil {
 		return ""
@@ -345,6 +350,10 @@ func showCommentsFromJob(job *model.Job) string {
 }
 
 func showCommentsFromSubjob(sub *model.SubJob, useDXF, useCloud bool) string {
+	if kerneltype.IsNextGen() {
+		// The parameters are calculated automatically in next-gen TiDB.
+		return ""
+	}
 	var labels []string
 	if sub.ReorgTp == model.ReorgTypeNone {
 		return ""
