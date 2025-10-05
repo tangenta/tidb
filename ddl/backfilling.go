@@ -505,14 +505,6 @@ func (dc *ddlCtx) handleRangeTasks(scheduler *backfillScheduler, t table.Table,
 	for i, keyRange := range kvRanges {
 		startKey := keyRange.StartKey
 		endKey := keyRange.EndKey
-		endK, err := getRangeEndKey(scheduler.jobCtx, dc.store, job.Priority, prefix, keyRange.StartKey, endKey)
-		if err != nil {
-			logutil.BgLogger().Info("[ddl] send range task to workers, get reverse key failed", zap.Error(err))
-		} else {
-			logutil.BgLogger().Info("[ddl] send range task to workers, change end key",
-				zap.String("end key", hex.EncodeToString(endKey)), zap.String("current end key", hex.EncodeToString(endK)))
-			endKey = endK
-		}
 		if len(startKey) == 0 {
 			startKey = prefix
 		}
@@ -526,7 +518,7 @@ func (dc *ddlCtx) handleRangeTasks(scheduler *backfillScheduler, t table.Table,
 			startKey:        startKey,
 			endKey:          endKey,
 			// If the boundaries overlap, we should ignore the preceding endKey.
-			endInclude: endK.Cmp(keyRange.EndKey) != 0 || i == len(kvRanges)-1,
+			endInclude: endKey.Cmp(keyRange.EndKey) != 0 || i == len(kvRanges)-1,
 			source:     source,
 		}
 		batchTasks = append(batchTasks, task)
