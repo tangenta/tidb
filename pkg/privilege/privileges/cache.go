@@ -75,6 +75,7 @@ const (
 	Alter_routine_priv,Event_priv,Shutdown_priv,Reload_priv,File_priv,Config_priv,Repl_client_priv,Repl_slave_priv,
 	Account_locked,Plugin,Token_issuer,User_attributes,password_expired,password_last_changed,password_lifetime,max_user_connections FROM mysql.user`
 	sqlLoadGlobalGrantsTable = `SELECT HIGH_PRIORITY Host,User,Priv,With_Grant_Option FROM mysql.global_grants`
+	sqlLoadProcsPriv         = `SELECT HIGH_PRIORITY Host,User,Db,Routine_name,Routine_type,Grantor,Proc_priv from mysql.procs_priv`
 )
 
 func computePrivMask(privs []mysql.PrivilegeType) mysql.PrivilegeType {
@@ -232,6 +233,23 @@ type tablesPrivRecord struct {
 	ColumnPriv mysql.PrivilegeType
 }
 
+type routinePrivRecord struct {
+	baseRecord
+
+	DB            string
+	ProcedureName string
+	Grantor       string
+	RoutineType   string
+	Timestamp     time.Time
+	RoutinePriv   mysql.PrivilegeType
+}
+
+func (record *routinePrivRecord) match(user, host, db, routineName string) bool {
+	return record.baseRecord.match(user, host) &&
+		strings.EqualFold(record.DB, db) &&
+		strings.EqualFold(record.ProcedureName, routineName)
+}
+
 type columnsPrivRecord struct {
 	baseRecord
 
@@ -335,6 +353,15 @@ func compareItemDynamicPriv(a, b itemDynamicPriv) bool {
 	return a.username < b.username
 }
 
+type itemRoutinePriv struct {
+	username string
+	data     []routinePrivRecord
+}
+
+func compareItemRoutinePriv(a, b itemRoutinePriv) bool {
+	return a.username < b.username
+}
+
 type bTree[T any] struct {
 	*btree.BTreeG[T]
 	sync.Mutex
@@ -370,6 +397,7 @@ type MySQLPrivilege struct {
 	globalPriv  bTree[itemGlobalPriv]
 	dynamicPriv bTree[itemDynamicPriv]
 	roleGraph   map[auth.RoleIdentity]roleGraphEdgesTable
+	routinePriv bTree[itemRoutinePriv]
 }
 
 func newMySQLPrivilege() *MySQLPrivilege {
@@ -381,6 +409,7 @@ func newMySQLPrivilege() *MySQLPrivilege {
 	p.defaultRoles = bTree[itemDefaultRole]{BTreeG: btree.NewG(8, compareItemDefaultRole)}
 	p.globalPriv = bTree[itemGlobalPriv]{BTreeG: btree.NewG(8, compareItemGlobalPriv)}
 	p.dynamicPriv = bTree[itemDynamicPriv]{BTreeG: btree.NewG(8, compareItemDynamicPriv)}
+	p.routinePriv = bTree[itemRoutinePriv]{BTreeG: btree.NewG(8, compareItemRoutinePriv)}
 	return &p
 }
 
@@ -507,6 +536,14 @@ func (p *MySQLPrivilege) LoadAll(ctx sqlexec.SQLExecutor) error {
 		}
 		logutil.BgLogger().Warn("mysql.role_edges missing")
 	}
+	err = p.LoadLoadProcsPriv(ctx)
+	if err != nil {
+		if !noSuchTable(err) {
+			logutil.BgLogger().Warn("load mysql.procs_priv", zap.Error(err))
+			return errLoadPrivilege.FastGen("mysql.procs_priv")
+		}
+		logutil.BgLogger().Warn("mysql.procs_priv missing")
+	}
 	return nil
 }
 
@@ -628,6 +665,18 @@ func (p *MySQLPrivilege) merge(diff *MySQLPrivilege, userList map[string]struct{
 		}
 	}
 	ret.columnsPriv.BTreeG = columnsPriv
+
+	routinePriv := p.routinePriv.Clone()
+	for u := range userList {
+		itm, ok := diff.routinePriv.Get(itemRoutinePriv{username: u})
+		if !ok {
+			routinePriv.Delete(itemRoutinePriv{username: u})
+		} else {
+			slices.SortFunc(itm.data, compareRoutinePrivRecord)
+			routinePriv.ReplaceOrInsert(itm)
+		}
+	}
+	ret.routinePriv.BTreeG = routinePriv
 
 	defaultRoles := p.defaultRoles.Clone()
 	for u := range userList {
@@ -757,24 +806,58 @@ func compareColumnsPrivRecord(x, y columnsPrivRecord) int {
 	return 0
 }
 
+func compareRoutinePrivRecord(x, y routinePrivRecord) int {
+	cmp := compareBaseRecord(&x.baseRecord, &y.baseRecord)
+	if cmp != 0 {
+		return cmp
+	}
+	switch {
+	case x.DB > y.DB:
+		return 1
+	case x.DB < y.DB:
+		return -1
+	}
+	switch {
+	case x.ProcedureName > y.ProcedureName:
+		return 1
+	case x.ProcedureName < y.ProcedureName:
+		return -1
+	}
+	switch {
+	case x.RoutineType > y.RoutineType:
+		return 1
+	case x.RoutineType < y.RoutineType:
+		return -1
+	}
+	return 0
+}
+
 // compareHost compares two host string using some special rules, return value 1, 0, -1 means > = <.
 // TODO: Check how MySQL do it exactly, instead of guess its rules.
 func compareHost(x, y string) int {
 	// The more-specific, the smaller it is.
 	// The pattern '%' means “any host” and is least specific.
-	if y == `%` {
-		if x == `%` {
+	if x == "%" || y == "%" {
+		if x == "%" && y == "%" {
 			return 0
 		}
-		return -1
+		if y == `%` {
+			return -1
+		}
+		// x == '%'
+		return 1
 	}
 
 	// The empty string '' also means “any host” but sorts after '%'.
-	if y == "" {
-		if x == "" {
+	if x == `` || y == `` {
+		if x == `` && y == `` {
 			return 0
 		}
-		return -1
+		if y == "" {
+			return -1
+		}
+		// x == ``
+		return 1
 	}
 
 	// One of them end with `%`.
@@ -797,11 +880,10 @@ func compareHost(x, y string) int {
 	}
 
 	// For other case, the order is nondeterministic.
-	switch x < y {
-	case true:
-		return -1
-	case false:
+	if x > y {
 		return 1
+	} else if x < y {
+		return -1
 	}
 	return 0
 }
@@ -828,6 +910,49 @@ func (p *MySQLPrivilege) LoadGlobalGrantsTable(exec sqlexec.SQLExecutor) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// LoadLoadProcsPriv loads the mysql.global_priv table from database.
+func (p *MySQLPrivilege) LoadLoadProcsPriv(exec sqlexec.SQLExecutor) error {
+	if err := loadTable(exec, sqlLoadProcsPriv, p.decodeProcsPrivTableRow(nil)); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (p *MySQLPrivilege) decodeProcsPrivTableRow(userList map[string]struct{}) func(chunk.Row, []*resolve.ResultField) error {
+	return func(row chunk.Row, fs []*resolve.ResultField) error {
+		var value routinePrivRecord
+		for i, f := range fs {
+			switch f.ColumnAsName.L {
+			case "db":
+				value.DB = row.GetString(i)
+			case "routine_name":
+				value.ProcedureName = row.GetString(i)
+			case "grantor":
+				value.Grantor = row.GetString(i)
+			case "proc_priv":
+				value.RoutinePriv = decodeSetToPrivilege(row.GetSet(i))
+			case "routine_type":
+				value.RoutineType = row.GetEnum(i).String()
+			default:
+				value.assignUserOrHost(row, i, f)
+			}
+		}
+		if userList != nil {
+			if _, ok := userList[value.User]; !ok {
+				return nil
+			}
+		}
+
+		old, ok := p.routinePriv.Get(itemRoutinePriv{username: value.User})
+		if !ok {
+			old.username = value.User
+		}
+		old.data = append(old.data, value)
+		p.routinePriv.ReplaceOrInsert(old)
+		return nil
+	}
 }
 
 // LoadDBTable loads the mysql.db table from database.
@@ -1393,7 +1518,7 @@ func (record *columnsPrivRecord) match(user, host, db, table, col string) bool {
 	return record.baseRecord.match(user, host) &&
 		strings.EqualFold(record.DB, db) &&
 		strings.EqualFold(record.TableName, table) &&
-		strings.EqualFold(record.ColumnName, col)
+		(strings.EqualFold(record.ColumnName, col) || col == "*")
 }
 
 // patternMatch matches "%" the same way as ".*" in regular expression, for example,
@@ -1579,6 +1704,7 @@ func (p *MySQLPrivilege) RequestDynamicVerification(activeRoles []*auth.RoleIden
 }
 
 // RequestVerification checks whether the user have sufficient privileges to do the operation.
+// `column == "*"` means it matches ANY column in the table.
 func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, user, host, db, table, column string, priv mysql.PrivilegeType) bool {
 	if priv == mysql.UsagePriv {
 		return true
@@ -1587,7 +1713,7 @@ func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, u
 	roleList := p.FindAllUserEffectiveRoles(user, host, activeRoles)
 	roleList = append(roleList, &auth.RoleIdentity{Username: user, Hostname: host})
 
-	var userPriv, dbPriv, tablePriv, columnPriv mysql.PrivilegeType
+	var userPriv, dbPriv, tablePriv, columnPriv, routinePriv mysql.PrivilegeType
 	for _, r := range roleList {
 		userRecord := p.matchUser(r.Username, r.Hostname)
 		if userRecord != nil {
@@ -1613,15 +1739,14 @@ func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, u
 		if tableRecord != nil {
 			tablePriv |= tableRecord.TablePriv
 			if column != "" {
-				columnPriv |= tableRecord.ColumnPriv
+				columnPriv |= tableRecord.TablePriv
 			}
 		}
 	}
-	if tablePriv&priv > 0 || columnPriv&priv > 0 {
+	if tablePriv&priv > 0 {
 		return true
 	}
 
-	columnPriv = 0
 	for _, r := range roleList {
 		columnRecord := p.matchColumns(r.Username, r.Hostname, db, table, column)
 		if columnRecord != nil {
@@ -1632,7 +1757,45 @@ func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, u
 		return true
 	}
 
+	routinePriv = 0
+	for _, r := range roleList {
+		routineRecord := p.matchRoutine(r.Username, r.Hostname, db, table)
+		if routineRecord != nil {
+			routinePriv |= routineRecord.RoutinePriv
+		}
+	}
+	if routinePriv&priv > 0 {
+		return true
+	}
+
 	return priv == 0
+}
+
+// RequestProcedureVerification detect stored procedure user permissions.
+func (p *MySQLPrivilege) RequestProcedureVerification(activeRoles []*auth.RoleIdentity, user, host, db, routineName string, priv mysql.PrivilegeType) bool {
+	roleList := p.FindAllUserEffectiveRoles(user, host, activeRoles)
+	roleList = append(roleList, &auth.RoleIdentity{Username: user, Hostname: host})
+	var procdurePriv mysql.PrivilegeType
+	for _, r := range roleList {
+		routineRecord := p.matchRoutine(r.Username, r.Hostname, db, routineName)
+		if routineRecord != nil {
+			procdurePriv |= routineRecord.RoutinePriv
+		}
+	}
+	return procdurePriv&priv > 0
+}
+
+func (p *MySQLPrivilege) matchRoutine(user, host, db, routineName string) *routinePrivRecord {
+	item, exists := p.routinePriv.Get(itemRoutinePriv{username: user})
+	if exists {
+		for i := range item.data {
+			record := &item.data[i]
+			if record.match(user, host, db, routineName) {
+				return record
+			}
+		}
+	}
+	return nil
 }
 
 // DBIsVisible checks whether the user can see the db.
@@ -1835,6 +1998,15 @@ func (p *MySQLPrivilege) showGrants(ctx sessionctx.Context, user, host string, r
 		s := fmt.Sprintf(`GRANT %s ON %s TO '%s'@'%s'`, privCols, k, user, host)
 		gs = append(gs, s)
 	}
+	slices.Sort(gs[sortFromIdx:])
+
+	// Show procedure and function grants
+	sortFromIdx = len(gs)
+	ProcedurePrivMap, FunctionPrivMap := p.getRoutinePriv(user, host, allRoles, sqlMode)
+	gs = routinePrivToString(ProcedurePrivMap, gs, "PROCEDURE", user, host)
+	slices.Sort(gs[sortFromIdx:])
+	sortFromIdx = len(gs)
+	gs = routinePrivToString(FunctionPrivMap, gs, "FUNCTION", user, host)
 	slices.Sort(gs[sortFromIdx:])
 
 	// Show role grants.
@@ -2226,4 +2398,55 @@ func (h *Handle) updateUsers(userList []string) error {
 	}
 	h.merge(p, userAndRoles)
 	return nil
+}
+
+func (p *MySQLPrivilege) getRoutinePriv(user, host string, allRoles []*auth.RoleIdentity, sqlMode mysql.SQLMode) (map[string]mysql.PrivilegeType, map[string]mysql.PrivilegeType) {
+	procedurePrivMap := make(map[string]mysql.PrivilegeType)
+	functionPrivMap := make(map[string]mysql.PrivilegeType)
+	addPrivilege := func(recordKey string, record *routinePrivRecord) {
+		switch record.RoutineType {
+		case "PROCEDURE":
+			procedurePrivMap[recordKey] |= record.RoutinePriv
+		case "FUNCTION":
+			functionPrivMap[recordKey] |= record.RoutinePriv
+		default:
+			logutil.BgLogger().Error(fmt.Sprintf("unexpected routine type:%v", record.RoutineType))
+		}
+	}
+	if item, exists := p.routinePriv.Get(itemRoutinePriv{username: user}); exists {
+		for _, r := range item.data {
+			recordKey := stringutil.Escape(r.DB, sqlMode) + "." + stringutil.Escape(r.ProcedureName, sqlMode)
+			if r.baseRecord.match(user, host) {
+				addPrivilege(recordKey, &r)
+			} else {
+				for _, r2 := range allRoles {
+					if r.baseRecord.match(r2.Username, r2.Hostname) {
+						addPrivilege(recordKey, &r)
+					}
+				}
+			}
+		}
+	}
+	return procedurePrivMap, functionPrivMap
+}
+
+func routinePrivToString(privMap map[string]mysql.PrivilegeType, gs []string, routineType, user, host string) []string {
+	for k, priv := range privMap {
+		g := PrivToString(priv, mysql.AllRoutinePrivs, mysql.Priv2Str)
+		if len(g) > 0 {
+			var s string
+			if (priv & mysql.GrantPriv) > 0 {
+				s = fmt.Sprintf(`GRANT %s ON %s %s TO '%s'@'%s' WITH GRANT OPTION`, g, routineType, k, user, host)
+			} else {
+				s = fmt.Sprintf(`GRANT %s ON %s %s TO '%s'@'%s'`, g, routineType, k, user, host)
+			}
+			gs = append(gs, s)
+		} else if len(g) == 0 && (priv&mysql.GrantPriv) > 0 {
+			// We have GRANT OPTION on the table, but no privilege granted.
+			// Wo we need to print a special USAGE line.
+			s := fmt.Sprintf(`GRANT USAGE ON %s %s TO '%s'@'%s' WITH GRANT OPTION`, k, routineType, user, host)
+			gs = append(gs, s)
+		}
+	}
+	return gs
 }
