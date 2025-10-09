@@ -48,6 +48,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/ranger"
 	"github.com/pingcap/tidb/pkg/util/size"
+	sliceutil "github.com/pingcap/tidb/pkg/util/slice"
 	"github.com/pingcap/tidb/pkg/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
 	"go.uber.org/zap"
@@ -146,6 +147,10 @@ type PhysicalTableScan struct {
 	// UsedColumnarIndexes is used to store the used columnar index for the table scan.
 	UsedColumnarIndexes []*ColumnarIndexExtra `plan-cache-clone:"must-nil"` // MPP plan should not be cached.
 
+	// For GroupedRanges and GroupByColIdxs, please see comments in struct AccessPath.
+
+	GroupedRanges  [][]*ranger.Range `plan-cache-clone:"shallow"`
+	GroupByColIdxs []int             `plan-cache-clone:"shallow"`
 	// TableSplit is a split (range) of the table to read.
 	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
 }
@@ -281,8 +286,8 @@ func (p *PhysicalTableScan) Clone(newCtx base.PlanContext) (base.PhysicalPlan, e
 	if p.Table != nil {
 		clonedScan.Table = p.Table.Clone()
 	}
-	clonedScan.Columns = util.CloneColInfos(p.Columns)
-	clonedScan.Ranges = util.CloneRanges(p.Ranges)
+	clonedScan.Columns = sliceutil.DeepClone(p.Columns)
+	clonedScan.Ranges = sliceutil.DeepClone(p.Ranges)
 	clonedScan.TableAsName = p.TableAsName
 	clonedScan.RangeInfo = p.RangeInfo
 	if p.runtimeFilterList != nil {
