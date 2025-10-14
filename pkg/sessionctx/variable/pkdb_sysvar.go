@@ -41,9 +41,6 @@ var pkdbSysVars = []*SysVar{
 	},
 }
 
-// ServerStartupTime indicates the server's startup time as a Unix timestamp (seconds since the epoch).
-var ServerStartupTime = time.Now().Unix()
-
 func init() {
 	defaultSysVars = append(defaultSysVars, pkdbSysVars...)
 }
