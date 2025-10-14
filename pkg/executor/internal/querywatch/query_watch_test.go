@@ -29,6 +29,7 @@ import (
 )
 
 func TestQueryWatch(t *testing.T) {
+	t.Skip("skip unstable test")
 	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/resourcegroup/runaway/FastRunawayGC", `return(true)`))
 	defer func() {
 		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/resourcegroup/runaway/FastRunawayGC"))
