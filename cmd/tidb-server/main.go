@@ -878,7 +878,7 @@ func setGlobalVars() {
 		old := variable.GetSysVar(name)
 		tmp := *old
 		tmp.Value = value
-		tmp.Scope |= vardef.ScopeInstance
+		tmp.IsInitedFromConfig = true
 		variable.RegisterSysVar(&tmp)
 	}
 	{
