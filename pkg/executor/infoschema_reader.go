@@ -1572,6 +1572,7 @@ func (e *memtableRetriever) setDataFromIndex(
 			"YES",        // IS_VISIBLE
 			"YES",        // CLUSTERED
 			0,            // IS_GLOBAL
+			nil,          // PREDICATE
 		)
 		rows = append(rows, record)
 		e.recordMemoryConsume(record)
@@ -1605,6 +1606,12 @@ func (e *memtableRetriever) setDataFromIndex(
 			if idxInfo.Invisible {
 				visible = "NO"
 			}
+
+			var predicate any
+			if idxInfo.ConditionExprString != "" {
+				predicate = idxInfo.ConditionExprString
+			}
+
 			record := types.MakeDatums(
 				schema.O,        // TABLE_SCHEMA
 				tb.Name.O,       // TABLE_NAME
@@ -1619,6 +1626,7 @@ func (e *memtableRetriever) setDataFromIndex(
 				visible,         // IS_VISIBLE
 				isClustered,     // CLUSTERED
 				idxInfo.Global,  // IS_GLOBAL
+				predicate,       // PREDICATE
 			)
 			rows = append(rows, record)
 			e.recordMemoryConsume(record)
