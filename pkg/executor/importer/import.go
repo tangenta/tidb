@@ -1428,6 +1428,8 @@ func (e *LoadDataController) getSourceType() mydump.SourceType {
 	switch e.Format {
 	case DataFormatParquet:
 		return mydump.SourceTypeParquet
+	case LoadDataFormatORC:
+		return mydump.SourceTypeORC
 	case DataFormatDelimitedData, DataFormatCSV:
 		return mydump.SourceTypeCSV
 	default:

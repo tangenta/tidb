@@ -8,6 +8,7 @@ go_library(
         "import.go",
         "job.go",
         "kv_encode.go",
+        "pkdb_import.go",
         "precheck.go",
         "sampler.go",
         "table_import.go",
