@@ -1690,7 +1690,7 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	var matchRules bool
 	if !stmtCtx.WriteSlowLog {
 		// If the level is Debug, or trace is enabled, print slow logs anyway.
-		force := log.GetLevel() <= zapcore.DebugLevel || trace.IsEnabled()
+		force := log.GetLevel() <= zapcore.DebugLevel
 		if !cfg.Instance.EnableSlowLog.Load() && !force {
 			return
 		}
