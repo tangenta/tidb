@@ -123,6 +123,9 @@ type DataSource struct {
 
 	// AskedColumnGroup is upper asked column groups for maintained of group ndv from composite index.
 	AskedColumnGroup [][]*expression.Column
+
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit
 }
 
 // Init initializes DataSource.
