@@ -53,6 +53,7 @@ var (
 	ErrQueryInterrupted                     = dbterror.ClassExecutor.NewStd(mysql.ErrQueryInterrupted)
 	ErrMaxExecTimeExceeded                  = dbterror.ClassExecutor.NewStd(mysql.ErrMaxExecTimeExceeded)
 	ErrResourceGroupQueryRunawayInterrupted = dbterror.ClassExecutor.NewStd(mysql.ErrResourceGroupQueryRunawayInterrupted)
+	ErrQueryExecStopped                     = dbterror.ClassExecutor.NewStd(mysql.ErrQueryExecStopped)
 	ErrResourceGroupQueryRunawayQuarantine  = dbterror.ClassExecutor.NewStd(mysql.ErrResourceGroupQueryRunawayQuarantine)
 	ErrDynamicPrivilegeNotRegistered        = dbterror.ClassExecutor.NewStd(mysql.ErrDynamicPrivilegeNotRegistered)
 	ErrIllegalPrivilegeLevel                = dbterror.ClassExecutor.NewStd(mysql.ErrIllegalPrivilegeLevel)
