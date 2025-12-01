@@ -2602,6 +2602,7 @@ EXECUTE stmt;
 a
 1
 set @@tidb_enable_prepared_plan_cache=1;
+set @@session.tidb_plan_cache_max_decimal_param_nums = 2;
 drop table if exists t1;
 create table t1 (a int, b1 decimal(10,2), b2 decimal(10,2), b3 decimal(10,2), b4 decimal(10,2), c varchar(10));
 prepare stmt from 'select * from t1 where a=? and c=?';
@@ -2803,3 +2804,4 @@ select @@last_plan_from_cache;
 @@last_plan_from_cache
 0
 deallocate prepare stmt;
+set @@session.tidb_plan_cache_max_decimal_param_nums = default;
