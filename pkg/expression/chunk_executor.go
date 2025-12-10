@@ -76,6 +76,12 @@ func HasGetSetVarFunc(expr Expression) bool {
 	if scalaFunc.FuncName.L == ast.GetVar {
 		return true
 	}
+	if scalaFunc.FuncName.L == ast.SetProcedureVar {
+		return true
+	}
+	if scalaFunc.FuncName.L == ast.GetProcedureVar {
+		return true
+	}
 	return slices.ContainsFunc(scalaFunc.GetArgs(), HasGetSetVarFunc)
 }
 

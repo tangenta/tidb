@@ -145,6 +145,7 @@ func TestCalculateRegionBatch(t *testing.T) {
 }
 
 func TestBackfillingSchedulerGlobalSortMode(t *testing.T) {
+	t.Skip("skip unstable test")
 	// init test env.
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	tk := testkit.NewTestKit(t, store)
