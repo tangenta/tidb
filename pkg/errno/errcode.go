@@ -1167,8 +1167,10 @@ const (
 	ErrResourceGroupInvalidForRole            = 8257
 
 	// Reserved for future use.
-	ErrEngineAttributeInvalidFormat = 8270
-	ErrStorageClassInvalidSpec      = 8271
+	ErrEngineAttributeInvalidFormat             = 8270
+	ErrStorageClassInvalidSpec                  = 8271
+	ErrModifyColumnReferencedByPartialCondition = 8272
+	ErrCheckPartialIndexWithoutFastCheck        = 8273
 	// Enterprise Edit errors.
 	ErrRowLabelUnAccessible = 8800
 

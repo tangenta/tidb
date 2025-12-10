@@ -22,6 +22,7 @@ import (
 	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/util"
+	tlsutil "github.com/pingcap/tidb/pkg/util/tls"
 )
 
 var statisticsList []Statistics
@@ -131,13 +132,6 @@ var tlcpCiphers = []uint16{
 
 var tlsSupportedCiphers, tlcpSupportedCiphers string
 
-// Taken from https://github.com/openssl/openssl/blob/c784a838e0947fcca761ee62def7d077dc06d37f/include/openssl/ssl.h#L141 .
-// Update: remove tlsv1.0 and v1.1 support
-var tlsVersionString = map[uint16]string{
-	tls.VersionTLS12: "TLSv1.2",
-	tls.VersionTLS13: "TLSv1.3",
-}
-
 // tlcp version string from https://github.com/Trisia/gotlcp/blob/c9f7412bc2f041e4169553a0dca0fd415d758027/tlcp/common.go#L29
 var tlcpVersionString = map[uint16]string{
 	tlcp.VersionTLCP: "TLCPv1.1",
@@ -170,15 +164,11 @@ func (s defaultStatusStat) Stats(vars *SessionVars) (map[string]any, error) {
 
 	// `vars` may be nil in unit tests.
 	if vars != nil && vars.TLSConnectionState != nil {
-		statusVars["Ssl_cipher"] = util.TLSCipher2String(vars.TLSConnectionState.CipherSuite)
+		statusVars["Ssl_cipher"] = tlsutil.CipherSuiteName(vars.TLSConnectionState.CipherSuite)
 		statusVars["Ssl_cipher_list"] = tlsSupportedCiphers
 		// tls.VerifyClientCertIfGiven == SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE
 		statusVars["Ssl_verify_mode"] = 0x01 | 0x04
-		if tlsVersion, tlsVersionKnown := tlsVersionString[vars.TLSConnectionState.Version]; tlsVersionKnown {
-			statusVars["Ssl_version"] = tlsVersion
-		} else {
-			statusVars["Ssl_version"] = "unknown_tls_version"
-		}
+		statusVars["Ssl_version"] = tlsutil.VersionName(vars.TLSConnectionState.Version)
 	}
 
 	if vars != nil && vars.TLCPConnectionState != nil {
@@ -198,7 +188,7 @@ func (s defaultStatusStat) Stats(vars *SessionVars) (map[string]any, error) {
 func init() {
 	var ciphersBuffer bytes.Buffer
 	for _, v := range tlsCiphers {
-		ciphersBuffer.WriteString(util.TLSCipher2String(v))
+		ciphersBuffer.WriteString(tlsutil.CipherSuiteName(v))
 		ciphersBuffer.WriteString(":")
 	}
 	tlsSupportedCiphers = ciphersBuffer.String()

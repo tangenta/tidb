@@ -348,6 +348,10 @@ func RegisterMetrics() {
 	prometheus.MustRegister(GlobalMemArbitratorRootPool)
 	prometheus.MustRegister(GlobalMemArbitratorEventCounter)
 	prometheus.MustRegister(GlobalMemArbitratorTaskExecCounter)
+
+	// TLS
+	prometheus.MustRegister(TLSVersion)
+	prometheus.MustRegister(TLSCipher)
 }
 
 // Register registers custom collectors.
