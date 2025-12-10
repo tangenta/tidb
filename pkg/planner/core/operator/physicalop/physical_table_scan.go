@@ -151,6 +151,8 @@ type PhysicalTableScan struct {
 
 	GroupedRanges  [][]*ranger.Range `plan-cache-clone:"shallow"`
 	GroupByColIdxs []int             `plan-cache-clone:"shallow"`
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit `plan-cache-clone:"must-nil"`
 }
 
 const emptyPhysicalTableScanSize = int64(unsafe.Sizeof(PhysicalTableScan{}))
@@ -169,6 +171,7 @@ func GetPhysicalScan4LogicalTableScan(s *logicalop.LogicalTableScan, schema *exp
 		AccessCondition: s.AccessConds,
 		TblCols:         ds.TblCols,
 		TblColHists:     ds.TblColHists,
+		TableSplit:      ds.TableSplit,
 	}.Init(s.SCtx(), s.QueryBlockOffset())
 	ts.SetStats(stats)
 	ts.SetSchema(schema.Clone())
@@ -193,6 +196,7 @@ func GetOriginalPhysicalTableScan(ds *logicalop.DataSource, prop *property.Physi
 		constColsByCond: path.ConstCols,
 		Prop:            prop,
 		FilterCondition: slices.Clone(path.TableFilters),
+		TableSplit:      ds.TableSplit,
 	}.Init(ds.SCtx(), ds.QueryBlockOffset())
 	ts.SetSchema(ds.Schema().Clone())
 	rowCount := path.CountAfterAccess
