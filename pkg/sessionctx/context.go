@@ -165,6 +165,11 @@ type Context interface {
 	SetSessionExec(cc SessionExec)
 	// GetSessionExec get procedure interface.
 	GetSessionExec() SessionExec
+	// GetTraceCtx returns the context bind with trace information.
+	// The trace information is set when entering server/conn.dispatch and reset after dispatch returns.
+	// The context only contains the initial trace information, which is used to track the execution of the current statement.
+	// During the execution of the statement, additional information may be added to the context, like context.WithValue(), that is not included.
+	GetTraceCtx() context.Context
 }
 
 // TxnFuture is an interface where implementations have a kv.Transaction field and after
