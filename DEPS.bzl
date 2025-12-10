@@ -6439,13 +6439,13 @@ def go_deps():
         name = "com_github_pingcap_metering_sdk",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pingcap/metering_sdk",
-        sha256 = "699b1484bca7e1f1315a05863f0ef6010705487728aad843c1fef01e573871d3",
-        strip_prefix = "github.com/pingcap/metering_sdk@v0.0.0-20250918015914-468cd6feb1dc",
+        sha256 = "1684d393425f4b1307b7f5f9d12b902c9c4eebe8630c628d725faac8e3e5ea38",
+        strip_prefix = "github.com/pingcap/metering_sdk@v0.0.0-20251110022152-dac449ac5389",
         urls = [
-            "http://bazel-cache.pingcap.net:8080/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20250918015914-468cd6feb1dc.zip",
-            "http://ats.apps.svc/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20250918015914-468cd6feb1dc.zip",
-            "https://cache.hawkingrei.com/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20250918015914-468cd6feb1dc.zip",
-            "https://storage.googleapis.com/pingcapmirror/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20250918015914-468cd6feb1dc.zip",
+            "http://bazel-cache.pingcap.net:8080/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20251110022152-dac449ac5389.zip",
+            "http://ats.apps.svc/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20251110022152-dac449ac5389.zip",
+            "https://cache.hawkingrei.com/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20251110022152-dac449ac5389.zip",
+            "https://storage.googleapis.com/pingcapmirror/gomod/github.com/pingcap/metering_sdk/com_github_pingcap_metering_sdk-v0.0.0-20251110022152-dac449ac5389.zip",
         ],
     )
     go_repository(
@@ -11212,13 +11212,13 @@ def go_deps():
         name = "org_uber_go_mock",
         build_file_proto_mode = "disable_global",
         importpath = "go.uber.org/mock",
-        sha256 = "29c088ba1621e04fba8670e388e962f92c15f47cd45a63bf0e5decd6d5d63cd1",
-        strip_prefix = "go.uber.org/mock@v0.4.0",
+        sha256 = "eb2f59d1ebba968e1c8c8835b326d8ae0e672ee921fe14eb38c85ecb16bd2d32",
+        strip_prefix = "go.uber.org/mock@v0.5.2",
         urls = [
-            "http://bazel-cache.pingcap.net:8080/gomod/go.uber.org/mock/org_uber_go_mock-v0.4.0.zip",
-            "http://ats.apps.svc/gomod/go.uber.org/mock/org_uber_go_mock-v0.4.0.zip",
-            "https://cache.hawkingrei.com/gomod/go.uber.org/mock/org_uber_go_mock-v0.4.0.zip",
-            "https://storage.googleapis.com/pingcapmirror/gomod/go.uber.org/mock/org_uber_go_mock-v0.4.0.zip",
+            "http://bazel-cache.pingcap.net:8080/gomod/go.uber.org/mock/org_uber_go_mock-v0.5.2.zip",
+            "http://ats.apps.svc/gomod/go.uber.org/mock/org_uber_go_mock-v0.5.2.zip",
+            "https://cache.hawkingrei.com/gomod/go.uber.org/mock/org_uber_go_mock-v0.5.2.zip",
+            "https://storage.googleapis.com/pingcapmirror/gomod/go.uber.org/mock/org_uber_go_mock-v0.5.2.zip",
         ],
     )
     go_repository(

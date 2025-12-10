@@ -112,6 +112,7 @@ go_library(
         "//pkg/util/topsql",
         "//pkg/util/topsql/state",
         "//pkg/util/topsql/stmtstats",
+        "//pkg/util/traceevent",
         "//pkg/util/tracing",
         "//pkg/util/versioninfo",
         "@com_gitee_trisia_gotlcp//tlcp",

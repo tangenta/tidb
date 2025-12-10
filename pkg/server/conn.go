@@ -112,6 +112,7 @@ import (
 	tlsutil "github.com/pingcap/tidb/pkg/util/tls"
 	"github.com/pingcap/tidb/pkg/util/topsql"
 	topsqlstate "github.com/pingcap/tidb/pkg/util/topsql/state"
+	"github.com/pingcap/tidb/pkg/util/traceevent"
 	"github.com/pingcap/tidb/pkg/util/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -1111,13 +1112,16 @@ func (cc *clientConn) Run(ctx context.Context) {
 		close(cc.quit)
 	}()
 
-	parentCtx := ctx
 	var traceInfo *tracing.TraceInfo
+	trace := traceevent.NewTrace()
+	ctx = tracing.WithFlightRecorder(ctx, trace)
+
 	// Usually, client connection status changes between [dispatching] <=> [reading].
 	// When some event happens, server may notify this client connection by setting
 	// the status to special values, for example: kill or graceful shutdown.
 	// The client connection would detect the events when it fails to change status
 	// by CAS operation, it would then take some actions accordingly.
+	parentCtx := ctx
 	for {
 		sessVars := cc.ctx.GetSessionVars()
 		if alias := sessVars.SessionAlias; traceInfo == nil || traceInfo.SessionAlias != alias {
@@ -1205,6 +1209,8 @@ func (cc *clientConn) Run(ctx context.Context) {
 		err = cc.dispatch(ctx, data)
 		cc.ctx.GetSessionVars().ClearAlloc(&cc.chunkAlloc, err != nil)
 		cc.chunkAlloc.Reset()
+		trace.DiscardOrFlush(ctx)
+
 		if err != nil {
 			// If the resource control error occurs, print audit logs.
 			originErr := errors.Cause(err)
