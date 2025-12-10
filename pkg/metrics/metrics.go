@@ -126,7 +126,9 @@ func InitMetrics() {
 func RegisterMetrics() {
 	// use new go collector
 	prometheus.DefaultRegisterer.Unregister(collectors.NewGoCollector())
-	prometheus.MustRegister(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsGC, collectors.MetricsMemory, collectors.MetricsScheduler)))
+	if err := prometheus.Register(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsGC, collectors.MetricsMemory, collectors.MetricsScheduler))); err != nil {
+		logutil.BgLogger().Warn("go runtime collectors have already registered", zap.Error(err))
+	}
 
 	prometheus.MustRegister(AutoAnalyzeCounter)
 	prometheus.MustRegister(ManualAnalyzeCounter)
