@@ -1452,6 +1452,35 @@ func TestTiDBServerMemoryLimitUpgradeTo651_2(t *testing.T) {
 	require.Equal(t, "70%", row.GetString(1))
 }
 
+func TestTiDBEnterpriseEditionUpgrade(t *testing.T) {
+	// rollback ee version
+	store, dom := CreateStoreAndBootstrap(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	ver0 := 0
+	seV0 := CreateSessionAndSetID(t, store)
+	txn, err := store.Begin()
+	require.NoError(t, err)
+	m := meta.NewMutator(txn)
+	err = m.FinishBootstrapEE(int64(ver0))
+	require.NoError(t, err)
+	err = txn.Commit(context.Background())
+	require.NoError(t, err)
+	MustExec(t, seV0, "delete from mysql.tidb  where variable_name='tidb_enterprise_edition_server_version'")
+	MustExec(t, seV0, "commit")
+	// update ee version
+	ver, err := getBootstrapEEVersion(seV0)
+	require.NoError(t, err)
+	require.Equal(t, int64(ver0), ver)
+	dom.Close()
+	domCurVer, err := BootstrapSession(store)
+	require.NoError(t, err)
+	defer domCurVer.Close()
+	seCurVer := CreateSessionAndSetID(t, store)
+	ver, err = getBootstrapEEVersion(seCurVer)
+	require.NoError(t, err)
+	require.Equal(t, currentEEBootstrapVersion, ver)
+}
+
 func TestTiDBGlobalVariablesDefaultValueUpgradeFrom630To660(t *testing.T) {
 	if kerneltype.IsNextGen() {
 		t.Skip("Skip this case because there is no upgrade in the first release of next-gen kernel")

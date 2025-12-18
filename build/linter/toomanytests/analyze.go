@@ -66,6 +66,8 @@ func checkRule(pkg string) int {
 		return 285
 	case "pkg/executor/test/analyzetest":
 		return 52
+	case "pkg/executor/test/executor":
+		return 65
 	default:
 		return 50
 	}
