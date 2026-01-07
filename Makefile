@@ -740,6 +740,7 @@ bazel_golangcilinter:
 bazel_brietest: failpoint-enable bazel_ci_simple_prepare
 	bazel $(BAZEL_GLOBAL_CONFIG) test $(BAZEL_CMD_CONFIG) --test_arg=-with-real-tikv --define gotags=$(REAL_TIKV_TEST_TAGS) --jobs=1 \
 	--@io_bazel_rules_go//go/config:cover_format=go_cover \
+	--test_env=BRIETEST_TMPDIR --sandbox_writable_path=$${BRIETEST_TMPDIR:-$(CURDIR)} \
 		-- //tests/realtikvtest/brietest/...
 
 .PHONY: bazel_pessimistictest
