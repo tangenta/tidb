@@ -91,6 +91,7 @@ import (
 	hintMpp1PhaseAgg          "MPP_1PHASE_AGG"
 	hintMpp2PhaseAgg          "MPP_2PHASE_AGG"
 	hintIgnoreIndex           "IGNORE_INDEX"
+	hintFull                  "FULL"
 	hintNoIndex               "NO_INDEX"
 	hintIndexJoin             "INDEX_JOIN"
 	hintNoIndexJoin           "NO_INDEX_JOIN"
@@ -707,6 +708,7 @@ SupportedTableLevelOptimizerHintName:
 |	"HASH_JOIN_BUILD"
 |	"HASH_JOIN_PROBE"
 |	"HYPO_INDEX"
+|   "FULL"
 
 UnsupportedIndexLevelOptimizerHintName:
 	"INDEX_MERGE"
@@ -858,4 +860,5 @@ Identifier:
 /* Oracle hint names */
 |	"INDEX"
 |	"NO_INDEX"
+|   "FULL"
 %%

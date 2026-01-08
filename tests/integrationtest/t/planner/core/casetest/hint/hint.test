@@ -283,3 +283,16 @@ explain format='plan_tree' select /*+ no_index(t idx_c) */ * from t where c = 2;
 explain format='plan_tree' select /*+ no_index(t idx_b, idx_c) */ * from t where b = 2 and c = 2;
 explain format='plan_tree' select /*+ no_index(t idx_b idx_c) */ * from t where b = 2 and c = 2;
 drop table if exists t;
+
+
+# TestFullHint
+set tidb_cost_model_version=2;
+drop table if exists t_full1, t_full2, t_full3;
+create table t_full1 (a int, b int, key(a));
+create table t_full2 (a int, b int, key(a));
+create table t_full3 (a int, b int, key(a));
+explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 where a = 1;
+explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
+explain format='plan_tree' select /*+ FULL(t_full1, t_full2) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
+explain format='plan_tree' select /*+ INDEX(t_full1) */ * from t_full1 where a in (select /*+ FULL(t_full2) */ a from t_full2 where a > 1);
+drop table if exists t_full1, t_full2, t_full3;

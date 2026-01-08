@@ -1381,6 +1381,21 @@ func getPossibleAccessPaths(ctx base.PlanContext, tableHints *hint.PlanHints, in
 		}
 	}
 
+	if tableHints != nil && tableHints.MatchFullScan(dbName, tblName) {
+		fullScanPaths := make([]*util.AccessPath, 0, 2)
+		for _, path := range publicPaths {
+			// We discard all IndexScan paths when FULL hint is present.
+			if path.IsTablePath() {
+				path.Forced = true
+				fullScanPaths = append(fullScanPaths, path)
+			}
+		}
+		// If full scan paths are found, return directly and ignore subsequent hints like UseIndex.
+		if len(fullScanPaths) > 0 {
+			return fullScanPaths, nil
+		}
+	}
+
 	hasScanHint, hasUseOrForce := false, false
 	available := make([]*util.AccessPath, 0, len(publicPaths))
 	ignored := make([]*util.AccessPath, 0, len(publicPaths))

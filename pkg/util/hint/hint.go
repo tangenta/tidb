@@ -87,6 +87,8 @@ const (
 	HintUseIndex = "use_index"
 	// HintIndex is hint enforce using some indexes. if no index provided, all indexes will be considered.
 	HintIndex = "index"
+	// HintFull is hint enforce full table scan.
+	HintFull = "full"
 	// HintIgnoreIndex is hint enforce ignoring some indexes.
 	HintIgnoreIndex = "ignore_index"
 	// HintNoIndex is hint enforce not using some indexes. if no index provided, all indexes won't be considered.
@@ -564,6 +566,7 @@ type PlanHints struct {
 	LeadingList        *ast.LeadingList // leading recursive
 	HJBuild            []HintedTable    // hash_join_build
 	HJProbe            []HintedTable    // hash_join_probe
+	FullScanTables     []HintedTable    // full
 
 	// Hints belows are not associated with any particular table.
 	PreferAggType    uint // hash_agg, merge_agg, agg_to_cop and so on
@@ -738,6 +741,18 @@ func (*PlanHints) matchTiKVOrTiFlash(tableName *HintedTable, hintTables []Hinted
 	return nil
 }
 
+// MatchFullScan checks if the FULL hint is specified for the table.
+// unlike IfPreferFullScan, it matches by name directly without checking SelectOffset.
+func (pHints *PlanHints) MatchFullScan(dbName, tblName ast.CIStr) bool {
+	for i, tbl := range pHints.FullScanTables {
+		if (tbl.DBName.L == dbName.L || tbl.DBName.L == "*") && tbl.TblName.L == tblName.L {
+			pHints.FullScanTables[i].Matched = true
+			return true
+		}
+	}
+	return false
+}
+
 // MatchTableName checks whether the hint hit the need.
 // Only need either side matches one on the list.
 // Even though you can put 2 tables on the list,
@@ -776,6 +791,7 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		shuffleJoinTables                                                               []HintedTable
 		indexHintList, indexMergeHintList                                               []HintedIndex
 		tiflashTables, tikvTables                                                       []HintedTable
+		fullScanTables                                                                  []HintedTable
 		preferAggType                                                                   uint
 		preferAggToCop                                                                  bool
 		timeRangeHint                                                                   ast.HintTimeRange
@@ -790,7 +806,7 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		// Set warning for the hint that requires the table name.
 		switch hint.HintName.L {
 		case TiDBMergeJoin, HintSMJ, TiDBIndexNestedLoopJoin, HintINLJ, HintINLHJ, HintINLMJ,
-			HintNoHashJoin, HintNoMergeJoin, TiDBHashJoin, HintHJ, HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex,
+			HintNoHashJoin, HintNoMergeJoin, TiDBHashJoin, HintHJ, HintUseIndex, HintIndex, HintFull, HintIgnoreIndex, HintNoIndex,
 			HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown, HintIndexMerge, HintLeading:
 			if len(hint.Tables) == 0 {
 				var sb strings.Builder
@@ -846,6 +862,8 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 			preferAggType |= PreferStreamAgg
 		case HintAggToCop:
 			preferAggToCop = true
+		case HintFull:
+			fullScanTables = append(fullScanTables, tableNames2HintTableInfo(currentDB, hint.HintName.L, hint.Tables, hintProcessor, currentLevel, warnHandler)...)
 		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown:
 			dbName := hint.Tables[0].DBName
 			if dbName.L == "" {
@@ -868,6 +886,8 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				hintType = ast.HintOrderIndex
 			case HintNoOrderIndex:
 				hintType = ast.HintNoOrderIndex
+			case HintFull:
+				hintType = ast.HintFull
 			case HintIndexLookUpPushDown:
 				if len(hint.Indexes) == 0 {
 					warnHandler.SetHintWarning("hint INDEX_LOOKUP_PUSH_DOWN is inapplicable, the index names should be specified")
@@ -967,6 +987,7 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		IndexHintList:      indexHintList,
 		TiFlashTables:      tiflashTables,
 		TiKVTables:         tikvTables,
+		FullScanTables:     fullScanTables,
 		PreferAggToCop:     preferAggToCop,
 		PreferAggType:      preferAggType,
 		IndexMergeHintList: indexMergeHintList,
