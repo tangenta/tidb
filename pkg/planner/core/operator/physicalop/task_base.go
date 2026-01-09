@@ -553,6 +553,7 @@ func (t *CopTask) convertToRootTaskImpl(ctx base.PlanContext) (rt *RootTask) {
 		}.Init(ctx, t.TablePlan.QueryBlockOffset())
 		p.PlanPartInfo = t.PhysPlanPartInfo
 		p.SetStats(t.TablePlan.StatsInfo())
+		p.TableSplit = ts.TableSplit
 
 		// If agg was pushed down in Attach2Task(), the partial agg was placed on the top of tablePlan, the final agg was
 		// placed above the PhysicalTableReader, and the schema should have been set correctly for them, the schema of

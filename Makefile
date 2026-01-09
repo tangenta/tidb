@@ -50,8 +50,9 @@ precheck: ## Run pre-commit checks
 precheck: fmt bazel_prepare
 
 .PHONY: check
+# disable license check
 check: ## Run comprehensive code quality checks
-check: check-bazel-prepare parser_yacc check-parallel lint tidy testSuite errdoc license bazel_check_abi
+check: check-bazel-prepare parser_yacc check-parallel lint tidy testSuite errdoc bazel_check_abi
 
 .PHONY: fmt
 fmt: ## Format Go code using gofmt

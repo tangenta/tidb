@@ -121,6 +121,9 @@ func (op *PhysicalTableScan) CloneForPlanCache(newCtx base.PlanContext) (base.Pl
 	if op.UsedColumnarIndexes != nil {
 		return nil, false
 	}
+	if op.TableSplit != nil {
+		return nil, false
+	}
 	return cloned, true
 }
 
@@ -342,6 +345,9 @@ func (op *PhysicalTableReader) CloneForPlanCache(newCtx base.PlanContext) (base.
 	if op.TableScanAndPartitionInfos != nil {
 		return nil, false
 	}
+	if op.TableSplit != nil {
+		return nil, false
+	}
 	return cloned, true
 }
 
@@ -464,6 +470,10 @@ func (op *BatchPointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Pl
 	cloned.PartitionIdxs = make([]int, len(op.PartitionIdxs))
 	copy(cloned.PartitionIdxs, op.PartitionIdxs)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(op.accessCols, nil)
+	cloned.Unfold = make([]bool, len(op.Unfold))
+	copy(cloned.Unfold, op.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(op.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, op.ColsInWhereClause)
 	return cloned, true
 }
 
@@ -493,6 +503,10 @@ func (op *PointGetPlan) CloneForPlanCache(newCtx base.PlanContext) (base.Plan, b
 	copy(cloned.IdxColLens, op.IdxColLens)
 	cloned.AccessConditions = utilfuncp.CloneExpressionsForPlanCache(op.AccessConditions, nil)
 	cloned.accessCols = utilfuncp.CloneColumnsForPlanCache(op.accessCols, nil)
+	cloned.Unfold = make([]bool, len(op.Unfold))
+	copy(cloned.Unfold, op.Unfold)
+	cloned.ColsInWhereClause = make([]string, len(op.ColsInWhereClause))
+	copy(cloned.ColsInWhereClause, op.ColsInWhereClause)
 	return cloned, true
 }
 

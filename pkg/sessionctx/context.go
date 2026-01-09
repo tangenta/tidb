@@ -24,10 +24,12 @@ import (
 	"github.com/pingcap/tidb/pkg/infoschema/validatorapi"
 	"github.com/pingcap/tidb/pkg/kv"
 	tablelock "github.com/pingcap/tidb/pkg/lock/context"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/planner/planctx"
 	"github.com/pingcap/tidb/pkg/session/cursor"
 	"github.com/pingcap/tidb/pkg/session/sessmgr"
 	"github.com/pingcap/tidb/pkg/sessionctx/sessionstates"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/statistics/handle/usage/indexusage"
 	"github.com/pingcap/tidb/pkg/table/tblctx"
 	"github.com/pingcap/tidb/pkg/util/sli"
@@ -159,6 +161,10 @@ type Context interface {
 	GetCursorTracker() cursor.Tracker
 	// GetCommitWaitGroup returns the wait group for async commit and secondary lock cleanup background goroutines
 	GetCommitWaitGroup() *sync.WaitGroup
+	// SetSessionExec set procedure interface.
+	SetSessionExec(cc SessionExec)
+	// GetSessionExec get procedure interface.
+	GetSessionExec() SessionExec
 	// GetTraceCtx returns the context bind with trace information.
 	// The trace information is set when entering server/conn.dispatch and reset after dispatch returns.
 	// The context only contains the initial trace information, which is used to track the execution of the current statement.
@@ -203,4 +209,73 @@ const (
 // statements that don't make reading operation immediately).
 func ValidateSnapshotReadTS(ctx context.Context, store kv.Storage, readTS uint64, isStaleRead bool) error {
 	return store.GetOracle().ValidateReadTS(ctx, readTS, isStaleRead, &oracle.Option{TxnScope: oracle.GlobalTxnScope})
+}
+
+// SessionExec procedure implementation interface
+type SessionExec interface {
+	MultiHanldeNodeWithResult(ctx context.Context, stmt ast.StmtNode) error
+}
+
+// OnExtensionSecurity writes security-level audit logs if possible
+func OnExtensionSecurity(s Context, info string, sc *stmtctx.StatementContext) {
+	if s.GetExtensions() == nil {
+		return
+	}
+
+	if !s.GetExtensions().HasSecurityEventListeners() {
+		return
+	}
+
+	tp := extension.SecurityEvent
+	user, host := "", ""
+
+	if sessVars := s.GetSessionVars(); sessVars != nil {
+		if u := sessVars.User; u != nil {
+			user, host = u.Username, u.Hostname
+		}
+	}
+
+	eventInfo := &SecurityEventInfo{
+		info: info,
+		user: user,
+		host: host,
+		sc:   sc,
+	}
+	s.GetExtensions().OnSecurityEvent(tp, eventInfo)
+}
+
+// SecurityEventInfo saves the security event of audit log.
+type SecurityEventInfo struct {
+	info string
+	user string
+	host string
+	sc   *stmtctx.StatementContext
+}
+
+// SecurityInfo returns the message that needs to be printed.
+func (e *SecurityEventInfo) SecurityInfo() string {
+	return e.info
+}
+
+// User returns the login username
+func (e *SecurityEventInfo) User() string { return e.user }
+
+// Host returns the login user-host.
+func (e *SecurityEventInfo) Host() string { return e.host }
+
+// OriginalText returns the original sql text (if possible)
+func (e *SecurityEventInfo) OriginalText() string {
+	if e.sc == nil {
+		return ""
+	}
+	return e.sc.OriginalSQL
+}
+
+// RedactedText returns the redacted sql text (if possible)
+func (e *SecurityEventInfo) RedactedText() (normalized string) {
+	if e.sc == nil {
+		return ""
+	}
+	normalized, _ = e.sc.SQLDigest()
+	return
 }
