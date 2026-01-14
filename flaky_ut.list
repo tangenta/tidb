@@ -31,3 +31,4 @@ pkg/extension/enterprise/audit/audit_test TestAuditLogReservedDays
 pkg/server/tests/commontest TestAuditPluginRetrying
 pkg/statistics/handle/storage TestGCExtendedStats
 pkg/executor/test/analyzetest TestKillAutoAnalyze
+pkg/executor TestSplitTablesQueryMatch

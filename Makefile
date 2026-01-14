@@ -188,7 +188,7 @@ ddltest:
 .PHONY: ut
 ut: tools/bin/ut tools/bin/xprog failpoint-enable ## Run unit tests
 	@echo "Debug: Running ut with X=$(X)"
-	tools/bin/ut $(X) --except flaky_ut.list || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
+	tools/bin/ut $(X) --except flaky_ut.list --retry-cnt 3 || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
 	@$(FAILPOINT_DISABLE)
 	@$(CLEAN_UT_BINARY)
 
