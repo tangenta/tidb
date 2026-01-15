@@ -89,7 +89,11 @@ ut run --short
 
 // test with long flag
 // when the '--long' flag is set, ut will only run the long tests and have different strategies for concurrency to make them stabler.
-ut run --long`
+ut run --long
+
+// retry failed tests up to N extra times
+ut run --retry-cnt 2
+ut run --retry-count 2`
 
 	fmt.Println(msg)
 	return true
@@ -510,6 +514,7 @@ var coverFileTempDir string
 var race bool
 var short bool
 var long bool
+var retryCount int
 
 var except string
 var only string
@@ -520,6 +525,7 @@ func main() {
 	coverprofile = handleFlags("--coverprofile")
 	except = handleFlags("--except")
 	only = handleFlags("--only")
+	retryCount = parseRetryCount()
 	race = handleFlag("--race")
 	short = handleFlag("--short")
 	long = handleFlag("--long")
@@ -821,13 +827,40 @@ func (n *numa) runTestCase(pkg string, fn string) testResult {
 
 	var buf bytes.Buffer
 	var err error
-	var start time.Time
+	var d time.Duration
+	attempts := retryCount + 1
+	for attempt := 1; attempt <= attempts; attempt++ {
+		buf.Reset()
+		d, err = n.runTestCaseOnce(pkg, fn, &buf)
+		if err == nil {
+			break
+		}
+		if attempt < attempts {
+			fmt.Fprintf(os.Stderr, "[RETRY] %s %s (%d/%d)\n", pkg, fn, attempt, attempts)
+		}
+	}
+	if err != nil {
+		res.Failure = &JUnitFailure{
+			Message:  "Failed",
+			Contents: buf.String(),
+		}
+		res.err = err
+	}
+
+	res.d = d
+	res.Time = formatDurationAsSeconds(res.d)
+	return res
+}
+
+func (n *numa) runTestCaseOnce(pkg string, fn string, buf *bytes.Buffer) (time.Duration, error) {
+	var err error
+	var d time.Duration
 	for range 3 {
 		cmd := n.testCommand(pkg, fn)
 		cmd.Dir = filepath.Join(workDir, pkg)
 		// Combine the test case output, so the run result for failed cases can be displayed.
-		cmd.Stdout = &buf
-		cmd.Stderr = &buf
+		cmd.Stdout = buf
+		cmd.Stderr = buf
 
 		if short {
 			cmd.Args = append(cmd.Args, "--test.short")
@@ -836,8 +869,9 @@ func (n *numa) runTestCase(pkg string, fn string) testResult {
 			cmd.Args = append(cmd.Args, "-long")
 		}
 
-		start = time.Now()
+		start := time.Now()
 		err = cmd.Run()
+		d = time.Since(start)
 		if err != nil {
 			//lint:ignore S1020
 			if _, ok := err.(*exec.ExitError); ok {
@@ -858,17 +892,7 @@ func (n *numa) runTestCase(pkg string, fn string) testResult {
 		}
 		break
 	}
-	if err != nil {
-		res.Failure = &JUnitFailure{
-			Message:  "Failed",
-			Contents: buf.String(),
-		}
-		res.err = err
-	}
-
-	res.d = time.Since(start)
-	res.Time = formatDurationAsSeconds(res.d)
-	return res
+	return d, err
 }
 
 func collectTestResults(workers []numa) JUnitTestSuites {
@@ -1151,6 +1175,23 @@ func goVersion() string {
 		return "unknown"
 	}
 	return strings.TrimPrefix(strings.TrimSpace(string(out)), "go version ")
+}
+
+func parseRetryCount() int {
+	retryCountStr := handleFlags("--retry-count")
+	retryCountLegacy := handleFlags("--retry-cnt")
+	if retryCountStr == "" {
+		retryCountStr = retryCountLegacy
+	}
+	if retryCountStr == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(retryCountStr)
+	if err != nil || parsed < 0 {
+		fmt.Printf("invalid --retry-count value: %q (must be >= 0)\n", retryCountStr)
+		os.Exit(1)
+	}
+	return parsed
 }
 
 func write(out io.Writer, suites JUnitTestSuites) error {
