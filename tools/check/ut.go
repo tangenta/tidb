@@ -91,6 +91,9 @@ ut run --short
 // when the '--long' flag is set, ut will only run the long tests and have different strategies for concurrency to make them stabler.
 ut run --long
 
+// test with real tikv
+ut run --real-tikv
+
 // retry failed tests up to N extra times
 ut run --retry-cnt 2
 ut run --retry-count 2`
@@ -359,6 +362,9 @@ func runTestCases(tasks []task) bool {
 	if long {
 		testWorkerCount = longTestWorkerCount
 	}
+	if realTikv {
+		testWorkerCount = 1
+	}
 	taskCh := make(chan task, 100)
 	works := make([]numa, testWorkerCount)
 	var wg sync.WaitGroup
@@ -514,6 +520,7 @@ var coverFileTempDir string
 var race bool
 var short bool
 var long bool
+var realTikv bool
 var retryCount int
 
 var except string
@@ -529,6 +536,7 @@ func main() {
 	race = handleFlag("--race")
 	short = handleFlag("--short")
 	long = handleFlag("--long")
+	realTikv = handleFlag("--real-tikv")
 
 	if coverprofile != "" {
 		var err error
@@ -790,6 +798,9 @@ func listPackages() ([]string, error) {
 		}
 		ret = append(ret, pkg)
 	}
+	if realTikv {
+		ret = filter(ret, isRealTiKVPackage)
+	}
 	return ret, nil
 }
 
@@ -837,6 +848,9 @@ func (n *numa) runTestCase(pkg string, fn string) testResult {
 		}
 		if attempt < attempts {
 			fmt.Fprintf(os.Stderr, "[RETRY] %s %s (%d/%d)\n", pkg, fn, attempt, attempts)
+			if filtered := filterRetryLog(buf.String()); filtered != "" {
+				fmt.Fprintln(os.Stderr, filtered)
+			}
 		}
 	}
 	if err != nil {
@@ -868,6 +882,9 @@ func (n *numa) runTestCaseOnce(pkg string, fn string, buf *bytes.Buffer) (time.D
 		if long {
 			cmd.Args = append(cmd.Args, "-long")
 		}
+		if realTikv {
+			cmd.Args = append(cmd.Args, "-with-real-tikv")
+		}
 
 		start := time.Now()
 		err = cmd.Run()
@@ -893,6 +910,31 @@ func (n *numa) runTestCaseOnce(pkg string, fn string, buf *bytes.Buffer) (time.D
 		break
 	}
 	return d, err
+}
+
+var retryLogTimestampRegexp = regexp.MustCompile(`^\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2}\]`)
+
+func filterRetryLog(output string) string {
+	if output == "" {
+		return ""
+	}
+	lines := strings.Split(output, "\n")
+	var builder strings.Builder
+	wrote := false
+	for i, line := range lines {
+		if i == len(lines)-1 && line == "" {
+			break
+		}
+		if retryLogTimestampRegexp.MatchString(line) {
+			continue
+		}
+		if wrote {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(line)
+		wrote = true
+	}
+	return builder.String()
 }
 
 func collectTestResults(workers []numa) JUnitTestSuites {
@@ -955,13 +997,12 @@ func (n *numa) testCommand(pkg string, fn string) *exec.Cmd {
 		testCPU = p / longTestWorkerCount
 	}
 	args = append(args, "-test.cpu", strconv.Itoa(testCPU))
-	if !race && !long {
+	if !race && !long && !realTikv {
 		args = append(args, []string{"-test.timeout", "2m"}...)
 	} else {
 		// it takes a longer when race is enabled. so it is set more timeout value.
 		args = append(args, []string{"-test.timeout", "30m"}...)
 	}
-
 	// session.test -test.run TestClusteredPrefixColumn
 	args = append(args, "-test.run", "^"+fn+"$")
 
@@ -973,10 +1014,21 @@ func skipDIR(pkg string) bool {
 		"cmd", "dumpling", "tests", "tools", "build"}
 	for _, ignore := range skipDir {
 		if strings.HasPrefix(pkg, ignore) {
+			if ignore == "tests" && realTikv {
+				return false
+			}
 			return true
 		}
 	}
 	return false
+}
+
+func isRealTiKVPackage(pkg string) bool {
+	realTiKVDir := filepath.Join("tests", "realtikvtest")
+	if pkg == realTiKVDir {
+		return true
+	}
+	return strings.HasPrefix(pkg, realTiKVDir+string(filepath.Separator))
 }
 
 // goTestCmd run "go test --tags=intest[|,nextgen] args.."
