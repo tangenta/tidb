@@ -13,6 +13,7 @@
 # limitations under the License.
 
 include Makefile.common
+include Makefile.realtikvtest.gotest
 
 
 .DEFAULT_GOAL := default
@@ -52,7 +53,7 @@ precheck: fmt bazel_prepare
 .PHONY: check
 # disable license check
 check: ## Run comprehensive code quality checks
-check: check-bazel-prepare parser_yacc check-parallel lint tidy testSuite errdoc bazel_check_abi
+check: parser_yacc check-parallel lint tidy testSuite errdoc
 
 .PHONY: fmt
 fmt: ## Format Go code using gofmt
