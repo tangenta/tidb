@@ -1866,6 +1866,20 @@ id	task	access object	operator info
 TableReader	root		data:Selection
 └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
   └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
+explain format='plan_tree' select /*+ FULL(t_full1) USE_INDEX(t_full1, a) */ * from t_full1 where a = 1;
+id	task	access object	operator info
+TableReader	root		data:Selection
+└─Selection	cop[tikv]		eq(test.t_full1.a, 1)
+  └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
+Level	Code	Message
+Warning	1815	use_index(test.t_full1, a) is inapplicable, check whether the table(test.t_full1) exists
+explain format='plan_tree' select /*+ FULL(xxx) */ * from t_full1 where a = 1;
+id	task	access object	operator info
+IndexLookUp	root		
+├─IndexRangeScan(Build)	cop[tikv]	table:t_full1, index:a(a)	range:[1,1], keep order:false, stats:pseudo
+└─TableRowIDScan(Probe)	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
+Level	Code	Message
+Warning	1815	There are no matching table names for (xxx) in optimizer hint /*+ FULL(xxx) */. Maybe you can use the table alias name
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 id	task	access object	operator info
 IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full1.a, inner key:test.t_full2.a, equal cond:eq(test.t_full1.a, test.t_full2.a)

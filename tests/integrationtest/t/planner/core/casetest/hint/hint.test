@@ -292,6 +292,10 @@ create table t_full1 (a int, b int, key(a));
 create table t_full2 (a int, b int, key(a));
 create table t_full3 (a int, b int, key(a));
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 where a = 1;
+--enable_warnings
+explain format='plan_tree' select /*+ FULL(t_full1) USE_INDEX(t_full1, a) */ * from t_full1 where a = 1;
+explain format='plan_tree' select /*+ FULL(xxx) */ * from t_full1 where a = 1;
+--disable_warnings
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 explain format='plan_tree' select /*+ FULL(t_full1, t_full2) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 explain format='plan_tree' select /*+ INDEX(t_full1) */ * from t_full1 where a in (select /*+ FULL(t_full2) */ a from t_full2 where a > 1);
