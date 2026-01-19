@@ -1088,6 +1088,19 @@ func Restore2JoinHint(hintType string, hintTables []HintedTable) string {
 	return buffer.String()
 }
 
+// Restore2FullHint restores full scan hint to string.
+func Restore2FullHint(hintTables []HintedTable) string {
+	if len(hintTables) == 0 {
+		return strings.ToUpper(HintFull)
+	}
+	buffer := bytes.NewBufferString("/*+ ")
+	buffer.WriteString(strings.ToUpper(HintFull))
+	buffer.WriteString("(")
+	buffer.WriteString(restore2TableHint(hintTables...))
+	buffer.WriteString(") */")
+	return buffer.String()
+}
+
 // Restore2IndexHint restores index hint to string.
 func Restore2IndexHint(hintType string, hintIndex HintedIndex) string {
 	buffer := bytes.NewBufferString("/*+ ")
@@ -1157,6 +1170,7 @@ func CollectUnmatchedHintWarnings(hintInfo *PlanHints) (warnings []string) {
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintHashJoinBuild, "", hintInfo.HJBuild)...)
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintHashJoinProbe, "", hintInfo.HJProbe)...)
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintLeading, "", hintInfo.LeadingJoinOrder)...)
+	warnings = append(warnings, collectUnmatchedFullHintWarning(hintInfo.FullScanTables)...)
 	warnings = append(warnings, collectUnmatchedStorageHintWarning(hintInfo.TiFlashTables, hintInfo.TiKVTables)...)
 	return warnings
 }
@@ -1193,6 +1207,17 @@ func collectUnmatchedJoinHintWarning(joinType string, joinTypeAlias string, hint
 
 	errMsg := fmt.Sprintf("There are no matching table names for (%s) in optimizer hint %s%s. Maybe you can use the table alias name",
 		strings.Join(unMatchedTables, ", "), Restore2JoinHint(joinType, hintTables), joinTypeAlias)
+	warnings = append(warnings, errMsg)
+	return warnings
+}
+
+func collectUnmatchedFullHintWarning(hintTables []HintedTable) (warnings []string) {
+	unMatchedTables := ExtractUnmatchedTables(hintTables)
+	if len(unMatchedTables) == 0 {
+		return
+	}
+	errMsg := fmt.Sprintf("There are no matching table names for (%s) in optimizer hint %s. Maybe you can use the table alias name",
+		strings.Join(unMatchedTables, ", "), Restore2FullHint(hintTables))
 	warnings = append(warnings, errMsg)
 	return warnings
 }
