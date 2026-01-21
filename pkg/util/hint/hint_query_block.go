@@ -288,7 +288,7 @@ func (p *QBHintHandler) GetCurrentStmtHints(hints []*ast.TableOptimizerHint, cur
 			continue
 		}
 		effectiveQBName := hint.QBName
-		if effectiveQBName.L == "" && len(hint.Tables) > 0 {
+		if effectiveQBName.L == "" && len(hint.Tables) > 0 && hint.HintName.L == HintFull {
 			var tableQBName ast.CIStr
 			ambiguous := false
 			for _, table := range hint.Tables {
