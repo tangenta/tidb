@@ -287,7 +287,35 @@ func (p *QBHintHandler) GetCurrentStmtHints(hints []*ast.TableOptimizerHint, cur
 		if hint.HintName.L == hintQBName {
 			continue
 		}
-		offset := p.GetHintOffset(hint.QBName, currentOffset)
+		effectiveQBName := hint.QBName
+		if effectiveQBName.L == "" && len(hint.Tables) > 0 {
+			var tableQBName ast.CIStr
+			ambiguous := false
+			for _, table := range hint.Tables {
+				if table.QBName.L == "" {
+					continue
+				}
+				if tableQBName.L == "" {
+					tableQBName = table.QBName
+					continue
+				}
+				if tableQBName.L != table.QBName.L {
+					ambiguous = true
+					break
+				}
+			}
+			if ambiguous {
+				if p.warnHandler != nil {
+					hintStr := RestoreTableOptimizerHint(hint)
+					p.warnHandler.SetHintWarning(fmt.Sprintf("Hint %s is ignored due to ambiguous query block name in table list", hintStr))
+				}
+				continue
+			}
+			if tableQBName.L != "" {
+				effectiveQBName = tableQBName
+			}
+		}
+		offset := p.GetHintOffset(effectiveQBName, currentOffset)
 		if offset < 0 || !p.checkTableQBName(hint.Tables) {
 			if p.warnHandler != nil {
 				hintStr := RestoreTableOptimizerHint(hint)

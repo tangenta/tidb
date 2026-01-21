@@ -742,7 +742,6 @@ func (*PlanHints) matchTiKVOrTiFlash(tableName *HintedTable, hintTables []Hinted
 }
 
 // MatchFullScan checks if the FULL hint is specified for the table.
-// unlike IfPreferFullScan, it matches by name directly without checking SelectOffset.
 func (pHints *PlanHints) MatchFullScan(dbName, tblName ast.CIStr) bool {
 	for i, tbl := range pHints.FullScanTables {
 		if (tbl.DBName.L == dbName.L || tbl.DBName.L == "*") && tbl.TblName.L == tblName.L {

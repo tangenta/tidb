@@ -1381,7 +1381,12 @@ func getPossibleAccessPaths(ctx base.PlanContext, tableHints *hint.PlanHints, in
 		}
 	}
 
-	if tableHints != nil && tableHints.MatchFullScan(dbName, tblName) {
+	// Resolve conflicts between FULL and index-related hints before selecting access paths.
+	fullHintIdx, ignoreFullHint, ignoreIndexHints := checkFullIndexHintConflict(ctx, tableHints, indexHints, dbName, tblName)
+	if !ignoreFullHint && fullHintIdx >= 0 {
+		if tableHints != nil {
+			tableHints.FullScanTables[fullHintIdx].Matched = true
+		}
 		fullScanPaths := make([]*util.AccessPath, 0, 2)
 		for _, path := range publicPaths {
 			// We discard all IndexScan paths when FULL hint is present.
@@ -1401,9 +1406,12 @@ func getPossibleAccessPaths(ctx base.PlanContext, tableHints *hint.PlanHints, in
 	ignored := make([]*util.AccessPath, 0, len(publicPaths))
 
 	// Extract comment-style index hint like /*+ INDEX(t, idx1, idx2) */.
+	if ignoreIndexHints {
+		indexHints = indexHints[:0]
+	}
 	indexHintsLen := len(indexHints)
 	var indexLookUpPushDownHints map[int]struct{}
-	if tableHints != nil {
+	if tableHints != nil && !ignoreIndexHints {
 		for i, hint := range tableHints.IndexHintList {
 			if hint.Match(dbName, tblName) {
 				indexHints = append(indexHints, hint.IndexHint)
@@ -1546,6 +1554,69 @@ func getPossibleAccessPaths(ctx base.PlanContext, tableHints *hint.PlanHints, in
 	}
 
 	return available, nil
+}
+
+// checkFullIndexHintConflict detects conflicts between FULL and index-related hints on the same table.
+// When both exist, it marks them as matched, emits a conflict warning, and returns flags to ignore them.
+func checkFullIndexHintConflict(ctx base.PlanContext, tableHints *hint.PlanHints, indexHints []*ast.IndexHint, dbName, tblName ast.CIStr) (fullHintIdx int, ignoreFullHint, ignoreIndexHints bool) {
+	fullHintIdx = -1
+	if tableHints != nil {
+		for i, tbl := range tableHints.FullScanTables {
+			if (tbl.DBName.L == dbName.L || tbl.DBName.L == "*") && tbl.TblName.L == tblName.L {
+				fullHintIdx = i
+				break
+			}
+		}
+	}
+	// Table-level index hints can arrive either from SQL index hints or from comment-style hints.
+	hasIndexHintForTable := false
+	for _, idxHint := range indexHints {
+		if idxHint.HintType == ast.HintUse || idxHint.HintType == ast.HintForce || idxHint.HintType == ast.HintIndex {
+			hasIndexHintForTable = true
+			break
+		}
+	}
+	if !hasIndexHintForTable && tableHints != nil {
+		for _, hint := range tableHints.IndexHintList {
+			if !hint.Match(dbName, tblName) {
+				continue
+			}
+			hintType := hint.IndexHint.HintType
+			if hintType == ast.HintUse || hintType == ast.HintForce || hintType == ast.HintIndex {
+				hasIndexHintForTable = true
+				break
+			}
+		}
+	}
+	if !hasIndexHintForTable && tableHints != nil {
+		for _, hint := range tableHints.IndexMergeHintList {
+			if hint.Match(dbName, tblName) {
+				hasIndexHintForTable = true
+				break
+			}
+		}
+	}
+	if fullHintIdx >= 0 && hasIndexHintForTable {
+		ignoreIndexHints = true
+		ignoreFullHint = true
+		if tableHints != nil {
+			// Mark as matched to avoid "unmatched hint" warnings on conflicts.
+			tableHints.FullScanTables[fullHintIdx].Matched = true
+			for i, hint := range tableHints.IndexHintList {
+				if hint.Match(dbName, tblName) {
+					tableHints.IndexHintList[i].Matched = true
+				}
+			}
+			for i, hint := range tableHints.IndexMergeHintList {
+				if hint.Match(dbName, tblName) {
+					tableHints.IndexMergeHintList[i].Matched = true
+				}
+			}
+		}
+		conflictMsg := fmt.Sprintf("FULL and index hints on %s.%s", dbName.String(), tblName.String())
+		ctx.GetSessionVars().StmtCtx.SetHintWarningFromError(hint.ErrWarnConflictingHint.FastGenByArgs(conflictMsg))
+	}
+	return fullHintIdx, ignoreFullHint, ignoreIndexHints
 }
 
 func removeIgnoredPaths(paths, ignoredPaths []*util.AccessPath, tblInfo *model.TableInfo) []*util.AccessPath {

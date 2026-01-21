@@ -191,6 +191,9 @@ select /*+ USE_INDEX_MERGE(t1, a, b, c, d) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, a, b), USE_INDEX(t1, a) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, a, b), IGNORE_INDEX(t1, a) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, primary, a, b, c) */ * from t1;
+drop table if exists t_conflict;
+create table t_conflict(a int, index idx_a(a));
+explain format='plan_tree' select /*+ FULL(t_conflict) USE_INDEX(t_conflict, idx_a) */ * from t_conflict;
 --disable_warnings
 drop table if exists t1;
 drop view if exists v1;
@@ -291,12 +294,18 @@ drop table if exists t_full1, t_full2, t_full3;
 create table t_full1 (a int, b int, key(a));
 create table t_full2 (a int, b int, key(a));
 create table t_full3 (a int, b int, key(a));
+create table t (a int, b int, key(a), key(b));
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 where a = 1;
 --enable_warnings
 explain format='plan_tree' select /*+ FULL(t_full1) USE_INDEX(t_full1, a) */ * from t_full1 where a = 1;
 explain format='plan_tree' select /*+ FULL(xxx) */ * from t_full1 where a = 1;
+explain format='plan_tree' select /*+ USE_INDEX(t,a), FULL(t) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
+explain format='plan_tree' select /*+ FORCE_INDEX(t, a), FULL(t) */ * from t where a = 456;
+explain format='plan_tree' select /*+ INDEX(t, a), FULL(t) */ * from t where a = 1 or b = 2;
 --disable_warnings
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 explain format='plan_tree' select /*+ FULL(t_full1, t_full2) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
+explain format='plan_tree' select /*+ FULL(t@sel_2) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
+explain format='plan_tree' select /*+ FULL(@sel_2 t) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
 explain format='plan_tree' select /*+ INDEX(t_full1) */ * from t_full1 where a in (select /*+ FULL(t_full2) */ a from t_full2 where a > 1);
-drop table if exists t_full1, t_full2, t_full3;
+drop table if exists t_full1, t_full2, t_full3, t;
