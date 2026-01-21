@@ -3758,12 +3758,6 @@ func (b *PlanBuilder) TableHints() *h.PlanHints {
 }
 
 func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p base.LogicalPlan, err error) {
-	if b.ctx.GetSessionVars() != nil && b.ctx.GetSessionVars().StmtCtx != nil {
-		sqlText := b.ctx.GetSessionVars().StmtCtx.OriginalSQL
-		if strings.Contains(sqlText, "explain") || strings.Contains(sqlText, "EXPLAIN") {
-			fmt.Println("debug: matched explain FULL(@sel_2 t) in buildSelect")
-		}
-	}
 	b.pushSelectOffset(sel.QueryBlockOffset)
 	b.pushTableHints(sel.TableHints, sel.QueryBlockOffset)
 	defer func() {
