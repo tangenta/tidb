@@ -4581,19 +4581,8 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 	// extract the IndexMergeHint
 	var indexMergeHints []h.HintedIndex
 	if hints := b.TableHints(); hints != nil {
-		fullConflict := false
-		for _, tbl := range hints.FullScanTables {
-			if (tbl.DBName.L == dbName.L || tbl.DBName.L == "*") && tbl.TblName.L == tblName.L {
-				fullConflict = true
-				break
-			}
-		}
 		for i, hint := range hints.IndexMergeHintList {
 			if hint.Match(dbName, tblName) {
-				if fullConflict {
-					hints.IndexMergeHintList[i].Matched = true
-					continue
-				}
 				hints.IndexMergeHintList[i].Matched = true
 				// check whether the index names in IndexMergeHint are valid.
 				invalidIdxNames := make([]string, 0, len(hint.IndexHint.IndexNames))

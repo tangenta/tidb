@@ -1641,8 +1641,6 @@ explain format='plan_tree' select /*+ FULL(t_conflict) USE_INDEX(t_conflict, idx
 id	task	access object	operator info
 IndexReader	root		index:IndexFullScan
 └─IndexFullScan	cop[tikv]	table:t_conflict, index:idx_a(a)	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	3126	Hint FULL and index hints on planner__core__casetest__hint__hint.t_conflict is ignored as conflicting/duplicated.
 drop table if exists t1;
 drop view if exists v1;
 CREATE TABLE t1 (c1 INT PRIMARY KEY, c2 INT, INDEX (c2));
@@ -1871,55 +1869,11 @@ drop table if exists t_full1, t_full2, t_full3;
 create table t_full1 (a int, b int, key(a));
 create table t_full2 (a int, b int, key(a));
 create table t_full3 (a int, b int, key(a));
-create table t (a int, b int, key(a), key(b));
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 where a = 1;
 id	task	access object	operator info
 TableReader	root		data:Selection
 └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
   └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
-explain format='plan_tree' select /*+ FULL(t_full1) USE_INDEX(t_full1, a) */ * from t_full1 where a = 1;
-id	task	access object	operator info
-IndexLookUp	root		
-├─IndexRangeScan(Build)	cop[tikv]	table:t_full1, index:a(a)	range:[1,1], keep order:false, stats:pseudo
-└─TableRowIDScan(Probe)	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	3126	Hint FULL and index hints on test.t_full1 is ignored as conflicting/duplicated.
-explain format='plan_tree' select /*+ FULL(xxx) */ * from t_full1 where a = 1;
-id	task	access object	operator info
-IndexLookUp	root		
-├─IndexRangeScan(Build)	cop[tikv]	table:t_full1, index:a(a)	range:[1,1], keep order:false, stats:pseudo
-└─TableRowIDScan(Probe)	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	1815	There are no matching table names for (xxx) in optimizer hint /*+ FULL(xxx) */. Maybe you can use the table alias name
-explain format='plan_tree' select /*+ USE_INDEX(t,a), FULL(t) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
-id	task	access object	operator info
-Projection	root		test.t.a, test.t.b, test.t.a, test.t.b
-└─IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t.a, inner key:test.t.a, equal cond:eq(test.t.a, test.t.a)
-  ├─IndexLookUp(Build)	root		
-  │ ├─IndexRangeScan(Build)	cop[tikv]	table:t, index:a(a)	range:[456,456], keep order:false, stats:pseudo
-  │ └─Selection(Probe)	cop[tikv]		eq(test.t.b, 123)
-  │   └─TableRowIDScan	cop[tikv]	table:t	keep order:false, stats:pseudo
-  └─IndexLookUp(Probe)	root		
-    ├─Selection(Build)	cop[tikv]		eq(test.t.a, 456)
-    │ └─IndexRangeScan	cop[tikv]	table:t, index:a(a)	range: decided by [eq(test.t.a, test.t.a)], keep order:false, stats:pseudo
-    └─TableRowIDScan(Probe)	cop[tikv]	table:t	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	3126	Hint FULL and index hints on test.t is ignored as conflicting/duplicated.
-explain format='plan_tree' select /*+ FORCE_INDEX(t, a), FULL(t) */ * from t where a = 456;
-id	task	access object	operator info
-IndexLookUp	root		
-├─IndexRangeScan(Build)	cop[tikv]	table:t, index:a(a)	range:[456,456], keep order:false, stats:pseudo
-└─TableRowIDScan(Probe)	cop[tikv]	table:t	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	3126	Hint FULL and index hints on test.t is ignored as conflicting/duplicated.
-explain format='plan_tree' select /*+ INDEX(t, a), FULL(t) */ * from t where a = 1 or b = 2;
-id	task	access object	operator info
-IndexMerge	root		type: union
-├─IndexRangeScan(Build)	cop[tikv]	table:t, index:a(a)	range:[1,1], keep order:false, stats:pseudo
-├─IndexRangeScan(Build)	cop[tikv]	table:t, index:b(b)	range:[2,2], keep order:false, stats:pseudo
-└─TableRowIDScan(Probe)	cop[tikv]	table:t	keep order:false, stats:pseudo
-Level	Code	Message
-Warning	3126	Hint FULL and index hints on test.t is ignored as conflicting/duplicated.
 explain format='plan_tree' select /*+ FULL(t_full1) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 id	task	access object	operator info
 IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full1.a, inner key:test.t_full2.a, equal cond:eq(test.t_full1.a, test.t_full2.a)
@@ -1932,35 +1886,14 @@ IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full1.a, inn
   └─TableRowIDScan(Probe)	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
 explain format='plan_tree' select /*+ FULL(t_full1, t_full2) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 id	task	access object	operator info
-HashJoin	root		inner join, equal:[eq(test.t_full1.a, test.t_full2.a)]
+IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full1.a, inner key:test.t_full2.a, equal cond:eq(test.t_full1.a, test.t_full2.a)
 ├─TableReader(Build)	root		data:Selection
-│ └─Selection	cop[tikv]		eq(1, test.t_full2.a)
-│   └─TableFullScan	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
-└─TableReader(Probe)	root		data:Selection
-  └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
-    └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
-explain format='plan_tree' select /*+ FULL(t@sel_2) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
-id	task	access object	operator info
-Projection	root		test.t.a, test.t.b, test.t.a, test.t.b
-└─IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t.a, inner key:test.t.a, equal cond:eq(test.t.a, test.t.a)
-  ├─TableReader(Build)	root		data:Selection
-  │ └─Selection	cop[tikv]		eq(456, test.t.a), eq(test.t.b, 123)
-  │   └─TableFullScan	cop[tikv]	table:t	keep order:false, stats:pseudo
-  └─IndexLookUp(Probe)	root		
-    ├─Selection(Build)	cop[tikv]		eq(test.t.a, 456)
-    │ └─IndexRangeScan	cop[tikv]	table:t, index:a(a)	range: decided by [eq(test.t.a, test.t.a)], keep order:false, stats:pseudo
-    └─TableRowIDScan(Probe)	cop[tikv]	table:t	keep order:false, stats:pseudo
-explain format='plan_tree' select /*+ FULL(@sel_2 t) */ * from t join (select * from t where b = 123) t_sub on t.a = t_sub.a where t.a = 456;
-id	task	access object	operator info
-Projection	root		test.t.a, test.t.b, test.t.a, test.t.b
-└─IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t.a, inner key:test.t.a, equal cond:eq(test.t.a, test.t.a)
-  ├─TableReader(Build)	root		data:Selection
-  │ └─Selection	cop[tikv]		eq(456, test.t.a), eq(test.t.b, 123)
-  │   └─TableFullScan	cop[tikv]	table:t	keep order:false, stats:pseudo
-  └─IndexLookUp(Probe)	root		
-    ├─Selection(Build)	cop[tikv]		eq(test.t.a, 456)
-    │ └─IndexRangeScan	cop[tikv]	table:t, index:a(a)	range: decided by [eq(test.t.a, test.t.a)], keep order:false, stats:pseudo
-    └─TableRowIDScan(Probe)	cop[tikv]	table:t	keep order:false, stats:pseudo
+│ └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
+│   └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
+└─IndexLookUp(Probe)	root		
+  ├─Selection(Build)	cop[tikv]		eq(1, test.t_full2.a)
+  │ └─IndexRangeScan	cop[tikv]	table:t_full2, index:a(a)	range: decided by [eq(test.t_full2.a, test.t_full1.a)], keep order:false, stats:pseudo
+  └─TableRowIDScan(Probe)	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
 explain format='plan_tree' select /*+ INDEX(t_full1) */ * from t_full1 where a in (select /*+ FULL(t_full2) */ a from t_full2 where a > 1);
 id	task	access object	operator info
 IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full2.a, inner key:test.t_full1.a, equal cond:eq(test.t_full2.a, test.t_full1.a)
@@ -1973,4 +1906,4 @@ IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full2.a, inn
   ├─Selection(Build)	cop[tikv]		not(isnull(test.t_full1.a))
   │ └─IndexRangeScan	cop[tikv]	table:t_full1, index:a(a)	range: decided by [eq(test.t_full1.a, test.t_full2.a)], keep order:false, stats:pseudo
   └─TableRowIDScan(Probe)	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
-drop table if exists t_full1, t_full2, t_full3, t;
+drop table if exists t_full1, t_full2, t_full3;

@@ -87,7 +87,7 @@ const (
 	HintUseIndex = "use_index"
 	// HintIndex is hint enforce using some indexes. if no index provided, all indexes will be considered.
 	HintIndex = "index"
-	// HintFull is hint enforce full table scan.
+	// HintFull is an alias of USE_INDEX with an empty index list, forcing table scan.
 	HintFull = "full"
 	// HintIgnoreIndex is hint enforce ignoring some indexes.
 	HintIgnoreIndex = "ignore_index"
@@ -566,7 +566,6 @@ type PlanHints struct {
 	LeadingList        *ast.LeadingList // leading recursive
 	HJBuild            []HintedTable    // hash_join_build
 	HJProbe            []HintedTable    // hash_join_probe
-	FullScanTables     []HintedTable    // full
 
 	// Hints belows are not associated with any particular table.
 	PreferAggType    uint // hash_agg, merge_agg, agg_to_cop and so on
@@ -741,17 +740,6 @@ func (*PlanHints) matchTiKVOrTiFlash(tableName *HintedTable, hintTables []Hinted
 	return nil
 }
 
-// MatchFullScan checks if the FULL hint is specified for the table.
-func (pHints *PlanHints) MatchFullScan(dbName, tblName ast.CIStr) bool {
-	for i, tbl := range pHints.FullScanTables {
-		if (tbl.DBName.L == dbName.L || tbl.DBName.L == "*") && tbl.TblName.L == tblName.L {
-			pHints.FullScanTables[i].Matched = true
-			return true
-		}
-	}
-	return false
-}
-
 // MatchTableName checks whether the hint hit the need.
 // Only need either side matches one on the list.
 // Even though you can put 2 tables on the list,
@@ -790,7 +778,6 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		shuffleJoinTables                                                               []HintedTable
 		indexHintList, indexMergeHintList                                               []HintedIndex
 		tiflashTables, tikvTables                                                       []HintedTable
-		fullScanTables                                                                  []HintedTable
 		preferAggType                                                                   uint
 		preferAggToCop                                                                  bool
 		timeRangeHint                                                                   ast.HintTimeRange
@@ -861,15 +848,14 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 			preferAggType |= PreferStreamAgg
 		case HintAggToCop:
 			preferAggToCop = true
-		case HintFull:
-			fullScanTables = append(fullScanTables, tableNames2HintTableInfo(currentDB, hint.HintName.L, hint.Tables, hintProcessor, currentLevel, warnHandler)...)
-		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown:
+		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown, HintFull:
 			dbName := hint.Tables[0].DBName
 			if dbName.L == "" {
 				dbName = ast.NewCIStr(currentDB)
 			}
 			var hintType ast.IndexHintType
 			var pushDownLookUp bool
+			indexNames := hint.Indexes
 			switch hint.HintName.L {
 			case HintUseIndex:
 				hintType = ast.HintUse
@@ -885,8 +871,6 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				hintType = ast.HintOrderIndex
 			case HintNoOrderIndex:
 				hintType = ast.HintNoOrderIndex
-			case HintFull:
-				hintType = ast.HintFull
 			case HintIndexLookUpPushDown:
 				if len(hint.Indexes) == 0 {
 					warnHandler.SetHintWarning("hint INDEX_LOOKUP_PUSH_DOWN is inapplicable, the index names should be specified")
@@ -894,13 +878,17 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				}
 				hintType = ast.HintUse
 				pushDownLookUp = true
+			case HintFull:
+				// FULL is treated as USE_INDEX with an empty index list to force table scan.
+				hintType = ast.HintUse
+				indexNames = nil
 			}
 			indexHintList = append(indexHintList, HintedIndex{
 				DBName:     dbName,
 				TblName:    hint.Tables[0].TableName,
 				Partitions: hint.Tables[0].PartitionList,
 				IndexHint: &ast.IndexHint{
-					IndexNames: hint.Indexes,
+					IndexNames: indexNames,
 					HintType:   hintType,
 					HintScope:  ast.HintForScan,
 				},
@@ -986,7 +974,6 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		IndexHintList:      indexHintList,
 		TiFlashTables:      tiflashTables,
 		TiKVTables:         tikvTables,
-		FullScanTables:     fullScanTables,
 		PreferAggToCop:     preferAggToCop,
 		PreferAggType:      preferAggType,
 		IndexMergeHintList: indexMergeHintList,
@@ -1087,19 +1074,6 @@ func Restore2JoinHint(hintType string, hintTables []HintedTable) string {
 	return buffer.String()
 }
 
-// Restore2FullHint restores full scan hint to string.
-func Restore2FullHint(hintTables []HintedTable) string {
-	if len(hintTables) == 0 {
-		return strings.ToUpper(HintFull)
-	}
-	buffer := bytes.NewBufferString("/*+ ")
-	buffer.WriteString(strings.ToUpper(HintFull))
-	buffer.WriteString("(")
-	buffer.WriteString(restore2TableHint(hintTables...))
-	buffer.WriteString(") */")
-	return buffer.String()
-}
-
 // Restore2IndexHint restores index hint to string.
 func Restore2IndexHint(hintType string, hintIndex HintedIndex) string {
 	buffer := bytes.NewBufferString("/*+ ")
@@ -1169,7 +1143,6 @@ func CollectUnmatchedHintWarnings(hintInfo *PlanHints) (warnings []string) {
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintHashJoinBuild, "", hintInfo.HJBuild)...)
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintHashJoinProbe, "", hintInfo.HJProbe)...)
 	warnings = append(warnings, collectUnmatchedJoinHintWarning(HintLeading, "", hintInfo.LeadingJoinOrder)...)
-	warnings = append(warnings, collectUnmatchedFullHintWarning(hintInfo.FullScanTables)...)
 	warnings = append(warnings, collectUnmatchedStorageHintWarning(hintInfo.TiFlashTables, hintInfo.TiKVTables)...)
 	return warnings
 }
@@ -1206,17 +1179,6 @@ func collectUnmatchedJoinHintWarning(joinType string, joinTypeAlias string, hint
 
 	errMsg := fmt.Sprintf("There are no matching table names for (%s) in optimizer hint %s%s. Maybe you can use the table alias name",
 		strings.Join(unMatchedTables, ", "), Restore2JoinHint(joinType, hintTables), joinTypeAlias)
-	warnings = append(warnings, errMsg)
-	return warnings
-}
-
-func collectUnmatchedFullHintWarning(hintTables []HintedTable) (warnings []string) {
-	unMatchedTables := ExtractUnmatchedTables(hintTables)
-	if len(unMatchedTables) == 0 {
-		return
-	}
-	errMsg := fmt.Sprintf("There are no matching table names for (%s) in optimizer hint %s. Maybe you can use the table alias name",
-		strings.Join(unMatchedTables, ", "), Restore2FullHint(hintTables))
 	warnings = append(warnings, errMsg)
 	return warnings
 }
