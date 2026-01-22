@@ -871,7 +871,6 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 			}
 			var hintType ast.IndexHintType
 			var pushDownLookUp bool
-			indexNames := hint.Indexes
 			switch hint.HintName.L {
 			case HintUseIndex:
 				hintType = ast.HintUse
@@ -900,7 +899,7 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				TblName:    hint.Tables[0].TableName,
 				Partitions: hint.Tables[0].PartitionList,
 				IndexHint: &ast.IndexHint{
-					IndexNames: indexNames,
+					IndexNames: hint.Indexes,
 					HintType:   hintType,
 					HintScope:  ast.HintForScan,
 				},
