@@ -1533,8 +1533,6 @@ func getPossibleAccessPaths(ctx base.PlanContext, tableHints *hint.PlanHints, in
 	return available, nil
 }
 
-// checkFullIndexHintConflict detects conflicts between FULL and index-related hints on the same table.
-// When both exist, it marks them as matched, emits a conflict warning, and returns flags to ignore them.
 func removeIgnoredPaths(paths, ignoredPaths []*util.AccessPath, tblInfo *model.TableInfo) []*util.AccessPath {
 	if len(ignoredPaths) == 0 {
 		return paths

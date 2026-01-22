@@ -848,7 +848,23 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 			preferAggType |= PreferStreamAgg
 		case HintAggToCop:
 			preferAggToCop = true
-		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown, HintFull:
+		case HintFull:
+			for _, table := range hint.Tables {
+				dbName := table.DBName
+				if dbName.L == "" {
+					dbName = ast.NewCIStr(currentDB)
+				}
+				indexHintList = append(indexHintList, HintedIndex{
+					DBName:     dbName,
+					TblName:    table.TableName,
+					Partitions: table.PartitionList,
+					IndexHint: &ast.IndexHint{
+						HintType:  ast.HintUse,
+						HintScope: ast.HintForScan,
+					},
+				})
+			}
+		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown:
 			dbName := hint.Tables[0].DBName
 			if dbName.L == "" {
 				dbName = ast.NewCIStr(currentDB)
@@ -878,10 +894,6 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				}
 				hintType = ast.HintUse
 				pushDownLookUp = true
-			case HintFull:
-				// FULL is treated as USE_INDEX with an empty index list to force table scan.
-				hintType = ast.HintUse
-				indexNames = nil
 			}
 			indexHintList = append(indexHintList, HintedIndex{
 				DBName:     dbName,
