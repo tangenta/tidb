@@ -176,6 +176,14 @@ func (e *SetExecutor) setSysVariable(ctx context.Context, name string, v *expres
 		if err != nil {
 			return err
 		}
+		if v.IsGlobal && name == vardef.TiDBEnableProcedure && variable.TiDBOptOn(valStr) {
+			// For user initiated SET GLOBAL, also change the value of TiDBEnableSPParamSubstitute
+			sessionVars.EnableSPParamSubstitute = true
+			err := sessionVars.GlobalVarsAccessor.SetGlobalSysVar(ctx, vardef.TiDBEnableSPParamSubstitute, vardef.On)
+			if err != nil {
+				return err
+			}
+		}
 		if v.IsGlobal {
 			err = sessionVars.GlobalVarsAccessor.SetGlobalSysVar(ctx, name, valStr)
 			if err != nil {
