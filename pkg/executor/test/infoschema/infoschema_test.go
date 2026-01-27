@@ -111,7 +111,7 @@ func TestUserPrivileges(t *testing.T) {
 		Username: "constraints_tester",
 		Hostname: "127.0.0.1",
 	}, nil, nil, nil))
-	constraintsTester.MustQuery("select * from information_schema.TABLE_CONSTRAINTS WHERE TABLE_NAME != 'CLUSTER_SLOW_QUERY';").Check([][]any{})
+	constraintsTester.MustQuery("select * from information_schema.TABLE_CONSTRAINTS WHERE TABLE_NAME != 'CLUSTER_SLOW_QUERY' AND TABLE_NAME != 'CLUSTER_AUDIT_LOG';").Check([][]any{})
 
 	// test the privilege of user with privilege of mysql.gc_delete_range for information_schema.table_constraints
 	tk.MustExec("CREATE ROLE r_gc_delete_range ;")
@@ -130,7 +130,7 @@ func TestUserPrivileges(t *testing.T) {
 		Username: "tester1",
 		Hostname: "127.0.0.1",
 	}, nil, nil, nil))
-	tk1.MustQuery("select * from information_schema.STATISTICS WHERE TABLE_NAME != 'CLUSTER_SLOW_QUERY';").Check([][]any{})
+	tk1.MustQuery("select * from information_schema.STATISTICS WHERE TABLE_NAME != 'CLUSTER_SLOW_QUERY' AND TABLE_NAME != 'CLUSTER_AUDIT_LOG';").Check([][]any{})
 
 	// test the privilege of user with some privilege for information_schema
 	tk.MustExec("create user tester2")
@@ -767,22 +767,22 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 	if kerneltype.IsClassic() {
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE table_name = "t1";`).Check(testkit.RowsWithSep("|",
-			"135|add index|public|128|133|t1|synced",
-			"134|create table|public|128|133|t1|synced",
-			"121|add index|public|114|119|t1|synced",
-			"120|create table|public|114|119|t1|synced",
+			"157|add index|public|150|155|t1|synced",
+			"156|create table|public|150|155|t1|synced",
+			"143|add index|public|136|141|t1|synced",
+			"142|create table|public|136|141|t1|synced",
 		))
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE db_name = "d1" and JOB_TYPE LIKE "add index%%";`).Check(testkit.RowsWithSep("|",
-			"141|add index|public|128|139|t3|synced",
-			"138|add index|public|128|136|t2|synced",
-			"135|add index|public|128|133|t1|synced",
-			"132|add index|public|128|130|t0|synced",
+			"163 add index public 150 161 t3 synced",
+			"160 add index public 150 158 t2 synced",
+			"157 add index public 150 155 t1 synced",
+			"154 add index public 150 152 t0 synced",
 		))
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and table_name = "t3";`).Check(testkit.RowsWithSep("|",
-			"127|add index|public|114|125|t3|synced",
-			"126|create table|public|114|125|t3|synced",
+			"149 add index public 136 147 t3 synced",
+			"148 create table public 136 147 t3 synced",
 		))
 	} else {
 		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
@@ -816,15 +816,15 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 			if kerneltype.IsClassic() {
 				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE table_name = "t0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"142 add index write only 114 116 t0 running",
+					"164 add index write only 136 138 t0 running",
 				))
 				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"142 add index write only 114 116 t0 running",
+					"164 add index write only 136 138 t0 running",
 				))
 				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE state = "running";`).Check(testkit.RowsWithSep("|",
-					"142 add index write only 114 116 t0 running",
+					"164 add index write only 136 138 t0 running",
 				))
 			} else {
 				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
@@ -856,8 +856,8 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 	if kerneltype.IsClassic() {
 		tk.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 				   FROM information_schema.ddl_jobs WHERE db_name = "test2" and table_name = "t1"`).Check(testkit.RowsWithSep("|",
-			"151|create table|public|148|150|t1|synced",
-			"146|create table|public|143|145|t1|synced",
+			"173|create table|public|170|172|t1|synced",
+			"168|create table|public|165|167|t1|synced",
 		))
 	} else {
 		tk.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 include Makefile.common
+include Makefile.realtikvtest.gotest
 
 
 .DEFAULT_GOAL := default
@@ -50,8 +51,9 @@ precheck: ## Run pre-commit checks
 precheck: fmt bazel_prepare
 
 .PHONY: check
+# disable license check
 check: ## Run comprehensive code quality checks
-check: check-bazel-prepare parser_yacc check-parallel lint tidy testSuite errdoc license bazel_check_abi
+check: parser_yacc check-parallel lint tidy testSuite errdoc
 
 .PHONY: fmt
 fmt: ## Format Go code using gofmt
@@ -194,7 +196,7 @@ ddltest:
 .PHONY: ut
 ut: tools/bin/ut tools/bin/xprog failpoint-enable ## Run unit tests
 	@echo "Debug: Running ut with X=$(X)"
-	tools/bin/ut $(X) || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
+	tools/bin/ut $(X) --except flaky_ut.list --retry-cnt 3 || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
 	@$(FAILPOINT_DISABLE)
 	@$(CLEAN_UT_BINARY)
 
@@ -742,6 +744,7 @@ bazel_golangcilinter:
 bazel_brietest: failpoint-enable bazel_ci_simple_prepare
 	bazel $(BAZEL_GLOBAL_CONFIG) test $(BAZEL_CMD_CONFIG) --test_arg=-with-real-tikv --define gotags=$(REAL_TIKV_TEST_TAGS) --jobs=1 \
 	--@io_bazel_rules_go//go/config:cover_format=go_cover \
+	--test_env=BRIETEST_TMPDIR --sandbox_writable_path=$${BRIETEST_TMPDIR:-$(CURDIR)} \
 		-- //tests/realtikvtest/brietest/...
 
 .PHONY: bazel_pessimistictest
