@@ -2109,6 +2109,11 @@ func (e *SimpleExec) executeGrantRole(ctx context.Context, s *ast.GrantRoleStmt)
 	defer e.ReleaseSysSession(internalCtx, restrictedCtx)
 	sqlExecutor := restrictedCtx.GetSQLExecutor()
 
+	err = checkExclusiveRoleGranting(internalCtx, sqlExecutor, s.Roles, s.Users)
+	if err != nil {
+		return err
+	}
+
 	// begin a transaction to insert role graph edges.
 	if _, err := sqlExecutor.ExecuteInternal(internalCtx, "begin"); err != nil {
 		return err

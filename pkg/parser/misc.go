@@ -1089,6 +1089,7 @@ var hintTokenMap = map[string]int{
 	"HASH_AGG":                hintHashAgg,
 	"MPP_1PHASE_AGG":          hintMpp1PhaseAgg,
 	"MPP_2PHASE_AGG":          hintMpp2PhaseAgg,
+	"FULL":                    hintFull,
 	"IGNORE_INDEX":            hintIgnoreIndex,
 	"NO_INDEX":                hintNoIndex,
 	"INL_HASH_JOIN":           hintInlHashJoin,

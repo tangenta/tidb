@@ -792,14 +792,6 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableProcedure, Value: vardef.Off, Type: vardef.TypeBool,
 		SetGlobal: func(ctx context.Context, s *SessionVars, val string) error {
 			on := TiDBOptOn(val)
-			// For user initiated SET GLOBAL, also change the value of TiDBSuperReadOnly
-			if on && s.StmtCtx.StmtType == "Set" {
-				s.EnableSPParamSubstitute = on
-				err := s.GlobalVarsAccessor.SetGlobalSysVar(context.Background(), vardef.TiDBEnableSPParamSubstitute, "ON")
-				if err != nil {
-					return err
-				}
-			}
 			vardef.TiDBEnableProcedureValue.Store(on)
 			return nil
 		}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
@@ -2963,6 +2955,8 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.SQLRequirePrimaryKey, Value: vardef.Off, Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
 		s.PrimaryKeyRequired = TiDBOptOn(val)
 		return nil
+	}, RequireDynamicPrivileges: func(isGlobal bool, sem bool) []string {
+		return []string{"SYSTEM_VARIABLES_ADMIN"}
 	}},
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableAnalyzeSnapshot, Value: BoolToOnOff(vardef.DefTiDBEnableAnalyzeSnapshot), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
 		s.EnableAnalyzeSnapshot = TiDBOptOn(val)
