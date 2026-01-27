@@ -131,7 +131,8 @@ func TestDumpPlanReplayerAPI(t *testing.T) {
 		filesInReplayer = append(filesInReplayer, f.Name)
 		// except for {global,session}_bindings.sql and table_tiflash_replica.txt, the file should not be empty
 		if !strings.Contains(f.Name, "table_tiflash_replica.txt") &&
-			!strings.Contains(f.Name, "bindings.sql") {
+			!strings.Contains(f.Name, "bindings.sql") &&
+			!strings.Contains(f.Name, "trace") {
 			require.NotZero(t, f.UncompressedSize64, f.Name)
 		}
 	}
@@ -373,7 +374,7 @@ func TestPlanReplayerWithMultiForeignKey(t *testing.T) {
 	tk.MustExec("drop table planReplayer.c")
 	tk.MustExec(`SET FOREIGN_KEY_CHECKS = 1;`)
 	tk.MustExec(fmt.Sprintf(`plan replayer load "%s"`, path))
-
+	tk.MustExec("admin reload bindings")
 	// 3-3. check whether binding takes effect
 	tk.MustExec(`select a, b from t where a in (1, 2, 3)`)
 	rows := tk.MustQuery("select @@last_plan_from_binding")

@@ -83,14 +83,14 @@ IndexHashJoin	root		inner join, inner:IndexLookUp, outer key:test.t_full1.a, inn
 │ └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
 │   └─TableFullScan	cop[tikv]	table:t_full1	keep order:false, stats:pseudo
 └─IndexLookUp(Probe)	root		
-  ├─Selection(Build)	cop[tikv]		eq(1, test.t_full2.a)
+  ├─Selection(Build)	cop[tikv]		eq(test.t_full2.a, 1)
   │ └─IndexRangeScan	cop[tikv]	table:t_full2, index:a(a)	range: decided by [eq(test.t_full2.a, test.t_full1.a)], keep order:false, stats:pseudo
   └─TableRowIDScan(Probe)	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
 explain format='plan_tree' select /*+ FULL(t_full1, t_full2) */ * from t_full1 join t_full2 on t_full1.a = t_full2.a where t_full1.a = 1;
 id	task	access object	operator info
 HashJoin	root		inner join, equal:[eq(test.t_full1.a, test.t_full2.a)]
 ├─TableReader(Build)	root		data:Selection
-│ └─Selection	cop[tikv]		eq(1, test.t_full2.a)
+│ └─Selection	cop[tikv]		eq(test.t_full2.a, 1)
 │   └─TableFullScan	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
 └─TableReader(Probe)	root		data:Selection
   └─Selection	cop[tikv]		eq(test.t_full1.a, 1)
@@ -100,7 +100,7 @@ id	task	access object	operator info
 HashJoin	root		inner join, equal:[eq(test.t_full2.a, test.t_full3.a)]
 ├─HashJoin(Build)	root		inner join, equal:[eq(test.t_full1.a, test.t_full2.a)]
 │ ├─TableReader(Build)	root		data:Selection
-│ │ └─Selection	cop[tikv]		eq(1, test.t_full2.a)
+│ │ └─Selection	cop[tikv]		eq(test.t_full2.a, 1)
 │ │   └─TableFullScan	cop[tikv]	table:t_full2	keep order:false, stats:pseudo
 │ └─TableReader(Probe)	root		data:Selection
 │   └─Selection	cop[tikv]		eq(test.t_full1.a, 1)

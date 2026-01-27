@@ -7472,7 +7472,6 @@ UnReservedKeyword:
 |	"STACKED"
 |	"RETURNED_SQLSTATE"
 
-
 TiDBKeyword:
 	"ADMIN"
 |	"BATCH"
