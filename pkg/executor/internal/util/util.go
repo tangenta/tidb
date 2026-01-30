@@ -15,7 +15,6 @@
 package util
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -24,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -37,17 +35,9 @@ func GetFunctionName() string {
 
 // CheckNoLeakFiles checks if there are file leaks
 func CheckNoLeakFiles(t *testing.T, fileNamePrefixForTest string) {
-	tempStoragePath := config.GetGlobalConfig().TempStoragePath
-	log.Info(fmt.Sprintf("path: %s", tempStoragePath))
-
-	if _, err := os.Stat(tempStoragePath); err != nil {
-		if os.IsNotExist(err) {
-			return
-		}
-		require.NoError(t, err)
-	}
-
-	err := filepath.WalkDir(tempStoragePath, func(_ string, d fs.DirEntry, err error) error {
+	path := config.GetGlobalConfig().TempStoragePath
+	require.Equal(t, filepath.Dir(t.TempDir()), filepath.Dir(path))
+	err := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return fs.SkipDir

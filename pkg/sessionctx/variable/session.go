@@ -1824,6 +1824,9 @@ type SessionVars struct {
 
 	// OutPacketBytes records the total outcoming packet bytes to clients for current session.
 	OutPacketBytes atomic.Uint64
+
+	// IndexLookUpPushDownPolicy indicates the policy of index look up push down.
+	IndexLookUpPushDownPolicy string
 	// CreateFromSelectUsingImport indicates whether to use import into to create table as select.
 	CreateFromSelectUsingImport bool
 
@@ -2397,6 +2400,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		RegardNULLAsPoint:             vardef.DefTiDBRegardNULLAsPoint,
 		AllowProjectionPushDown:       vardef.DefOptEnableProjectionPushDown,
 		SkipMissingPartitionStats:     vardef.DefTiDBSkipMissingPartitionStats,
+		IndexLookUpPushDownPolicy:     vardef.DefTiDBIndexLookUpPushDownPolicy,
 		inCallProcedure: struct {
 			inCall bool
 			num    int

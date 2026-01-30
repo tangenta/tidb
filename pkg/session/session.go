@@ -4476,6 +4476,12 @@ func runInBootstrapSession(store kv.Storage, ver, verEE int64) ddl.StartMode {
 		// to let the older owner have time to notice that it's already retired.
 		time.Sleep(owner.WaitTimeOnForceOwner)
 		upgrade(s)
+	case ddl.Normal:
+		// We need to init MDL variable before start the domain to prevent potential stuck issue
+		// when upgrade is skipped. See https://github.com/pingcap/tidb/issues/64539.
+		if err := InitMDLVariable(store); err != nil {
+			logutil.BgLogger().Fatal("init metadata lock failed during normal startup", zap.Error(err))
+		}
 	}
 	finishBootstrap(store)
 	s.ClearValue(sessionctx.Initing)

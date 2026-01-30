@@ -266,6 +266,7 @@ var Keywords = []KeywordsType{
 	{"ACTION", false, "unreserved"},
 	{"ADD_COLUMNAR_REPLICA_ON_DEMAND", false, "unreserved"},
 	{"ADVISE", false, "unreserved"},
+	{"AFFINITY", false, "unreserved"},
 	{"AFTER", false, "unreserved"},
 	{"AGAINST", false, "unreserved"},
 	{"AGO", false, "unreserved"},

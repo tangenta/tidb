@@ -319,6 +319,7 @@ import (
 	action                     "ACTION"
 	addColumnarReplicaOnDemand "ADD_COLUMNAR_REPLICA_ON_DEMAND"
 	advise                     "ADVISE"
+	affinity                    "AFFINITY"
 	after                      "AFTER"
 	against                    "AGAINST"
 	ago                        "AGO"
@@ -7072,6 +7073,7 @@ UnReservedKeyword:
 |	"STATS_COL_LIST"
 |	"AUTO_ID_CACHE"
 |	"AUTO_INCREMENT"
+|   "AFFINITY"
 |	"AFTER"
 |	"ALWAYS"
 |	"AVG"
@@ -12507,6 +12509,10 @@ ShowTargetFilterable:
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowColumnStatsUsage}
 	}
+|	"AFFINITY"
+	{
+		$$ = &ast.ShowStmt{Tp: ast.ShowAffinity}
+	}
 |	"ANALYZE" "STATUS"
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowAnalyzeStatus}
@@ -13270,7 +13276,11 @@ TableOption:
 		yylex.AppendError(yylex.Errorf("The AUTOEXTEND_SIZE option is parsed but ignored by all storage engines."))
 		parser.lastErrorAsWarn()
 	}
-/* MariaDB specific options 
+|	"AFFINITY" EqOpt StringName
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionAffinity, StrValue: $3}
+	}
+/* MariaDB specific options
  * - https://mariadb.com/docs/server/reference/sql-statements/data-definition/create/create-table
  */
 |	"PAGE_CHECKSUM" EqOpt LengthNum
