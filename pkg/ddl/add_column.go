@@ -260,7 +260,7 @@ func CreateNewColumn(ctx sessionctx.Context, schema *model.DBInfo, spec *ast.Alt
 						return nil, errors.Trace(err)
 					}
 					return nil, errors.Trace(dbterror.ErrAddColumnWithSequenceAsDefault.GenWithStackByArgs(specNewColumn.Name.Name.O))
-				case ast.Rand, ast.UUID, ast.UUIDToBin, ast.Replace, ast.Upper:
+				case ast.Rand, ast.UUID, ast.UUIDShort, ast.UUIDToBin, ast.Replace, ast.Upper:
 					return nil, errors.Trace(dbterror.ErrBinlogUnsafeSystemFunction.GenWithStackByArgs())
 				}
 			}
@@ -647,6 +647,23 @@ func SetDefaultValue(ctx expression.BuildContext, col *table.Column, option *ast
 	return hasDefaultValue, nil
 }
 
+// allowedDateFormatSpecifiers holds the set of format strings that are permitted
+// within a DEFAULT value expression for the DATE_FORMAT function.
+var allowedDateFormatSpecifiers = map[string]struct{}{
+	"%Y-%m":             {},
+	"%Y-%m-%d":          {},
+	"%y%m%d":            {},
+	"%Y-%m-%d %H.%i.%s": {},
+	"%Y-%m-%d %H:%i:%s": {},
+}
+
+// isAllowedDateFormatSpecifier checks if the given format specifier
+// is in the whitelist of formats allowed for default value expressions.
+func isAllowedDateFormatSpecifier(specifier string) bool {
+	_, ok := allowedDateFormatSpecifiers[specifier]
+	return ok
+}
+
 // getFuncCallDefaultValue gets the default column value of function-call expression.
 func getFuncCallDefaultValue(col *table.Column, option *ast.ColumnOption, expr *ast.FuncCallExpr) (any, bool, error) {
 	switch expr.FnName.L {
@@ -682,30 +699,12 @@ func getFuncCallDefaultValue(col *table.Column, option *ast.ColumnOption, expr *
 		col.DefaultIsExpr = true
 		return str, false, nil
 	case ast.DateFormat: // DATE_FORMAT()
-		if err := expression.VerifyArgsWrapper(expr.FnName.L, len(expr.Args)); err != nil {
+		str, err := validateDateFormatDefaultExpr(col, expr)
+		if err != nil {
 			return nil, false, errors.Trace(err)
 		}
-		// Support DATE_FORMAT(NOW(),'%Y-%m'), DATE_FORMAT(NOW(),'%Y-%m-%d'),
-		// DATE_FORMAT(NOW(),'%Y-%m-%d %H.%i.%s'), DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s').
-		nowFunc, ok := expr.Args[0].(*ast.FuncCallExpr)
-		if ok && nowFunc.FnName.L == ast.Now {
-			if err := expression.VerifyArgsWrapper(nowFunc.FnName.L, len(nowFunc.Args)); err != nil {
-				return nil, false, errors.Trace(err)
-			}
-			valExpr, isValue := expr.Args[1].(ast.ValueExpr)
-			if !isValue || (valExpr.GetString() != "%Y-%m" && valExpr.GetString() != "%Y-%m-%d" &&
-				valExpr.GetString() != "%Y-%m-%d %H.%i.%s" && valExpr.GetString() != "%Y-%m-%d %H:%i:%s") {
-				return nil, false, dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(), valExpr)
-			}
-			str, err := restoreFuncCall(expr)
-			if err != nil {
-				return nil, false, errors.Trace(err)
-			}
-			col.DefaultIsExpr = true
-			return str, false, nil
-		}
-		return nil, false, dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(),
-			fmt.Sprintf("%s with disallowed args", expr.FnName.String()))
+		col.DefaultIsExpr = true
+		return str, false, nil
 	case ast.Replace:
 		if err := expression.VerifyArgsWrapper(expr.FnName.L, len(expr.Args)); err != nil {
 			return nil, false, errors.Trace(err)
@@ -808,20 +807,83 @@ func getFuncCallDefaultValue(col *table.Column, option *ast.ColumnOption, expr *
 	}
 }
 
+// getCastFuncDefaultValue handles the validation for a CAST expression used as a default value.
+func getCastFuncDefaultValue(col *table.Column, x *ast.FuncCastExpr) (any, bool, error) {
+	// Unwrap any layers of parentheses. This loop handles cases like (...) and ((...)).
+	var innerExpr = x.Expr
+	for pexpr, ok := innerExpr.(*ast.ParenthesesExpr); ok; pexpr, ok = innerExpr.(*ast.ParenthesesExpr) {
+		innerExpr = pexpr.Expr
+	}
+
+	// Support CAST(DATE_FORMAT(..., ...) AS ...).
+	if dateFormatFunc, ok := innerExpr.(*ast.FuncCallExpr); ok && dateFormatFunc.FnName.L == ast.DateFormat {
+		str, err := validateDateFormatDefaultExpr(col, dateFormatFunc)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+		col.DefaultIsExpr = true
+		return str, false, nil
+	}
+
+	return nil, false, dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(),
+		fmt.Sprintf("%s with disallowed args", "cast"))
+}
+
+func validateDateFormatDefaultExpr(col *table.Column, expr *ast.FuncCallExpr) (string, error) {
+	if err := expression.VerifyArgsWrapper(expr.FnName.L, len(expr.Args)); err != nil {
+		return "", errors.Trace(err)
+	}
+
+	switch arg0 := expr.Args[0].(type) {
+	case *ast.FuncCallExpr:
+		if arg0.FnName.L != ast.Now {
+			return "", dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(),
+				fmt.Sprintf("%s with disallowed function %s", expr.FnName.String(), arg0.FnName.String()))
+		}
+		if err := expression.VerifyArgsWrapper(arg0.FnName.L, len(arg0.Args)); err != nil {
+			return "", errors.Trace(err)
+		}
+	case ast.ValueExpr:
+		// A literal string like '2025-08-08 13:13:13' is a deterministic value and is allowed.
+	default:
+		return "", dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(),
+			fmt.Sprintf("%s with disallowed args", expr.FnName.String()))
+	}
+
+	valExpr, isValue := expr.Args[1].(ast.ValueExpr)
+	if !isValue || !isAllowedDateFormatSpecifier(valExpr.GetString()) {
+		return "", dbterror.ErrDefValGeneratedNamedFunctionIsNotAllowed.GenWithStackByArgs(col.Name.String(), valExpr)
+	}
+
+	str, err := restoreFuncCall(expr)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return str, nil
+}
+
 // getDefaultValue will get the default value for column.
 // 1: get the expr restored string for the column which uses sequence next value as default value.
 // 2: get specific default value for the other column.
 func getDefaultValue(ctx exprctx.BuildContext, col *table.Column, option *ast.ColumnOption) (any, bool, error) {
-	// handle default value with function call
-	tp, fsp := col.FieldType.GetType(), col.FieldType.GetDecimal()
-	if x, ok := option.Expr.(*ast.FuncCallExpr); ok {
+	switch x := option.Expr.(type) {
+	case *ast.FuncCallExpr:
+		// handle default value with function call
 		val, isSeqExpr, err := getFuncCallDefaultValue(col, option, x)
 		if val != nil || isSeqExpr || err != nil {
 			return val, isSeqExpr, err
 		}
 		// If the function call is ast.CurrentTimestamp, it needs to be continuously processed.
+	case *ast.FuncCastExpr:
+		// handle default value with cast function
+		val, isSeqExpr, err := getCastFuncDefaultValue(col, x)
+		if val != nil || isSeqExpr || err != nil {
+			return val, isSeqExpr, err
+		}
 	}
 
+	tp, fsp := col.FieldType.GetType(), col.FieldType.GetDecimal()
 	if tp == mysql.TypeTimestamp || tp == mysql.TypeDatetime || tp == mysql.TypeDate {
 		vd, err := expression.GetTimeValue(ctx, option.Expr, tp, fsp, nil)
 		value := vd.GetValue()

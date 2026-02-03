@@ -345,4 +345,6 @@ const (
 	ValidatePasswordSpecialCharCount = "validate_password.special_char_count"
 	// ValidatePasswordDictionary specified the dictionary that validate_password uses for checking passwords. Each word is separated by semicolon (;).
 	ValidatePasswordDictionary = "validate_password.dictionary"
+	// SPCacheSize specified the soft upper limit for number of cached stored routines for one connection.
+	SPCacheSize = "stored_program_cache"
 )

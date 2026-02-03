@@ -17,6 +17,8 @@ package expression
 import (
 	"math"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -163,6 +165,55 @@ func TestUUID(t *testing.T) {
 	}
 	_, err = funcs[ast.UUID].getFunction(ctx, datumsToConstants(nil))
 	require.NoError(t, err)
+}
+
+func TestUUIDShort(t *testing.T) {
+	ctx := createContext(t)
+	f, err := newFunctionForTest(ctx, ast.UUIDShort)
+	require.NoError(t, err)
+	_, err = f.Eval(ctx, chunk.Row{})
+	require.Error(t, err) // unknown sever id
+	_, err = funcs[ast.UUIDShort].getFunction(ctx, datumsToConstants(nil))
+	require.NoError(t, err)
+}
+
+func TestUUIDShortAllocator(t *testing.T) {
+	allocator := UUIDShortAllocator{
+		ts:    1760422595,
+		count: 0,
+	}
+	// basic test.
+	require.Equal(t, uint64(101592584165523456), allocator.next(1))
+
+	// concurrency test
+	now := time.Now().Unix()
+	allocator.ts = now
+	values := sync.Map{}
+	for i := 1; i < 100; i++ {
+		id := allocator.next(1)
+		_, loaded := values.LoadOrStore(id, true)
+		require.False(t, loaded, "duplicated value")
+	}
+	allocator.count = math.MaxUint32 - 100
+	var wg sync.WaitGroup
+	count := uint64(0)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				id := allocator.next(1)
+				_, loaded := values.LoadOrStore(id, true)
+				require.False(t, loaded, "duplicated value")
+				if atomic.AddUint64(&count, 1) > 10000 {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	require.True(t, 10000 < count)
+	require.True(t, now < allocator.ts)
 }
 
 func TestAnyValue(t *testing.T) {

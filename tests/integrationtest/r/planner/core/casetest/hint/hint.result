@@ -1633,6 +1633,14 @@ select /*+ USE_INDEX_MERGE(t1, primary, a, b, c) */ * from t1;
 a	b	c
 Level	Code	Message
 Warning	1815	use_index_merge(planner__core__casetest__hint__hint.t1, primary, a, b, c) is inapplicable, check whether the indexes (c) exist, or the indexes are conflicted with use_index/ignore_index/force_index hints.
+drop table if exists t_conflict;
+Level	Code	Message
+Note	1051	Unknown table 'planner__core__casetest__hint__hint.t_conflict'
+create table t_conflict(a int, index idx_a(a));
+explain format='plan_tree' select /*+ FULL(t_conflict) USE_INDEX(t_conflict, idx_a) */ * from t_conflict;
+id	task	access object	operator info
+IndexReader	root		index:IndexFullScan
+└─IndexFullScan	cop[tikv]	table:t_conflict, index:idx_a(a)	keep order:false, stats:pseudo
 drop table if exists t1;
 drop view if exists v1;
 CREATE TABLE t1 (c1 INT PRIMARY KEY, c2 INT, INDEX (c2));

@@ -29,7 +29,7 @@ SELECT UUID_TIMESTAMP('019b1440-87b7-7380-ab00-ce413e795004');
 UUID_TIMESTAMP('019b1440-87b7-7380-ab00-ce413e795004')
 1765571332.023000
 SELECT UUID_SHORT();
-Error 1305 (42000): FUNCTION UUID_SHORT does not exist
+Error 1105 (HY000): Unspecified server ID. Set the config `instance.server_id` to an integer between 1 and 255 when using `UUID_SHORT()`.
 CREATE TABLE t123 (id int PRIMARY KEY, uuid VARCHAR(255) AS (UUID()));
 Error 3102 (HY000): Expression of generated column 'uuid' contains a disallowed function.
 CREATE TABLE t123 (id int PRIMARY KEY, uuid VARCHAR(255) AS (UUID_V4()));
