@@ -61,6 +61,11 @@ func TestSQLRules(t *testing.T) {
 			expected: true,
 		},
 		{
+			rule:     SelectIntoFileRule,
+			stmt:     "SELECT 1 INTO @a",
+			expected: false,
+		},
+		{
 			rule:     ImportFromLocalRule,
 			stmt:     "IMPORT INTO t1 FROM '/bucket/path/to/file.csv'",
 			expected: true,
