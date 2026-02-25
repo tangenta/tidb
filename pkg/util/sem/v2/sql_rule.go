@@ -110,7 +110,7 @@ var ImportWithExternalIDRule SQLRule = func(stmt ast.StmtNode) bool {
 // SelectIntoFileRule SQLRule returns true if the SQL statement is a SELECT INTO OUTFILE statement.
 var SelectIntoFileRule SQLRule = func(stmt ast.StmtNode) bool {
 	if selectStmt, ok := stmt.(*ast.SelectStmt); ok {
-		return selectStmt.SelectIntoOpt != nil
+		return selectStmt.SelectIntoOpt != nil && selectStmt.SelectIntoOpt.Tp == ast.SelectIntoOutfile
 	}
 	return false
 }

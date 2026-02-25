@@ -409,6 +409,8 @@ func doDDLWorks(s sessionapi.Session) {
 	mustExecute(s, metadef.CreateSchemaUnusedIndexesView)
 	// Create a test database.
 	mustExecute(s, "CREATE DATABASE IF NOT EXISTS test")
+	// Create PKDB specific system tables.
+	doPkdbDDLWorks(s)
 }
 
 func checkSystemTableConstraint(tblInfo *model.TableInfo) error {
@@ -512,6 +514,7 @@ func doDMLWorks(s sessionapi.Session) {
 	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES(%?, %?, "Bootstrap version. Do not delete.")`,
 		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion,
 	)
+	doPkdbDMLWorks(s)
 	writeSystemTZ(s)
 
 	writeNewCollationParameter(s, config.GetGlobalConfig().NewCollationsEnabledOnFirstBootstrap)

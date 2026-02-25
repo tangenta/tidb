@@ -8,9 +8,10 @@ go_library(
         "contextimpl.go",
         "mock_bootstrap.go",
         "nontransactional.go",
+        "pkdb_bootstrap.go",
         "session.go",
         "sync_upgrade.go",
-        "testutil.go",  #keep
+        "testutil.go",
         "tidb.go",
         "txn.go",
         "txnmanager.go",
@@ -44,6 +45,8 @@ go_library(
         "//pkg/expression/exprstatic",
         "//pkg/expression/sessionexpr",
         "//pkg/extension",
+        "//pkg/extension/enterprise/audit",
+        "//pkg/extension/enterprise/whitelist",
         "//pkg/extension/extensionimpl",
         "//pkg/infoschema",
         "//pkg/infoschema/context",
@@ -130,6 +133,7 @@ go_library(
         "//pkg/util/topsql/stmtstats",
         "//pkg/util/traceevent",
         "//pkg/util/tracing",
+        "@com_gitee_trisia_gotlcp//tlcp",
         "@com_github_ngaut_pools//:pools",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_failpoint//:failpoint",
@@ -152,11 +156,13 @@ go_library(
 
 go_test(
     name = "session_test",
-    timeout = "moderate",
+    timeout = "short",
     srcs = [
         "bench_test.go",
+        "bootstrap_duty_separation_test.go",
         "bootstrap_test.go",
         "main_test.go",
+        "pkdb_bootstrap_test.go",
         "session_test.go",
         "tidb_test.go",
         "upgrade_test.go",
@@ -164,7 +170,7 @@ go_test(
     embed = [":session"],
     flaky = True,
     race = "off",
-    shard_count = 46,
+    shard_count = 50,
     deps = [
         "//pkg/autoid_service",
         "//pkg/bindinfo",
@@ -175,6 +181,7 @@ go_test(
         "//pkg/executor",
         "//pkg/expression",
         "//pkg/expression/sessionexpr",
+        "//pkg/extension/enterprise/audit",
         "//pkg/keyspace",
         "//pkg/kv",
         "//pkg/meta",
@@ -207,7 +214,6 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@com_github_tikv_client_go_v2//tikv",
         "@io_etcd_go_etcd_tests_v3//integration",
-        "@org_uber_go_atomic//:atomic",  #keep
         "@org_uber_go_goleak//:goleak",
         "@org_uber_go_zap//:zap",
         "@org_uber_go_zap//zapcore",

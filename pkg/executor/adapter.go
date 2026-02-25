@@ -89,6 +89,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const (
+	// rcWaitAuditLog is the audit log template for pending due to resource control
+	rcWaitAuditLog = "[Resource group wait time:%s] [Resource group name:%s]"
+	// rcErrorAuditLog is the audit log template for resource control failure
+	rcErrorAuditLog = "[Resource group error:%s] [Resource group name:%s]"
+)
+
 // processinfoSetter is the interface use to set current running process info.
 type processinfoSetter interface {
 	SetProcessInfo(string, time.Time, byte, uint64)
@@ -1111,6 +1118,15 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e exec.Executor) (
 	return nil, err
 }
 
+// CallStmt is used to execute procedure. If call the function txnManager.OnPessimisticStmtStart(ctx), it will create KVTxn.aggressiveLockingContext,
+// when it goes to the first statement of the procedure, it will call the function txnManager.OnPessimisticStmtStart(ctx) again which leads to panic at driver/txn/txn_driver.go:385.
+// So it needs to skip txnManager.OnPessimisticStmtStart(ctx) for callStmt.
+// The executing of sql statements in procedure will call txnManager.OnPessimisticStmtStart and txnManager.OnPessimisticStmtEnd.
+func (a *ExecStmt) needSkipPessimisticStmtStart() bool {
+	_, ok := a.StmtNode.(*ast.CallStmt)
+	return ok
+}
+
 func (a *ExecStmt) handlePessimisticDML(ctx context.Context, e exec.Executor) (err error) {
 	sctx := a.Ctx
 	// Do not activate the transaction here.
@@ -1141,15 +1157,22 @@ func (a *ExecStmt) handlePessimisticDML(ctx context.Context, e exec.Executor) (e
 	}()
 
 	txnManager := sessiontxn.GetTxnManager(a.Ctx)
-	err = txnManager.OnPessimisticStmtStart(ctx)
+	if !a.needSkipPessimisticStmtStart() {
+		err = txnManager.OnPessimisticStmtStart(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	if err != nil {
 		return err
 	}
 	defer func() {
 		isSuccessful := err == nil
-		err1 := txnManager.OnPessimisticStmtEnd(ctx, isSuccessful)
-		if err == nil && err1 != nil {
-			err = err1
+		if !a.needSkipPessimisticStmtStart() {
+			err1 := txnManager.OnPessimisticStmtEnd(ctx, isSuccessful)
+			if err == nil && err1 != nil {
+				err = err1
+			}
 		}
 	}()
 
@@ -1479,6 +1502,31 @@ func (a *ExecStmt) observePhaseDurations(internal bool, commitDetails *util.Comm
 	}
 }
 
+// rcAuitLog write audit log about resource group
+func (a *ExecStmt) rcAuitLog(err error) {
+	if a.Ctx.GetExtensions() == nil || err == nil {
+		return
+	}
+
+	if !a.Ctx.GetExtensions().HasSecurityEventListeners() {
+		return
+	}
+
+	errInfo := err.Error()
+	if strings.Contains(errInfo, "Query execution was interrupted, identified as runaway query") || strings.Contains(errInfo, "Quarantined and interrupted because of being in runaway watch list") {
+		sessionctx.OnExtensionSecurity(a.Ctx, fmt.Sprintf(rcErrorAuditLog, errInfo, a.Ctx.GetSessionVars().StmtCtx.ResourceGroup), a.Ctx.GetSessionVars().StmtCtx)
+		return
+	}
+
+	ruDetails := util.NewRUDetails()
+	if ruDetailsVal := a.GoCtx.Value(util.RUDetailsCtxKey); ruDetailsVal != nil {
+		ruDetails = ruDetailsVal.(*util.RUDetails)
+	}
+	if ruDetails.RUWaitDuration() > 0 {
+		sessionctx.OnExtensionSecurity(a.Ctx, fmt.Sprintf(rcWaitAuditLog, ruDetails.RUWaitDuration(), a.Ctx.GetSessionVars().StmtCtx.ResourceGroup), a.Ctx.GetSessionVars().StmtCtx)
+	}
+}
+
 // FinishExecuteStmt is used to record some information after `ExecStmt` execution finished:
 // 1. record slow log if needed.
 // 2. record summary statement.
@@ -1519,6 +1567,7 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	a.updateNetworkTrafficStatsAndMetrics()
 	// `LowSlowQuery` and `SummaryStmt` must be called before recording `PrevStmt`.
 	a.LogSlowQuery(txnTS, succ, hasMoreResults)
+	a.rcAuitLog(err)
 	a.SummaryStmt(succ)
 	a.observeStmtFinishedForTopSQL()
 	a.UpdatePlanCacheRuntimeInfo()
@@ -1702,8 +1751,8 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	var slowItems *variable.SlowQueryLogItems
 	var matchRules bool
 	if !stmtCtx.WriteSlowLog {
-		// If the level is Debug, or trace is enabled, print slow logs anyway.
-		force := log.GetLevel() <= zapcore.DebugLevel || trace.IsEnabled()
+		// if the level is Debug, print slow logs anyway
+		force := log.GetLevel() <= zapcore.DebugLevel
 		if !cfg.Instance.EnableSlowLog.Load() && !force {
 			return
 		}
