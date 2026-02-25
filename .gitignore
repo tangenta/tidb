@@ -29,6 +29,9 @@ export-20*/
 *-coverage.xml
 *-junit-report.xml
 compose-dev.yaml
+# Pingkai section
+tidb-enterprise-utilities
+tidb-security-advanced
 # Files generated when testing
 out
 /_bazel
@@ -47,5 +50,4 @@ coverage.dat
 .golangci.bck.yml
 go.work
 go.work.sum
-tidb-enterprise-utilities
-tidb-security-advanced
+.cursor
