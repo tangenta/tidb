@@ -617,6 +617,7 @@ func TestDMLStmt(t *testing.T) {
 			WHERE stuff.value >= ALL (SELECT stuff.value
 			FROM stuff)`, true, "SELECT `stuff`.`id` FROM `stuff` WHERE `stuff`.`value`>=ALL (SELECT `stuff`.`value` FROM `stuff`)"},
 		{"BEGIN", true, "START TRANSACTION"},
+		{"BEGIN WORK", true, "START TRANSACTION"},
 		{"START TRANSACTION", true, "START TRANSACTION"},
 		// 45
 		{"COMMIT", true, "COMMIT"},
@@ -626,6 +627,7 @@ func TestDMLStmt(t *testing.T) {
 		{"COMMIT AND NO CHAIN RELEASE", true, "COMMIT RELEASE"},
 		{"COMMIT AND CHAIN NO RELEASE", true, "COMMIT AND CHAIN"},
 		{"COMMIT AND CHAIN RELEASE", false, ""},
+		{"COMMIT WORK", true, "COMMIT"},
 		{"ROLLBACK", true, "ROLLBACK"},
 		{"ROLLBACK AND NO CHAIN", true, "ROLLBACK"},
 		{"ROLLBACK NO RELEASE", true, "ROLLBACK"},
@@ -633,6 +635,7 @@ func TestDMLStmt(t *testing.T) {
 		{"ROLLBACK AND NO CHAIN RELEASE", true, "ROLLBACK RELEASE"},
 		{"ROLLBACK AND CHAIN NO RELEASE", true, "ROLLBACK AND CHAIN"},
 		{"ROLLBACK AND CHAIN RELEASE", false, ""},
+		{"ROLLBACK WORK", true, "ROLLBACK"},
 		{`BEGIN;
 			INSERT INTO foo VALUES (42, 3.14);
 			INSERT INTO foo VALUES (-1, 2.78);
@@ -824,6 +827,15 @@ func TestDMLStmt(t *testing.T) {
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' optionally enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
+		// select into var list
+		{"select 1 into @a", true, "SELECT 1 INTO @`a`"},
+		{"select 1 into @a from dual", true, "SELECT 1 INTO @`a`"},
+		{"select a into @a from t", true, "SELECT `a` INTO @`a` FROM `t`"},
+		{"select a, b into @a, @bc from t", true, "SELECT `a`,`b` INTO @`a`,@`bc` FROM `t`"},
+		{"select a, b+1 into @a, @bc from t", true, "SELECT `a`,`b`+1 INTO @`a`,@`bc` FROM `t`"},
+		{"select a into a from t", true, "SELECT `a` INTO `a` FROM `t`"},
+		{"select a, b into a, bc from t", true, "SELECT `a`,`b` INTO `a`,`bc` FROM `t`"},
+		{"select a, b+1 into a, bc from t", true, "SELECT `a`,`b`+1 INTO `a`,`bc` FROM `t`"},
 
 		// from join
 		{"SELECT * from t1, t2, t3", true, "SELECT * FROM ((`t1`) JOIN `t2`) JOIN `t3`"},
@@ -3016,9 +3028,14 @@ func TestDDL(t *testing.T) {
 		{"create table t (d date default date_format(now(),'%Y-%m'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m')))"},
 		{"create table t (d date default (date_format(now(),'%Y-%m')))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d')))"},
+		{"create table t (d date default date_format(now(),'%y%m%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')))"},
+		{"create table t (d date default date_format('2025-08-08 13:13:13','%y%m%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(_UTF8MB4'2025-08-08 13:13:13', _UTF8MB4'%y%m%d')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d %H.%i.%s'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d %H.%i.%s')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d %H:%i:%s'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d %H:%i:%s')))"},
 		{"create table t (d date default date_format(now(),'%b %d %Y %h:%i %p'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%b %d %Y %h:%i %p')))"},
+		{"create table t(id int default cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
+		{"create table t(id int default (cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned)))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
+		{"create table t(id int default (cast((DATE_FORMAT('2025-08-08 13:13:13', '%y%m%d')) as unsigned)))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(_UTF8MB4'2025-08-08 13:13:13', _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
 		{"create table t (a varchar(32) default (replace(upper(uuid()), '-', '')))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(UPPER(UUID()), _UTF8MB4'-', _UTF8MB4'')))"},
 		{"create table t (a varchar(32) default replace(upper(uuid()), '-', ''))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(UPPER(UUID()), _UTF8MB4'-', _UTF8MB4'')))"},
 		{"create table t (a varchar(32) default (replace(convert(upper(uuid()) using utf8mb4), '-', '')))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(CONVERT(UPPER(UUID()) USING 'utf8mb4'), _UTF8MB4'-', _UTF8MB4'')))"},
@@ -8167,4 +8184,30 @@ func TestSplitPartition(t *testing.T) {
 		{`alter table t SPLIT BETWEEN (0) AND (1000000) REGIONS 3`, true, "ALTER TABLE `t` SPLIT BETWEEN (0) AND (1000000) REGIONS 3"},
 	}
 	RunTest(t, cases, false)
+}
+
+func TestTableSplitStmt(t *testing.T) {
+	table := []testCase{
+		// Valid cases
+		{"SELECT * FROM t TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"select * from t tablesplit ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` AS `t1` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t PARTITION (p0) TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`) TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t1 TABLESPLIT ('a', 'b'), t2", true, "SELECT * FROM (`t1` TABLESPLIT('a', 'b')) JOIN `t2`"},
+		{"SELECT * FROM t1, t2 TABLESPLIT ('a', 'b')", true, "SELECT * FROM (`t1`) JOIN `t2` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t TABLESPLIT ('', 'b')", true, "SELECT * FROM `t` TABLESPLIT('', 'b')"},
+		{"SELECT * FROM t PARTITION (p0, p1) AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`, `p1`) AS `t1` TABLESPLIT('a', 'b')"},
+
+		// Invalid cases
+		{"SELECT * FROM t TABLESPLIT", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a',)", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a', 'b', 'c')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a' 'b')", false, ""},
+		{"SELECT * FROM t TABLESPLIT 'a', 'b'", false, ""},
+		{"SELECT * FROM t TABLESPLIT (a, b)", false, ""},
+		{"SELECT * FROM t TABLESPLIT (1, 2)", false, ""},
+	}
+
+	RunTest(t, table, false)
 }

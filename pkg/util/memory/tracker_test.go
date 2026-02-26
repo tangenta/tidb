@@ -128,6 +128,7 @@ func TestRelease(t *testing.T) {
 			tracker.Consume(10)
 		}()
 	}
+	waitGroup.Wait()
 	waitGroup.Add(10)
 	for range 10 {
 		go func() {

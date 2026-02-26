@@ -130,6 +130,9 @@ type DataSource struct {
 	// NOTE: This list does not distinguish between the type of predicate or usage. It is used in
 	// index pruning early in the planning phase - which is an approximate heuristic.
 	InterestingColumns []*expression.Column
+
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit
 }
 
 // Init initializes DataSource.
