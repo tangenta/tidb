@@ -27,10 +27,12 @@ import (
 )
 
 func TestGetStartMode(t *testing.T) {
-	require.Equal(t, ddl.Normal, getStartMode(currentBootstrapVersion))
-	require.Equal(t, ddl.Normal, getStartMode(currentBootstrapVersion+1))
-	require.Equal(t, ddl.Upgrade, getStartMode(currentBootstrapVersion-1))
-	require.Equal(t, ddl.Bootstrap, getStartMode(0))
+	require.Equal(t, ddl.Normal, getStartMode(currentBootstrapVersion, currentEEBootstrapVersion))
+
+	require.Equal(t, ddl.Upgrade, getStartMode(currentBootstrapVersion-1, currentEEBootstrapVersion))
+	require.Equal(t, ddl.Upgrade, getStartMode(currentBootstrapVersion, currentEEBootstrapVersion-1))
+
+	require.Equal(t, ddl.Bootstrap, getStartMode(notBootstrapped, notBootstrapped))
 }
 
 func TestDDLTableVersionTables(t *testing.T) {

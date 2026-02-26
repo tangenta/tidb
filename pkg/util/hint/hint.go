@@ -85,8 +85,14 @@ const (
 	HintMPP2PhaseAgg = "mpp_2phase_agg"
 	// HintUseIndex is hint enforce using some indexes.
 	HintUseIndex = "use_index"
+	// HintIndex is hint enforce using some indexes. if no index provided, all indexes will be considered.
+	HintIndex = "index"
+	// HintFull is an alias of USE_INDEX with an empty index list, forcing table scan.
+	HintFull = "full"
 	// HintIgnoreIndex is hint enforce ignoring some indexes.
 	HintIgnoreIndex = "ignore_index"
+	// HintNoIndex is hint enforce not using some indexes. if no index provided, all indexes won't be considered.
+	HintNoIndex = "no_index"
 	// HintForceIndex make optimizer to use this index even if it thinks a table scan is more efficient.
 	HintForceIndex = "force_index"
 	// HintOrderIndex is hint enforce using some indexes and keep the index's order.
@@ -789,7 +795,7 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 		// Set warning for the hint that requires the table name.
 		switch hint.HintName.L {
 		case TiDBMergeJoin, HintSMJ, TiDBIndexNestedLoopJoin, HintINLJ, HintINLHJ, HintINLMJ,
-			HintNoHashJoin, HintNoMergeJoin, TiDBHashJoin, HintHJ, HintUseIndex, HintIgnoreIndex,
+			HintNoHashJoin, HintNoMergeJoin, TiDBHashJoin, HintHJ, HintUseIndex, HintIndex, HintFull, HintIgnoreIndex, HintNoIndex,
 			HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown, HintIndexMerge, HintLeading:
 			if len(hint.Tables) == 0 {
 				var sb strings.Builder
@@ -860,7 +866,23 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 				DBName:  dbName,
 				TblName: hint.Tables[0].TableName,
 			})
-		case HintUseIndex, HintIgnoreIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown:
+		case HintFull:
+			for _, table := range hint.Tables {
+				dbName := table.DBName
+				if dbName.L == "" {
+					dbName = ast.NewCIStr(currentDB)
+				}
+				indexHintList = append(indexHintList, HintedIndex{
+					DBName:     dbName,
+					TblName:    table.TableName,
+					Partitions: table.PartitionList,
+					IndexHint: &ast.IndexHint{
+						HintType:  ast.HintUse,
+						HintScope: ast.HintForScan,
+					},
+				})
+			}
+		case HintUseIndex, HintIndex, HintIgnoreIndex, HintNoIndex, HintForceIndex, HintOrderIndex, HintNoOrderIndex, HintIndexLookUpPushDown:
 			dbName := hint.Tables[0].DBName
 			if dbName.L == "" {
 				dbName = ast.NewCIStr(currentDB)
@@ -870,8 +892,12 @@ func ParsePlanHints(hints []*ast.TableOptimizerHint,
 			switch hint.HintName.L {
 			case HintUseIndex:
 				hintType = ast.HintUse
+			case HintIndex:
+				hintType = ast.HintIndex
 			case HintIgnoreIndex:
 				hintType = ast.HintIgnore
+			case HintNoIndex:
+				hintType = ast.HintNoIndex
 			case HintForceIndex:
 				hintType = ast.HintForce
 			case HintOrderIndex:

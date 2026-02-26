@@ -191,6 +191,9 @@ select /*+ USE_INDEX_MERGE(t1, a, b, c, d) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, a, b), USE_INDEX(t1, a) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, a, b), IGNORE_INDEX(t1, a) */ * from t1;
 select /*+ USE_INDEX_MERGE(t1, primary, a, b, c) */ * from t1;
+drop table if exists t_conflict;
+create table t_conflict(a int, index idx_a(a));
+explain format='plan_tree' select /*+ FULL(t_conflict) USE_INDEX(t_conflict, idx_a) */ * from t_conflict;
 --disable_warnings
 drop table if exists t1;
 drop view if exists v1;
@@ -249,4 +252,3 @@ explain format = 'brief' select /*+ INDEX_LOOKUP_PUSH_DOWN(t1, idx_a) */ * from 
 explain format = 'brief' select /*+ INDEX_LOOKUP_PUSH_DOWN(t1, idx_a) */ * from t1 where a=2;
 explain format = 'brief' select /*+ INDEX_LOOKUP_PUSH_DOWN(t1, idx_b) */ * from t1 where b=3;
 --disable_warnings
-

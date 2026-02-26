@@ -202,6 +202,7 @@ const (
 	FromBase64      = "from_base64"
 	InsertFunc      = "insert_func"
 	Instr           = "instr"
+	LabelAceesible  = "label_accessible"
 	Lcase           = "lcase"
 	Left            = "left"
 	Length          = "length"
@@ -269,6 +270,7 @@ const (
 	FormatBytes          = "format_bytes"
 	FormatNanoTime       = "format_nano_time"
 	CurrentResourceGroup = "current_resource_group"
+	DataOperationAudit   = "data_operation_audit"
 
 	// control functions
 	If     = "if"
@@ -379,6 +381,10 @@ const (
 	NextVal = "nextval"
 	LastVal = "lastval"
 	SetVal  = "setval"
+
+	// procedure variable function
+	SetProcedureVar = "setprocedurevar"
+	GetProcedureVar = "getprocedurevar"
 )
 
 type FuncCallExprType int8
