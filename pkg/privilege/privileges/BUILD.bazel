@@ -68,6 +68,7 @@ go_test(
         "//pkg/executor",
         "//pkg/kv",
         "//pkg/lightning/mydump",
+        "//pkg/meta/metadef",
         "//pkg/parser/auth",
         "//pkg/parser/mysql",
         "//pkg/parser/terror",

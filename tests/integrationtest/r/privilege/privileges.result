@@ -763,17 +763,25 @@ CREATE OR REPLACE VIEW v AS SELECT 1, 1;
 Error 1142 (42000): DROP command denied to user 'foo'@'%' for table 'v'
 CREATE OR REPLACE VIEW v1 AS SELECT 1, 1;
 Error 1142 (42000): DROP command denied to user 'foo'@'%' for table 'v1'
-drop user if exists test_permission@'%';
-CREATE USER test_permission;
-set sql_require_primary_key = 0;
-Error 1227 (42000): Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation
-set sql_require_primary_key = 1;
-Error 1227 (42000): Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation
-set global sql_require_primary_key = 0;
-Error 1227 (42000): Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation
-set global sql_require_primary_key = 1;
-Error 1227 (42000): Access denied; you need (at least one of) the SUPER or SYSTEM_VARIABLES_ADMIN privilege(s) for this operation
-GRANT SUPER ON *.* TO test_permission;
-set global sql_require_primary_key = 1;
-set global sql_require_primary_key = 0;
-drop user test_permission@'%';
+use privilege__privileges;
+DROP TABLE IF EXISTS t_partition;
+DROP USER IF EXISTS foo;
+CREATE TABLE t_partition (id INT, year_col INT)
+PARTITION BY RANGE (year_col) (
+PARTITION p0 VALUES LESS THAN (1991),
+PARTITION p1 VALUES LESS THAN (1995),
+PARTITION p2 VALUES LESS THAN (1999),
+PARTITION p3 VALUES LESS THAN (2003),
+PARTITION p4 VALUES LESS THAN (2007)
+);
+CREATE USER foo;
+GRANT ALTER ON privilege__privileges.t_partition TO foo;
+ALTER TABLE t_partition TRUNCATE PARTITION p0;
+Error 1142 (42000): DROP command denied to user 'foo'@'%' for table 't_partition'
+ALTER TABLE t_partition DROP PARTITION p1;
+Error 1142 (42000): DROP command denied to user 'foo'@'%' for table 't_partition'
+GRANT DROP ON privilege__privileges.t_partition TO foo;
+ALTER TABLE t_partition TRUNCATE PARTITION p2;
+ALTER TABLE t_partition DROP PARTITION p3;
+DROP TABLE t_partition;
+DROP USER foo;

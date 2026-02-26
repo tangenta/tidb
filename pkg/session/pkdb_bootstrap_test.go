@@ -85,7 +85,7 @@ func TestOSSCreatedMaxUserConnections(t *testing.T) {
 	require.NoError(t, err)
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
-	revertVersionAndVariables(t, se, 220)
+	RevertVersionAndVariables(t, se, 220)
 	txn, err = store.Begin()
 	require.NoError(t, err)
 	m = meta.NewMutator(txn)

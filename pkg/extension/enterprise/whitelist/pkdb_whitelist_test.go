@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package whitelist
+package whitelist_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/whitelist"
 	"github.com/pingcap/tidb/pkg/server"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestWhiteListTable(t *testing.T) {
-	Register4Test()
+	whitelist.Register4Test()
 	store := testkit.CreateMockStore(t)
 	srv := server.CreateMockServer(t, store)
 	defer srv.Close()
@@ -50,7 +52,7 @@ func TestWhiteListTable(t *testing.T) {
 }
 
 func TestParseIPListFromTable(t *testing.T) {
-	Register4Test()
+	whitelist.Register4Test()
 	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/extension/enterprise/whitelist/mock-whitelist-reload-enable", `return`))
 	defer func() {
 		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/extension/enterprise/whitelist/mock-whitelist-reload-enable"))
@@ -82,7 +84,7 @@ func TestParseIPListFromTable(t *testing.T) {
 }
 
 func TestConnHandleWhiteList(t *testing.T) {
-	Register4Test()
+	whitelist.Register4Test()
 	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/server/mock-whitelist-config-enabled", `return`))
 	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/extension/enterprise/whitelist/mock-whitelist-reload-enable", `return`))
 	defer func() {

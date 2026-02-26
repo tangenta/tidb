@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
@@ -1655,10 +1656,10 @@ func createStoreAndPrepareDB(t *testing.T) kv.Storage {
 	tk.MustExec("use test")
 	tk.MustExec(`CREATE TABLE test(id INT NOT NULL DEFAULT 1, name varchar(255), PRIMARY KEY(id));`)
 	tk.MustExec(fmt.Sprintf("create database if not exists %s;", mysql.SystemDB))
-	tk.MustExec(session.CreateUserTable)
-	tk.MustExec(session.CreateDBTable)
-	tk.MustExec(session.CreateTablesPrivTable)
-	tk.MustExec(session.CreateColumnsPrivTable)
+	tk.MustExec(metadef.CreateUserTable)
+	tk.MustExec(metadef.CreateDBTable)
+	tk.MustExec(metadef.CreateTablesPrivTable)
+	tk.MustExec(metadef.CreateColumnsPrivTable)
 	return store
 }
 

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/statistics/handle/autoanalyze/priorityqueue"
 	"github.com/pingcap/tidb/pkg/statistics/handle/util"
@@ -128,7 +128,7 @@ func TestValidateAndPrepareForDynamicPartitionedTable(t *testing.T) {
 	t.Skip("will fix later, @fzzf678")
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	tk := testkit.NewTestKit(t, store)
-	tk.MustExec(session.CreateAnalyzeJobsTable)
+	tk.MustExec(metadef.CreateAnalyzeJobsTable)
 	tk.MustExec("create database example_schema")
 	tk.MustExec("use example_schema")
 	tk.MustExec("create table example_table (a int, b int, index idx(a)) partition by range (a) (partition p0 values less than (2), partition p1 values less than (4))")
@@ -184,7 +184,7 @@ func TestValidateAndPrepareForDynamicPartitionedTable(t *testing.T) {
 func TestPerformanceOfValidateAndPrepare(t *testing.T) {
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	tk := testkit.NewTestKit(t, store)
-	tk.MustExec(session.CreateAnalyzeJobsTable)
+	tk.MustExec(metadef.CreateAnalyzeJobsTable)
 	tk.MustExec("create database example_schema")
 	tk.MustExec("use example_schema")
 	tk.MustExec("create table example_table (a int, b int, index idx(a)) partition by range (a) (partition p0 values less than (2), partition p1 values less than (4))")
