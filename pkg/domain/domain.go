@@ -824,7 +824,7 @@ const resourceIdleTimeout = 3 * time.Minute // resources in the ResourcePool wil
 
 // NewDomain creates a new domain. Should not create multiple domains for the same store.
 func NewDomain(store kv.Storage, schemaLease time.Duration, statsLease time.Duration, dumpFileGcLease time.Duration, factory pools.Factory) *Domain {
-	return NewDomainWithEtcdClient(store, schemaLease, statsLease, dumpFileGcLease, factory, nil, nil)
+	return NewDomainWithEtcdClient(store, schemaLease, statsLease, dumpFileGcLease, factory, nil, nil, nil)
 }
 
 // NewDomainWithEtcdClient creates a new domain with etcd client. Should not create multiple domains for the same store.
@@ -836,6 +836,7 @@ func NewDomainWithEtcdClient(
 	factory pools.Factory,
 	crossKSSessFactoryGetter func(targetKS string, validator validatorapi.Validator) pools.Factory,
 	etcdClient *clientv3.Client,
+	schemaFilter issyncer.Filter,
 ) *Domain {
 	intest.Assert(schemaLease > 0, "schema lease should be a positive duration")
 	do := &Domain{
@@ -879,6 +880,7 @@ func NewDomainWithEtcdClient(
 		do.schemaLease,
 		do.sysSessionPool,
 		isvalidator.New(do.schemaLease),
+		schemaFilter,
 	)
 	do.initDomainSysVars()
 
@@ -1840,7 +1842,7 @@ func (do *Domain) BindingHandle() bindinfo.BindingHandle {
 // be called only once in BootstrapSession.
 func (do *Domain) InitBindingHandle() error {
 	do.bindHandle.Store(bindinfo.NewBindingHandle(do.sysSessionPool))
-	err := do.BindingHandle().LoadFromStorageToCache(true)
+	err := do.BindingHandle().LoadFromStorageToCache(true, false)
 	if err != nil || bindinfo.Lease == 0 {
 		return err
 	}
@@ -1878,7 +1880,7 @@ func (do *Domain) globalBindHandleWorkerLoop(owner owner.Manager) {
 				return
 			case <-bindWorkerTicker.C:
 				bindHandle := do.BindingHandle()
-				err := bindHandle.LoadFromStorageToCache(false)
+				err := bindHandle.LoadFromStorageToCache(false, false)
 				if err != nil {
 					logutil.BgLogger().Error("update bindinfo failed", zap.Error(err))
 				}

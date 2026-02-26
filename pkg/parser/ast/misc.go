@@ -2549,6 +2549,7 @@ const (
 	AdminUnsetBDRRole
 	AdminAlterDDLJob
 	AdminWorkloadRepoCreate
+	AdminReloadClusterBindings
 	AdminLBACEnable
 	// adminTpCount is the total number of admin statement types.
 	adminTpCount
@@ -2799,6 +2800,8 @@ func (n *AdminStmt) Restore(ctx *format.RestoreCtx) error {
 			}
 			ctx.WritePlain(v)
 		}
+	case AdminLBACEnable:
+		ctx.WriteKeyWord("LBAC ENABLE")
 	case AdminPluginDisable:
 		ctx.WriteKeyWord("PLUGINS DISABLE")
 		for i, v := range n.Plugins {
@@ -2817,6 +2820,8 @@ func (n *AdminStmt) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("EVOLVE BINDINGS")
 	case AdminReloadBindings:
 		ctx.WriteKeyWord("RELOAD BINDINGS")
+	case AdminReloadClusterBindings:
+		ctx.WriteKeyWord("RELOAD CLUSTER BINDINGS")
 	case AdminReloadStatistics:
 		ctx.WriteKeyWord("RELOAD STATS_EXTENDED")
 	case AdminFlushPlanCache:

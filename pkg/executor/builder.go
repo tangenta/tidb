@@ -173,6 +173,10 @@ func (b *MockExecutorBuilder) Build(p base.Plan) exec.Executor {
 }
 
 func (b *executorBuilder) build(p base.Plan) exec.Executor {
+	if phyWrapper, ok := p.(*plannercore.PhysicalPlanWrapper); ok {
+		p = phyWrapper.Inner
+	}
+
 	switch v := p.(type) {
 	case nil:
 		return nil
@@ -254,8 +258,6 @@ func (b *executorBuilder) build(p base.Plan) exec.Executor {
 		return b.buildShow(v)
 	case *plannercore.Simple:
 		return b.buildSimple(v)
-	case *plannercore.PhysicalSimpleWrapper:
-		return b.buildSimple(&v.Inner)
 	case *plannercore.Set:
 		return b.buildSet(v)
 	case *plannercore.SetConfig:
@@ -5657,6 +5659,7 @@ func (b *executorBuilder) buildSQLBindExec(v *plannercore.SQLBindPlan) exec.Exec
 		isGlobal:     v.IsGlobal,
 		sqlBindOp:    v.SQLBindOp,
 		details:      v.Details,
+		isFromRemote: v.IsFromRemote,
 	}
 	return e
 }

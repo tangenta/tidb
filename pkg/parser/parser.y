@@ -319,7 +319,7 @@ import (
 	action                     "ACTION"
 	addColumnarReplicaOnDemand "ADD_COLUMNAR_REPLICA_ON_DEMAND"
 	advise                     "ADVISE"
-	affinity                    "AFFINITY"
+	affinity                   "AFFINITY"
 	after                      "AFTER"
 	against                    "AGAINST"
 	ago                        "AGO"
@@ -7073,7 +7073,7 @@ UnReservedKeyword:
 |	"STATS_COL_LIST"
 |	"AUTO_ID_CACHE"
 |	"AUTO_INCREMENT"
-|   "AFFINITY"
+|	"AFFINITY"
 |	"AFTER"
 |	"ALWAYS"
 |	"AVG"
@@ -11913,6 +11913,12 @@ AdminStmt:
 	{
 		$$ = &ast.AdminStmt{
 			Tp: ast.AdminReloadBindings,
+		}
+	}
+|	"ADMIN" "RELOAD" "CLUSTER" "BINDINGS"
+	{
+		$$ = &ast.AdminStmt{
+			Tp: ast.AdminReloadClusterBindings,
 		}
 	}
 |	"ADMIN" "RELOAD" "STATS_EXTENDED"
