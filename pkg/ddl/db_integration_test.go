@@ -1697,6 +1697,120 @@ func TestDefaultValueAsExpressions(t *testing.T) {
 	tk.MustQuery("select c3 from t2").Check(testkit.Rows(nowStr, nowStr, nowStr, nowStr))
 }
 
+// TestDateFormatAsDefaultValue tests the usage of the DATE_FORMAT function
+// as a column's default value. It covers successful cases for both NOW() and
+// literal strings, as well as expected failure scenarios.
+func TestDateFormatAsDefaultValue(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	// Clean up any tables from previous test runs.
+	tk.MustExec("drop table if exists t_int_success, t_varchar_success, t_int_fail, t_unsupported_format, t_invalid_date_literal")
+
+	// ## SCENARIO 1: Successful conversion of DATE_FORMAT(NOW(), '%y%m%d') to an INT column.
+	// This is the original successful test case. The format '%y%m%d' generates a string
+	// like '250905', which is a valid integer and can be implicitly converted.
+	tk.MustExec("create table t_int_success (id int default (DATE_FORMAT(now(), '%y%m%d')), note VARCHAR(255));")
+	tk.MustExec("insert into t_int_success (note) values ('now_to_int_ok');")
+	// Prepare the expected ID based on the current time. The format "060102" in Go corresponds to "YYMMDD".
+	expectedID := time.Now().Format("060102")
+	tk.MustQuery("select * from t_int_success").Check(testkit.Rows(expectedID + " now_to_int_ok"))
+
+	// ## SCENARIO 2: Successful use of DATE_FORMAT with a literal string as the first argument.
+	// This tests the refactored logic that allows ast.ValueExpr as the first argument.
+	// The result '2025-08' is stored in a VARCHAR column.
+	tk.MustExec("create table t_varchar_success (id varchar(7) default (DATE_FORMAT('2025-08-08 13:13:13', '%Y-%m')), note VARCHAR(255));")
+	tk.MustExec("insert into t_varchar_success (note) values ('literal_to_varchar_ok');")
+	tk.MustQuery("select * from t_varchar_success").Check(testkit.Rows("2025-08 literal_to_varchar_ok"))
+
+	// ## SCENARIO 3: Failed conversion of a non-numeric date format string to an INT column.
+	// This test ensures that data truncation errors are still correctly thrown when the format
+	// string (e.g., '%Y-%m-%d %H:%i:%s') contains non-numeric characters.
+	tk.MustExec("create table t_int_fail (id int default (DATE_FORMAT(now(), '%Y-%m-%d %H:%i:%s')), note VARCHAR(255));")
+	tk.MustGetErrCode("insert into t_int_fail (note) values ('truncation_error')", errno.ErrTruncatedWrongValue)
+
+	// ## SCENARIO 4: Failed table creation due to a format specifier not in the whitelist.
+	// This verifies that the table-driven whitelist for format strings is working correctly.
+	// The DDL itself should fail because the parser rejects the disallowed default expression.
+	tk.MustGetErrCode("create table t_unsupported_format (id varchar(20) default (DATE_FORMAT(now(), '%Y year')))", errno.ErrDefValGeneratedNamedFunctionIsNotAllowed)
+
+	// ## SCENARIO 5: Failed insert due to an invalid date string literal in DATE_FORMAT.
+	// This test confirms that while the table creation is successful, the validation
+	// of the literal date string occurs at INSERT time, causing an "Incorrect datetime value" error.
+	tk.MustExec("create table t_invalid_date_literal (id varchar(7) default (DATE_FORMAT('abcd', '%Y-%m')), note VARCHAR(255));")
+	tk.MustGetErrCode("insert into t_invalid_date_literal (note) values ('invalid_date_literal')", errno.ErrTruncatedWrongValue)
+}
+
+// TestCastAsDefaultValue tests the usage of CAST with nested functions
+// as a column's default value. It validates successful parsing for expressions
+// both with and without extra parentheses and checks for expected error conditions.
+func TestCastAsDefaultValue(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	// Clean up any tables from previous test runs.
+	tk.MustExec("drop table if exists t_cast_success, t_cast_parens_success, t_cast_fail_truncation, t_cast_fail_disallowed")
+
+	// ## SCENARIO 1: Successful use of CAST(DATE_FORMAT(NOW(), ...)) as a default value.
+	// This validates the primary test case where the default value is a CAST expression.
+	tk.MustExec("create table t_cast_success (id int default cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned), note VARCHAR(255));")
+	tk.MustExec("insert into t_cast_success (note) values ('cast_ok');")
+	// Prepare the expected ID based on the current time. Go's "060102" format corresponds to SQL's "%y%m%d".
+	expectedID := time.Now().Format("060102")
+	tk.MustQuery("select * from t_cast_success").Check(testkit.Rows(expectedID + " cast_ok"))
+
+	// ## SCENARIO 2: Successful use of a parenthesized CAST(...) expression as a default value.
+	// This confirms that the parser correctly handles an extra layer of parentheses around the entire CAST expression.
+	tk.MustExec("create table t_cast_parens_success (id int default (cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned)), note VARCHAR(255));")
+	tk.MustExec("insert into t_cast_parens_success (note) values ('cast_with_parens_ok');")
+	tk.MustQuery("select * from t_cast_parens_success").Check(testkit.Rows(expectedID + " cast_with_parens_ok"))
+
+	// ## SCENARIO 3: Failed conversion when CASTing a non-numeric string to an INT column.
+	// This test ensures that a data truncation error is thrown at INSERT time if the DATE_FORMAT
+	// produces a string that cannot be cast to the target column type (e.g., '2025-09-08' to unsigned int).
+	tk.MustExec("create table t_cast_fail_truncation (id int default (cast(DATE_FORMAT(now(), '%Y-%m-%d') as unsigned)), note VARCHAR(255));")
+	tk.MustGetErrCode("insert into t_cast_fail_truncation (note) values ('truncation_error')", errno.ErrTruncatedWrongValue)
+
+	// ## SCENARIO 4: Failed table creation due to a disallowed function (UUID) inside CAST.
+	// This verifies that the validation logic correctly inspects functions nested within CAST.
+	// The DDL itself should fail because the default expression contains a disallowed function.
+	tk.MustGetErrCode("create table t_cast_fail_disallowed (id varchar(40) default (cast(UUID() as char)), note VARCHAR(255))", errno.ErrDefValGeneratedNamedFunctionIsNotAllowed)
+}
+
+// TestAddColumnWithBinlogUnsafeFunctions verifies that adding a column with a default value
+// that uses a binlog-unsafe function is disallowed. This test covers functions like RAND(),
+// UUID(), REPLACE(), UPPER(), etc., which are forbidden in this context to ensure replication safety.
+func TestAddColumnWithBinlogUnsafeFunctions(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t_base")
+
+	// Create a base table to which columns will be added.
+	tk.MustExec("create table t_base (id int)")
+
+	// Test case for each binlog-unsafe function.
+	// Each ALTER TABLE statement is expected to fail with ErrBinlogUnsafeSystemFunction.
+
+	// ## Test RAND()
+	tk.MustGetErrCode("alter table t_base add column c_rand double default (rand())", errno.ErrBinlogUnsafeSystemFunction)
+	tk.MustGetErrCode("alter table t_base add column c_rand_p int default ((rand(1)))", errno.ErrBinlogUnsafeSystemFunction)
+
+	// ## Test UUID(), UUID_SHORT(), and UUID_TO_BIN()
+	tk.MustGetErrCode("alter table t_base add column c_uuid varchar(40) default (uuid())", errno.ErrBinlogUnsafeSystemFunction)
+	tk.MustGetErrCode("alter table t_base add column c_uuid_short bigint default (uuid_short())", errno.ErrBinlogUnsafeSystemFunction)
+	tk.MustGetErrCode("alter table t_base add column c_uuid_bin varbinary(16) default (uuid_to_bin(uuid()))", errno.ErrBinlogUnsafeSystemFunction)
+
+	// ## Test functions that are often used to wrap unsafe functions, like REPLACE(), UPPER(), CAST()
+	tk.MustGetErrCode("alter table t_base add column c_replace varchar(40) default (replace(uuid(), '-', ''))", errno.ErrBinlogUnsafeSystemFunction)
+	tk.MustGetErrCode("alter table t_base add column c_upper varchar(40) default (upper(uuid()))", errno.ErrBinlogUnsafeSystemFunction)
+	// FIXME: ok under mysql
+	tk.MustGetErrCode("alter table t_base add column c_upper varchar(40) default (replace('a-b-c', '-', ''))", errno.ErrBinlogUnsafeSystemFunction)
+	tk.MustGetErrCode("alter table t_base add column c_upper varchar(40) default (upper('a'))", errno.ErrBinlogUnsafeSystemFunction)
+}
+
 func TestChangingDBCharset(t *testing.T) {
 	store := testkit.CreateMockStore(t, mockstore.WithDDLChecker())
 
