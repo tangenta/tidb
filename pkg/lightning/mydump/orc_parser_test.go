@@ -11,8 +11,9 @@ import (
 
 	"gitee.com/joccau/orc"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/lightning/log"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/compressedio"
 	"github.com/pingcap/tidb/pkg/types"
 	orc_proto "github.com/scritchley/orc/proto"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ import (
 
 func createMockOrcParser(orcFilePath string) (*ORCParser, error) {
 	ctx := context.Background()
-	mockStore, err := storage.NewLocalStorage("./orc/")
+	mockStore, err := objstore.NewLocalStorage("./orc/")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -31,7 +32,7 @@ func createMockOrcParser(orcFilePath string) (*ORCParser, error) {
 		Compression: CompressionNone,
 	}
 
-	reader, err := OpenReader(ctx, &filemeta, mockStore, storage.DecompressConfig{})
+	reader, err := OpenReader(ctx, &filemeta, mockStore, compressedio.DecompressConfig{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -59,7 +60,7 @@ func TestReadOrcSchemas(t *testing.T) {
 func TestReadOrcFileRowCount(t *testing.T) {
 	ctx := context.Background()
 	orcFileName := "TestOrcFile.testDate1900.orc"
-	mockStore, err := storage.NewLocalStorage("./orc/")
+	mockStore, err := objstore.NewLocalStorage("./orc/")
 	require.NoError(t, err)
 
 	filemeta := SourceFileMeta{
@@ -68,7 +69,7 @@ func TestReadOrcFileRowCount(t *testing.T) {
 		Compression: CompressionNone,
 	}
 
-	reader, err := OpenReader(ctx, &filemeta, mockStore, storage.DecompressConfig{})
+	reader, err := OpenReader(ctx, &filemeta, mockStore, compressedio.DecompressConfig{})
 	require.NoError(t, err)
 	parser, err := NewORCParser(log.L(), reader, "")
 	require.NoError(t, err)

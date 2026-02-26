@@ -11,8 +11,9 @@ import (
 
 	"gitee.com/joccau/orc"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/lightning/log"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	orc_proto "github.com/scritchley/orc/proto"
@@ -20,7 +21,7 @@ import (
 )
 
 type fileReader struct {
-	*storage.LocalFile
+	*objstore.LocalFile
 }
 
 // Size returns the size of the file in bytes.
@@ -34,9 +35,9 @@ func (f fileReader) Size() int64 {
 
 func readOrcFileRowCount(
 	ctx context.Context,
-	reader storage.ReadSeekCloser,
+	reader storeapi.ReadSeekCloser,
 ) (int64, error) {
-	lf, ok := reader.(*storage.LocalFile)
+	lf, ok := reader.(*objstore.LocalFile)
 	if !ok {
 		panic("only support local storage!")
 	}
@@ -55,7 +56,7 @@ func readOrcFileRowCount(
 // ReadOrcFileRowCountByFile reads the total count of orc file.
 func ReadOrcFileRowCountByFile(
 	ctx context.Context,
-	store storage.ExternalStorage,
+	store storeapi.Storage,
 	fileMeta SourceFileMeta,
 ) (int64, error) {
 	r, err := store.Open(ctx, fileMeta.Path, nil)
@@ -89,8 +90,8 @@ type ORCParser struct {
 }
 
 // NewORCParser creates a parser to parse the orc file.
-func NewORCParser(logger log.Logger, reader storage.ReadSeekCloser, path string) (*ORCParser, error) {
-	lf, ok := reader.(*storage.LocalFile)
+func NewORCParser(logger log.Logger, reader storeapi.ReadSeekCloser, path string) (*ORCParser, error) {
+	lf, ok := reader.(*objstore.LocalFile)
 	if !ok {
 		panic("only support local storage!")
 	}

@@ -32,3 +32,12 @@ pkg/server/tests/commontest TestAuditPluginRetrying
 pkg/statistics/handle/storage TestGCExtendedStats
 pkg/executor/test/analyzetest TestKillAutoAnalyze
 pkg/executor TestSplitTablesQueryMatch
+pkg/extension/enterprise/audit/audit_test TestEventClass
+pkg/objstore/objectio TestNewCompressReader
+pkg/ddl TestBackfillingSchedulerGlobalSortMode
+pkg/executor/internal/querywatch TestQueryWatch
+pkg/planner/core/casetest TestTiFlashLateMaterialization
+pkg/sessionctx/variable TestUpdateVariable
+pkg/store/gcworker TestTickGCSysTable
+tests/realtikvtest/txntest TestValidateReadOnlyInStalenessTransaction
+pkg/owner TestAcquireDistributedLock

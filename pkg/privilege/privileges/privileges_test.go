@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1063,10 +1064,13 @@ func TestLoadDataColumnPrivilege(t *testing.T) {
 	tk.MustExec(`CREATE TABLE t_load(a int)`)
 
 	var reader io.ReadCloser = mydump.NewStringReader("1")
-	var readerBuilder executor.LoadDataReaderBuilder = func(_ string) (
-		r io.ReadCloser, err error,
-	) {
-		return reader, nil
+	var readerBuilder = executor.LoadDataReaderBuilder{
+		Build: func(_ string) (
+			r io.ReadCloser, err error,
+		) {
+			return reader, nil
+		},
+		Wg: &sync.WaitGroup{},
 	}
 
 	tk.Session().(sessionctx.Context).SetValue(executor.LoadDataReaderBuilderKey, readerBuilder)

@@ -51,3 +51,4 @@ coverage.dat
 go.work
 go.work.sum
 .cursor
+*__failpoint_stash__

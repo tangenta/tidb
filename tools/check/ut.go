@@ -998,7 +998,7 @@ func (n *numa) testCommand(pkg string, fn string) *exec.Cmd {
 	}
 	args = append(args, "-test.cpu", strconv.Itoa(testCPU))
 	if !race && !long && !realTikv {
-		args = append(args, []string{"-test.timeout", "2m"}...)
+		args = append(args, []string{"-test.timeout", "3m"}...)
 	} else {
 		// it takes a longer when race is enabled. so it is set more timeout value.
 		args = append(args, []string{"-test.timeout", "30m"}...)

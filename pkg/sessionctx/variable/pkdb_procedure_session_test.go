@@ -313,7 +313,6 @@ func TestRootInfo(t *testing.T) {
 }
 
 func TestUpdateVariable(t *testing.T) {
-	t.Skip("skip unstable test")
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.InProcedure()
