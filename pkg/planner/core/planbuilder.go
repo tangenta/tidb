@@ -967,7 +967,7 @@ func collectStrOrUserVarList(ctx base.PlanContext, list []*ast.StringOrUserVar) 
 	for _, single := range list {
 		var str string
 		if single.UserVar != nil {
-			val, ok := ctx.GetSessionVars().GetUserVarVal(strings.ToLower(single.UserVar.Name))
+			val, ok := ctx.GetSessionVars().GetUserVarVal(single.UserVar.Name)
 			if !ok {
 				return nil, errors.New("can't find specified user variable: " + single.UserVar.Name)
 			}
@@ -1644,7 +1644,7 @@ func (b *PlanBuilder) buildPrepare(x *ast.PrepareStmt) base.Plan {
 		Name: x.Name,
 	}
 	if x.SQLVar != nil {
-		if v, ok := b.ctx.GetSessionVars().GetUserVarVal(strings.ToLower(x.SQLVar.Name)); ok {
+		if v, ok := b.ctx.GetSessionVars().GetUserVarVal(x.SQLVar.Name); ok {
 			var err error
 			p.SQLText, err = v.ToString()
 			if err != nil {

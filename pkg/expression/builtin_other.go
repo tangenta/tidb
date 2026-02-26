@@ -17,7 +17,6 @@ package expression
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -1104,7 +1103,6 @@ func (b *builtinSetRealVarSig) evalReal(ctx EvalContext, row chunk.Row) (res flo
 		return 0, isNull, err
 	}
 	res = datum.GetFloat64()
-	varName = strings.ToLower(varName)
 	sessionVars.SetUserVarVal(varName, datum)
 	return res, false, nil
 }
@@ -1139,7 +1137,6 @@ func (b *builtinSetDecimalVarSig) evalDecimal(ctx EvalContext, row chunk.Row) (*
 		return nil, isNull, err
 	}
 	res := datum.GetMysqlDecimal()
-	varName = strings.ToLower(varName)
 	sessionVars.SetUserVarVal(varName, datum)
 	return res, false, nil
 }
@@ -1174,7 +1171,6 @@ func (b *builtinSetIntVarSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bo
 		return 0, isNull, err
 	}
 	res := datum.GetInt64()
-	varName = strings.ToLower(varName)
 	sessionVars.SetUserVarVal(varName, datum)
 	return res, false, nil
 }
@@ -1208,7 +1204,6 @@ func (b *builtinSetTimeVarSig) evalTime(ctx EvalContext, row chunk.Row) (types.T
 		return types.ZeroTime, datum.IsNull(), handleInvalidTimeError(ctx, err)
 	}
 	res := datum.GetMysqlTime()
-	varName = strings.ToLower(varName)
 	sessionVars.SetUserVarVal(varName, datum)
 	return res, false, nil
 }
@@ -1315,7 +1310,6 @@ func (b *builtinGetStringVarSig) evalString(ctx EvalContext, row chunk.Row) (str
 	if isNull || err != nil {
 		return "", isNull, err
 	}
-	varName = strings.ToLower(varName)
 	if v, ok := ctx.GetUserVarsReader().GetUserVarVal(varName); ok {
 		// We cannot use v.GetString() here, because the datum may be in KindMysqlTime, which
 		// stores the data in datum.x.
@@ -1369,7 +1363,6 @@ func (b *builtinGetIntVarSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bo
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
-	varName = strings.ToLower(varName)
 	if v, ok := ctx.GetUserVarsReader().GetUserVarVal(varName); ok {
 		return v.GetInt64(), false, nil
 	}
@@ -1411,7 +1404,6 @@ func (b *builtinGetRealVarSig) evalReal(ctx EvalContext, row chunk.Row) (float64
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
-	varName = strings.ToLower(varName)
 	if v, ok := ctx.GetUserVarsReader().GetUserVarVal(varName); ok {
 		d, err := v.ToFloat64(typeCtx(ctx))
 		if err != nil {
@@ -1457,7 +1449,6 @@ func (b *builtinGetDecimalVarSig) evalDecimal(ctx EvalContext, row chunk.Row) (*
 	if isNull || err != nil {
 		return nil, isNull, err
 	}
-	varName = strings.ToLower(varName)
 	if v, ok := ctx.GetUserVarsReader().GetUserVarVal(varName); ok {
 		d, err := v.ToDecimal(typeCtx(ctx))
 		if err != nil {
@@ -1511,7 +1502,6 @@ func (b *builtinGetTimeVarSig) evalTime(ctx EvalContext, row chunk.Row) (types.T
 	if isNull || err != nil {
 		return types.ZeroTime, isNull, err
 	}
-	varName = strings.ToLower(varName)
 	if v, ok := ctx.GetUserVarsReader().GetUserVarVal(varName); ok {
 		return v.GetMysqlTime(), false, nil
 	}
