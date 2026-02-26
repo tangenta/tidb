@@ -1216,6 +1216,10 @@ type SessionVars struct {
 	// to use the greedy join reorder algorithm.
 	TiDBOptJoinReorderThreshold int
 
+	// TiDBOptJoinReorderThroughSel enables pushing selection conditions down to
+	// reordered join trees when applicable.
+	TiDBOptJoinReorderThroughSel bool
+
 	// SlowQueryFile indicates which slow query log file for SLOW_QUERY table to parse.
 	SlowQueryFile string
 
@@ -2352,6 +2356,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		EnableVectorizedExpression:    vardef.DefEnableVectorizedExpression,
 		CommandValue:                  uint32(mysql.ComSleep),
 		TiDBOptJoinReorderThreshold:   vardef.DefTiDBOptJoinReorderThreshold,
+		TiDBOptJoinReorderThroughSel:  vardef.DefTiDBOptJoinReorderThroughSel,
 		SlowQueryFile:                 config.GetGlobalConfig().Log.SlowQueryFile,
 		WaitSplitRegionFinish:         vardef.DefTiDBWaitSplitRegionFinish,
 		WaitSplitRegionTimeout:        vardef.DefWaitSplitRegionTimeout,
