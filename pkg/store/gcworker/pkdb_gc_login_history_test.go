@@ -25,7 +25,6 @@ func setLoginHistoryRetainDuration(dur time.Duration) {
 }
 
 func TestTickGCSysTable(t *testing.T) {
-	t.Skip("skip unstable test")
 	// create mock store
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

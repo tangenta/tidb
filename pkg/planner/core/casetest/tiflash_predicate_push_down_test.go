@@ -31,7 +31,6 @@ import (
 )
 
 func TestTiFlashLateMaterialization(t *testing.T) {
-	t.Skip("skip unstable test")
 	testkit.RunTestUnderCascadesWithDomain(t, func(t *testing.T, testKit *testkit.TestKit, dom *domain.Domain, cascades, caller string) {
 		testKit.MustExec("use test")
 		testKit.MustExec("drop table if exists t1;")
