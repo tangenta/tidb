@@ -29,9 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/executor/join/joinversion"
 	"github.com/pingcap/tidb/pkg/infoschema/issyncer/mdldef"
@@ -726,6 +728,7 @@ func (s *UserVars) Clone() UserVarsReader {
 
 // SetUserVarVal set user defined variables' value
 func (s *UserVars) SetUserVarVal(name string, dt types.Datum) {
+	name = strings.ToLower(name)
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.values[name] = dt
@@ -742,6 +745,7 @@ func (s *UserVars) UnsetUserVar(varName string) {
 
 // GetUserVarVal get user defined variables' value
 func (s *UserVars) GetUserVarVal(name string) (types.Datum, bool) {
+	name = strings.ToLower(name)
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	dt, ok := s.values[name]
@@ -750,6 +754,7 @@ func (s *UserVars) GetUserVarVal(name string) (types.Datum, bool) {
 
 // SetUserVarType set user defined variables' type
 func (s *UserVars) SetUserVarType(name string, ft *types.FieldType) {
+	name = strings.ToLower(name)
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.types[name] = ft
@@ -757,6 +762,7 @@ func (s *UserVars) SetUserVarType(name string, ft *types.FieldType) {
 
 // GetUserVarType get user defined variables' type
 func (s *UserVars) GetUserVarType(name string) (*types.FieldType, bool) {
+	name = strings.ToLower(name)
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	ft, ok := s.types[name]
@@ -843,6 +849,9 @@ type SessionVars struct {
 
 	// TLSConnectionState is the TLS connection state (nil if not using TLS).
 	TLSConnectionState *tls.ConnectionState
+
+	// TLCPConnectionState is the TLCP connection state (nil if not using TLCP).
+	TLCPConnectionState *tlcp.ConnectionState
 
 	// ConnectionID is the connection id of the current session.
 	ConnectionID uint64
@@ -1743,6 +1752,15 @@ type SessionVars struct {
 	// OptimizerFixControl control some details of the optimizer behavior through the tidb_opt_fix_control variable.
 	OptimizerFixControl map[uint64]string
 
+	// in call procedure status
+	inCallProcedure struct {
+		inCall bool
+		num    int
+	}
+
+	// procedureContext indicates current procedure environment variable
+	procedureContext sessionProcedureContext
+
 	// FastCheckTable is used to control whether fast check table is enabled.
 	FastCheckTable bool
 
@@ -1819,6 +1837,21 @@ type SessionVars struct {
 	// BulkDMLEnabled indicates whether to enable bulk DML in pipelined mode.
 	BulkDMLEnabled bool
 
+	// database name +"."+procedure_name as key , *RoutineCacahe as value.
+	ProcedurePlanCache map[string]any
+	// LastProcedureErrorStr is used to save last handler command.
+	LastProcedureErrorStr string
+	// MaxSpRecursionDepth indicates how many recursions are allowed in a stored procedure
+	MaxSpRecursionDepth int
+	// ReplaceAbleUserDefVars indicates whether to replace user defined variables in the sql.
+	ReplaceAbleUserDefVars map[string]struct{}
+	// EnableUDVSubstitute indicates whether to enable user defined variable substitute,
+	// it takes effect both in general sql and stored procedures.
+	EnableUDVSubstitute bool
+	// EnableSPParamSubstitute indicate whether to enable stored procedure parameter substitute, it is only used to control
+	// the replacement of parameters (in, out, inout) in stored procedures.
+	EnableSPParamSubstitute bool
+
 	// InternalSQLScanUserTable indicates whether to use user table for internal SQL. it will be used by TTL scan
 	InternalSQLScanUserTable bool
 
@@ -1836,6 +1869,11 @@ type SessionVars struct {
 
 	// IndexLookUpPushDownPolicy indicates the policy of index look up push down.
 	IndexLookUpPushDownPolicy string
+	// CreateFromSelectUsingImport indicates whether to use import into to create table as select.
+	CreateFromSelectUsingImport bool
+
+	// PlanCacheMaxDecimalParamNums indicates the max number of decimal parameters which can use the plan cache
+	PlanCacheMaxDecimalParamNums int
 }
 
 // ResetRelevantOptVarsAndFixes resets the relevant optimizer variables and fixes.
@@ -2253,6 +2291,7 @@ type ConnectionInfo struct {
 	DB                string
 	AuthMethod        string
 	Attributes        map[string]string
+	IPInWhiteList     bool
 }
 
 const (
@@ -2413,6 +2452,11 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		SkipMissingPartitionStats:     vardef.DefTiDBSkipMissingPartitionStats,
 		IndexLookUpPushDownPolicy:     vardef.DefTiDBIndexLookUpPushDownPolicy,
 		OptPartialOrderedIndexForTopN: vardef.DefTiDBOptPartialOrderedIndexForTopN,
+		inCallProcedure: struct {
+			inCall bool
+			num    int
+		}{inCall: false, num: 0},
+		ProcedurePlanCache: make(map[string]any),
 	}
 	vars.TiFlashFineGrainedShuffleBatchSize = vardef.DefTiFlashFineGrainedShuffleBatchSize
 	vars.status.Store(uint32(mysql.ServerStatusAutocommit))
@@ -2651,7 +2695,6 @@ func (s *SessionVars) GetParseParams() []parser.ParseParam {
 
 // SetStringUserVar set the value and collation for user defined variable.
 func (s *SessionVars) SetStringUserVar(name string, strVal string, collation string) {
-	name = strings.ToLower(name)
 	if len(collation) > 0 {
 		s.SetUserVarVal(name, types.NewCollationStringDatum(stringutil.Copy(strVal), collation))
 	} else {
@@ -3138,6 +3181,11 @@ func (s *SessionVars) SetResourceGroupName(groupName string) {
 		metrics.ConnGauge.WithLabelValues(groupName).Inc()
 	}
 	s.ResourceGroupName = groupName
+}
+
+// GetCallProcedure get procedure flag.
+func (s *SessionVars) GetCallProcedure() bool {
+	return s.inCallProcedure.inCall
 }
 
 // TableDelta stands for the changed count for one table or partition.
@@ -3802,6 +3850,50 @@ func (s *SessionVars) PessimisticLockEligible() bool {
 		return true
 	}
 	return false
+}
+
+// SetInCallProcedure set in procedure flag.
+func (s *SessionVars) SetInCallProcedure() {
+	if !s.inCallProcedure.inCall {
+		s.inCallProcedure.inCall = true
+	}
+	s.inCallProcedure.num++
+}
+
+// InOtherCall in other procedure.
+func (s *SessionVars) InOtherCall() bool {
+	return s.inCallProcedure.num >= 2
+}
+
+// OutCallProcedure out of procedure.
+func (s *SessionVars) OutCallProcedure(clearStmtCtx bool) {
+	s.inCallProcedure.num--
+	if s.inCallProcedure.num <= 0 {
+		s.inCallProcedure.inCall = false
+		//clear all BackupStmtCtxes
+		if clearStmtCtx {
+			for i := range s.procedureContext.BackupStmtCtx {
+				s.procedureContext.BackupStmtCtx[i] = nil
+			}
+			s.procedureContext.BackupStmtCtx = s.procedureContext.BackupStmtCtx[:0]
+		}
+		if len(s.procedureContext.BackupStmtCtx) != 0 {
+			log.Error("procedure unclear backup stmtctx", zap.String("SQL", s.StmtCtx.OriginalSQL))
+		}
+		if len(s.ProcedurePlanCache) > int(vardef.StoredProgramCacheSize.Load()) {
+			for k := range s.ProcedurePlanCache {
+				delete(s.ProcedurePlanCache, k)
+			}
+		}
+	}
+}
+
+// GetProcedureContext get procedure environment variables.
+func (s *SessionVars) GetProcedureContext() *sessionProcedureContext {
+	if !s.inCallProcedure.inCall {
+		return nil
+	}
+	return &s.procedureContext
 }
 
 // RemoveLockDDLJobs removes the DDL jobs which doesn't get the metadata lock from jobs.

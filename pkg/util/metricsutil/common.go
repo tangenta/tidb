@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/task"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
@@ -46,6 +47,7 @@ import (
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/client/opt"
 	"github.com/tikv/pd/client/pkg/caller"
+	"go.uber.org/zap"
 )
 
 var componentName = caller.Component("tidb-metrics-util")
@@ -82,6 +84,7 @@ func RegisterMetrics() error {
 	if kerneltype.IsNextGen() {
 		registerMetrics(nil) // metrics' const label already set
 	} else {
+		log.Info("[tidbx-server] cfg.KeyspaceName", zap.Any("cfg.KeyspaceName", cfg.KeyspaceName))
 		keyspaceMeta, err := getKeyspaceMeta(pdCli, cfg.KeyspaceName)
 		if err != nil {
 			return err
