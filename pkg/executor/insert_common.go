@@ -1224,7 +1224,7 @@ func (e *InsertValues) handleDuplicateKey(ctx context.Context, txn kv.Transactio
 	if !replace {
 		e.Ctx().GetSessionVars().StmtCtx.AppendWarning(uk.dupErr)
 		if txnCtx := e.Ctx().GetSessionVars().TxnCtx; txnCtx.IsPessimistic && e.Ctx().GetSessionVars().LockUnchangedKeys {
-			txnCtx.AddUnchangedKeyForLock(uk.newKey)
+			txnCtx.AddUnchangedKeyForLock(uk.newKey, false)
 		}
 		return true, nil
 	}
@@ -1292,7 +1292,7 @@ func (e *InsertValues) batchCheckAndInsert(
 					if txnCtx := e.Ctx().GetSessionVars().TxnCtx; txnCtx.IsPessimistic &&
 						e.Ctx().GetSessionVars().LockUnchangedKeys {
 						// lock duplicated row key on insert-ignore
-						txnCtx.AddUnchangedKeyForLock(r.handleKey.newKey)
+						txnCtx.AddUnchangedKeyForLock(r.handleKey.newKey, false)
 					}
 					continue
 				}
