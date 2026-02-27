@@ -41,3 +41,4 @@ pkg/sessionctx/variable TestUpdateVariable
 pkg/store/gcworker TestTickGCSysTable
 tests/realtikvtest/txntest TestValidateReadOnlyInStalenessTransaction
 pkg/owner TestAcquireDistributedLock
+pkg/util/gctuner TestIssue48741
