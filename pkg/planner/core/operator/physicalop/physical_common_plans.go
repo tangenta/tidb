@@ -96,6 +96,11 @@ type Insert struct {
 
 	FKChecks   []*FKCheck   `plan-cache-clone:"must-nil"`
 	FKCascades []*FKCascade `plan-cache-clone:"must-nil"`
+
+	// LabelSecurityInfo
+	PolicyName  string // The label policy name binded to this table.
+	UserLabel   string // The label binded to current user.
+	LabelColumn string // The column name of this table used to store label value.
 }
 
 // Init initializes Insert.
@@ -172,6 +177,11 @@ type Update struct {
 
 	FKChecks   map[int64][]*FKCheck   `plan-cache-clone:"must-nil"`
 	FKCascades map[int64][]*FKCascade `plan-cache-clone:"must-nil"`
+
+	// LabelSecurityInfo
+	PolicyName  string // The label policy name binded to this table.
+	UserLabel   string // The label binded to current user.
+	LabelColumn string // The column name of this table used to store label value.
 }
 
 // Init initializes Update.

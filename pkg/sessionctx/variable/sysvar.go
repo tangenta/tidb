@@ -124,6 +124,11 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeNone, Name: "ssl_ca", Value: ""},
 	{Scope: vardef.ScopeNone, Name: "ssl_cert", Value: ""},
 	{Scope: vardef.ScopeNone, Name: "ssl_key", Value: ""},
+	{Scope: vardef.ScopeNone, Name: "tlcp_ca", Value: ""},
+	{Scope: vardef.ScopeNone, Name: "tlcp_sig_cert", Value: ""},
+	{Scope: vardef.ScopeNone, Name: "tlcp_sig_key", Value: ""},
+	{Scope: vardef.ScopeNone, Name: "tlcp_enc_cert", Value: ""},
+	{Scope: vardef.ScopeNone, Name: "tlcp_enc_key", Value: ""},
 	{Scope: vardef.ScopeNone, Name: "version_compile_os", Value: runtime.GOOS},
 	{Scope: vardef.ScopeNone, Name: "version_compile_machine", Value: runtime.GOARCH},
 	/* TiDB specific variables */
@@ -788,6 +793,21 @@ var defaultSysVars = []*SysVar{
 			return strconv.FormatInt(int64(vardef.PasswordValidationSpecialCharCount.Load()), 10), nil
 		},
 	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableProcedure, Value: vardef.Off, Type: vardef.TypeBool,
+		SetGlobal: func(ctx context.Context, s *SessionVars, val string) error {
+			on := TiDBOptOn(val)
+			vardef.TiDBEnableProcedureValue.Store(on)
+			return nil
+		}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.TiDBEnableProcedureValue.Load()), nil
+		},
+	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.AutomaticSpPrivileges, Value: BoolToOnOff(true), Type: vardef.TypeBool, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
+		vardef.AutomaticSPPrivileges.Store(TiDBOptOn(val))
+		return nil
+	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+		return BoolToOnOff(vardef.AutomaticSPPrivileges.Load()), nil
+	}},
 	{Scope: vardef.ScopeGlobal, Name: vardef.ValidatePasswordDictionary, Value: "", Type: vardef.TypeStr},
 	{Scope: vardef.ScopeGlobal, Name: vardef.DefaultPasswordLifetime, Value: "0", Type: vardef.TypeInt, MinValue: 0, MaxValue: math.MaxUint16},
 	{Scope: vardef.ScopeGlobal, Name: vardef.DisconnectOnExpiredPassword, Value: vardef.On, Type: vardef.TypeBool, ReadOnly: true, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
@@ -2943,6 +2963,8 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.SQLRequirePrimaryKey, Value: vardef.Off, Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
 		s.PrimaryKeyRequired = TiDBOptOn(val)
 		return nil
+	}, RequireDynamicPrivileges: func(isGlobal bool, sem bool) []string {
+		return []string{"SYSTEM_VARIABLES_ADMIN"}
 	}},
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableAnalyzeSnapshot, Value: BoolToOnOff(vardef.DefTiDBEnableAnalyzeSnapshot), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
 		s.EnableAnalyzeSnapshot = TiDBOptOn(val)
@@ -3570,6 +3592,14 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
 		return strconv.Itoa(ldap.LDAPSimpleAuthImpl.GetMaxCapacity()), nil
 	}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableDutySeparationMode, Value: BoolToOnOff(vardef.DefTiDBEnableDutySeparationMode), Type: vardef.TypeBool, ReadOnly: true,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			vardef.EnableDutySeparationMode.Store(TiDBOptOn(val))
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.EnableDutySeparationMode.Load()), nil
+		},
+	},
 	// runtime filter variables group
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBRuntimeFilterTypeName, Value: vardef.DefRuntimeFilterType, Type: vardef.TypeStr,
 		Validation: func(_ *SessionVars, normalizedValue string, originalValue string, _ vardef.ScopeFlag) (string, error) {
@@ -3705,6 +3735,51 @@ var defaultSysVars = []*SysVar{
 			vardef.SchemaVersionCacheLimit.Store(TidbOptInt64(val, vardef.DefTiDBSchemaVersionCacheLimit))
 			return nil
 		}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableLabelSecurity, Value: BoolToOnOff(vardef.DefTiDBEnableLabelSecurity), Type: vardef.TypeBool, SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+		vardef.EnableLabelSecurity.Store(TiDBOptOn(val))
+		return nil
+	}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+		return BoolToOnOff(vardef.EnableLabelSecurity.Load()), nil
+	}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.SPCacheSize, Value: strconv.Itoa(vardef.DefStoredProgramCacheSize), Type: vardef.TypeInt, MinValue: 0, MaxValue: 524288, SetGlobal: func(ctx context.Context, vars *SessionVars, s string) error {
+		val, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		vardef.StoredProgramCacheSize.Store(val)
+		return nil
+	}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+		return strconv.Itoa(int(vardef.StoredProgramCacheSize.Load())), nil
+	}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.MaxSpRecursionDepth, Type: vardef.TypeInt, Value: "0", MinValue: 0, MaxValue: 255, SetSession: func(s *SessionVars, val string) error {
+		s.MaxSpRecursionDepth = TidbOptInt(val, 0)
+		return nil
+	}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.AutomaticSpPrivileges, Value: BoolToOnOff(true), Type: vardef.TypeBool, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
+		vardef.AutomaticSPPrivileges.Store(TiDBOptOn(val))
+		return nil
+	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+		return BoolToOnOff(vardef.AutomaticSPPrivileges.Load()), nil
+	}},
+	{Scope: vardef.ScopeSession, Name: vardef.TiDBProcedureLastErrorSQL, Value: "", Type: vardef.TypeStr, ReadOnly: true, GetSession: func(s *SessionVars) (string, error) {
+		return s.LastProcedureErrorStr, nil
+	}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableProcedureAstCache, Value: BoolToOnOff(vardef.TiDBEnableSPAstReuse.Load()), Type: vardef.TypeBool, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+		return BoolToOnOff(vardef.TiDBEnableSPAstReuse.Load()), nil
+	}, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
+		vardef.TiDBEnableSPAstReuse.Store(TiDBOptOn(val))
+		return nil
+	}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableUDVSubstitute, Value: BoolToOnOff(vardef.DefTiDBEnableUDVSubstitute), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
+		s.EnableUDVSubstitute = TiDBOptOn(val)
+		return nil
+	}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableSPParamSubstitute, Value: BoolToOnOff(vardef.DefTiDBEnableSPParamSubstitute), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
+		s.EnableSPParamSubstitute = TiDBOptOn(val)
+		return nil
+	}, GetSession: func(vars *SessionVars) (string, error) {
+		return BoolToOnOff(vars.EnableSPParamSubstitute), nil
+	}},
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBIdleTransactionTimeout, Value: strconv.Itoa(vardef.DefTiDBIdleTransactionTimeout), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: secondsPerYear,
 		SetSession: func(s *SessionVars, val string) error {
 			s.IdleTransactionTimeout = tidbOptPositiveInt32(val, vardef.DefTiDBIdleTransactionTimeout)
@@ -3713,6 +3788,11 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.DivPrecisionIncrement, Value: strconv.Itoa(vardef.DefDivPrecisionIncrement), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: 30,
 		SetSession: func(s *SessionVars, val string) error {
 			s.DivPrecisionIncrement = tidbOptPositiveInt32(val, vardef.DefDivPrecisionIncrement)
+			return nil
+		}},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBPlanCacheMaxDecimalParamNums, Value: strconv.Itoa(vardef.DefTiDBPlanCacheMaxDecimalParamNums), Type: vardef.TypeInt, MinValue: math.MinInt, MaxValue: math.MaxInt,
+		SetSession: func(s *SessionVars, val string) error {
+			s.PlanCacheMaxDecimalParamNums = TidbOptInt(val, vardef.DefTiDBPlanCacheMaxDecimalParamNums)
 			return nil
 		}},
 	{Scope: vardef.ScopeSession, Name: vardef.TiDBDMLType, Value: vardef.DefTiDBDMLType, Type: vardef.TypeStr,
