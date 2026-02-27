@@ -317,6 +317,8 @@ const (
 	AdminCreateWorkloadSnapshotCommand = "ADMIN CREATE WORKLOAD SNAPSHOT"
 	// AdminReloadClusterBindingsCommand represents ADMIN RELOAD CLUSTER BINDINGS statement
 	AdminReloadClusterBindingsCommand = "ADMIN RELOAD CLUSTER BINDINGS"
+	// AdminLBACEnableCommand represents ADMIN LBAC ENABLE statement
+	AdminLBACEnableCommand = "ADMIN LBAC ENABLE"
 )
 
 // BRIE Commands
@@ -462,6 +464,10 @@ const (
 	// ProcedureCommand represents all statements in procedure. It's too rough
 	// but still fine for now.
 	ProcedureCommand = "PROCEDURE"
+	// SignalCommand represents SIGNAL statement
+	SignalCommand = "SIGNAL"
+	// GetDiagnosticsCommand represents GET DIAGNOSTICS statement
+	GetDiagnosticsCommand = "GET DIAGNOSTICS"
 	// UnknownCommand represents unknown statements
 	UnknownCommand = "UNKNOWN"
 	// SetOprCommand represents UNION/INTERSECT/EXCEPT statement
@@ -916,6 +922,8 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminCreateWorkloadSnapshotCommand
 	case AdminReloadClusterBindings:
 		return AdminReloadClusterBindingsCommand
+	case AdminLBACEnable:
+		return AdminLBACEnableCommand
 	default:
 		return UnknownCommand
 	}
@@ -1220,7 +1228,17 @@ func (n *ProcedureBlock) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
-func (n *ProcedureInfo) SEMCommand() string {
+func (n *CreateProcedureInfo) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureLoopStmt) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *AlterProcedureStmt) SEMCommand() string {
 	return ProcedureCommand
 }
 
@@ -1322,4 +1340,14 @@ func (n *ProcedureErrorVal) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *ProcedureErrorState) SEMCommand() string {
 	return ProcedureCommand
+}
+
+// SEMCommand implements StmtNode interface for Signal.
+func (n *Signal) SEMCommand() string {
+	return SignalCommand
+}
+
+// SEMCommand implements StmtNode interface for GetDiagnosticsStmt.
+func (stmt *GetDiagnosticsStmt) SEMCommand() string {
+	return GetDiagnosticsCommand
 }
