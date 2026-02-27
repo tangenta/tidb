@@ -110,7 +110,7 @@ type aggOrderByResolver struct {
 func (a *aggOrderByResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 	a.exprDepth++
 	if n, ok := inNode.(*driver.ParamMarkerExpr); ok {
-		if a.exprDepth == 1 {
+		if a.exprDepth == 1 && canParamMarkerBePositionExpr(n) {
 			_, isNull, isExpectedType := getUintFromNode(a.ctx.GetExprCtx(), n, false)
 			// For constant uint expression in top level, it should be treated as position expression.
 			if !isNull && isExpectedType {
@@ -119,6 +119,14 @@ func (a *aggOrderByResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 		}
 	}
 	return inNode, false
+}
+
+func canParamMarkerBePositionExpr(param *driver.ParamMarkerExpr) bool {
+	if !param.InExecute {
+		return true
+	}
+	allowed, _ := CheckParamTypeInt64orUint64(param)
+	return allowed
 }
 
 func (a *aggOrderByResolver) Leave(inNode ast.Node) (ast.Node, bool) {
@@ -2918,7 +2926,7 @@ func (g *gbyResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 		return inNode, true
 	case *driver.ParamMarkerExpr:
 		g.isParam = true
-		if g.exprDepth == 1 && !n.UseAsValueInGbyByClause {
+		if g.exprDepth == 1 && !n.UseAsValueInGbyByClause && canParamMarkerBePositionExpr(n) {
 			_, isNull, isExpectedType := getUintFromNode(g.ctx.GetExprCtx(), n, false)
 			// For constant uint expression in top level, it should be treated as position expression.
 			if !isNull && isExpectedType {
