@@ -636,7 +636,7 @@ func (s *mdLoaderSetup) constructFileInfo(ctx context.Context, f RawFile) (*File
 	}
 
 	switch res.Type {
-	case SourceTypeSQL, SourceTypeCSV:
+	case SourceTypeSQL, SourceTypeCSV, SourceTypeORC:
 		if !s.setupCfg.SkipRealSizeEstimation {
 			info.FileMeta.RealSize = EstimateRealSizeForFile(ctx, info.FileMeta, s.loader.GetStore())
 		}
