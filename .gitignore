@@ -75,6 +75,10 @@ fix.sql
 export-20*/
 var
 
+# Pingkai section
+tidb-enterprise-utilities
+tidb-security-advanced
+
 # Personal config files
 /*config.toml
 .cache
