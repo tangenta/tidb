@@ -2383,7 +2383,8 @@ func (n *ImportIntoStmt) SecureText() string {
 type CallStmt struct {
 	dmlNode
 
-	Procedure *FuncCallExpr
+	Procedure  *FuncCallExpr
+	IsFunction bool
 }
 
 // Restore implements Node interface.
@@ -3136,6 +3137,7 @@ const (
 	ShowCreateUser
 	ShowCreateSequence
 	ShowCreatePlacementPolicy
+	ShowCreateTrigger
 	ShowGrants
 	ShowMaskingPolicies
 	ShowTriggers
@@ -3182,6 +3184,7 @@ const (
 	ShowImportJobs
 	ShowImportGroups
 	ShowCreateProcedure
+	ShowCreateFunction
 	ShowBinlogStatus
 	ShowReplicaStatus
 	ShowDistributions
@@ -3214,6 +3217,7 @@ type ShowStmt struct {
 	Table  *TableName // Used for showing columns.
 	// Procedure's naming method is consistent with the table name
 	Procedure         *TableName
+	Trigger           *TableName
 	Partition         CIStr       // Used for showing partition.
 	Column            *ColumnName // Used for `desc table column`.
 	IndexName         CIStr
@@ -3291,6 +3295,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowCreateProcedure:
 		ctx.WriteKeyWord("CREATE PROCEDURE ")
+		if err := n.Procedure.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Procedure")
+		}
+	case ShowCreateFunction:
+		ctx.WriteKeyWord("CREATE FUNCTION ")
 		if err := n.Procedure.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Procedure")
 		}
@@ -3690,7 +3699,7 @@ func (n *ShowStmt) NeedLimitRSRow() bool {
 		//    ShowProfile, ShowProfiles
 		//
 		// 5) Below STMTs do not implement fetch logic.
-		//    ShowTriggers, ShowProcedureStatus, ShowEvents, ShowErrors, ShowOpenTables.
+		//    ShowEvents, ShowErrors, ShowOpenTables.
 		return false
 	}
 }

@@ -13,6 +13,11 @@
 
 package parser
 
+// ChangeDebugLevelForTest changes the debug level of the parser for test.
+func ChangeDebugLevelForTest(level int) {
+	yyDebug = level
+}
+
 func isLetter(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
@@ -166,6 +171,7 @@ var tokenMap = map[string]int{
 	"AFFINITY":                       affinity,
 	"AFTER":                          after,
 	"AGAINST":                        against,
+	"AGGREGATE":                      aggregate,
 	"AGO":                            ago,
 	"ALGORITHM":                      algorithm,
 	"ALL":                            all,
@@ -200,6 +206,7 @@ var tokenMap = map[string]int{
 	"BACKUP":                         backup,
 	"BACKUPS":                        backups,
 	"BDR":                            bdr,
+	"BEFORE":                         before,
 	"BEGIN":                          begin,
 	"BETWEEN":                        between,
 	"BERNOULLI":                      bernoulli,
@@ -283,6 +290,7 @@ var tokenMap = map[string]int{
 	"CONSTRAINT_SCHEMA":              constraintSchema,
 	"CONSTRAINT_NAME":                constraintName,
 	"CONSTRAINTS":                    constraints,
+	"CONTAINS":                       contains,
 	"CONTEXT":                        context,
 	"CONTINUE":                       continueKwd,
 	"CONVERT":                        convert,
@@ -341,6 +349,7 @@ var tokenMap = map[string]int{
 	"DEFINER":                        definer,
 	"DELAY_KEY_WRITE":                delayKeyWrite,
 	"DELAYED":                        delayed,
+	"DETERMINISTIC":                  deterministic,
 	"DELETE":                         deleteKwd,
 	"DEPENDENCY":                     dependency,
 	"DEPTH":                          depth,
@@ -370,6 +379,7 @@ var tokenMap = map[string]int{
 	"DUPLICATE":                      duplicate,
 	"DURATION":                       timeDuration,
 	"DYNAMIC":                        dynamic,
+	"EACH":                           each,
 	"ELSE":                           elseKwd,
 	"ELSEIF":                         elseIfKwd,
 	"ENABLE":                         enable,
@@ -422,6 +432,7 @@ var tokenMap = map[string]int{
 	"FOLLOWERS":                      followers,
 	"FOLLOWER_CONSTRAINTS":           followerConstraints,
 	"FOLLOWING":                      following,
+	"FOLLOWS":                        follows,
 	"FOR":                            forKwd,
 	"FORCE":                          force,
 	"FOREIGN":                        foreign,
@@ -581,6 +592,7 @@ var tokenMap = map[string]int{
 	"MOD":                            mod,
 	"MODE":                           mode,
 	"MODIFY":                         modify,
+	"MODIFIES":                       modifies,
 	"MONTH":                          month,
 	"MYSQL_ERRNO":                    mysqlErrno,
 	"NAMES":                          names,
@@ -658,6 +670,7 @@ var tokenMap = map[string]int{
 	"POLICY":                         policy,
 	"POSITION":                       position,
 	"PRE_SPLIT_REGIONS":              preSplitRegions,
+	"PRECEDES":                       precedes,
 	"PRECEDING":                      preceding,
 	"PREDICATE":                      predicate,
 	"PRECISION":                      precisionType,
@@ -682,6 +695,7 @@ var tokenMap = map[string]int{
 	"RANGE":                          rangeKwd,
 	"RATE_LIMIT":                     rateLimit,
 	"READ":                           read,
+	"READS":                          reads,
 	"READ_ONLY":                      readOnly,
 	"REAL":                           realType,
 	"REBUILD":                        rebuild,
@@ -721,6 +735,8 @@ var tokenMap = map[string]int{
 	"RESTORES":                       restores,
 	"RESTORED_TS":                    restoredTS,
 	"RESTRICT":                       restrict,
+	"RETURN":                         returnKwd,
+	"RETURNS":                        returns,
 	"RETURNED_SQLSTATE":              returned_sqlstate,
 	"REVERSE":                        reverse,
 	"REVOKE":                         revoke,
@@ -781,6 +797,7 @@ var tokenMap = map[string]int{
 	"SMALLINT":                       smallIntType,
 	"SNAPSHOT":                       snapshot,
 	"SOME":                           some,
+	"SONAME":                         soname,
 	"SOURCE":                         source,
 	"SPATIAL":                        spatial,
 	"SPEED":                          speed,
@@ -835,6 +852,7 @@ var tokenMap = map[string]int{
 	"STRAIGHT_JOIN":                  straightJoin,
 	"STRICT":                         strict,
 	"STRICT_FORMAT":                  strictFormat,
+	"STRING":                         stringType,
 	"STRONG":                         strong,
 	"SUBCLASS_ORIGIN":                subclassOrigin,
 	"SUBDATE":                        subDate,

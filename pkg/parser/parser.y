@@ -38,6 +38,13 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/duration"
 )
 
+type createFunctionPrefix struct {
+	orReplace     bool
+	viewAlgorithm ast.ViewAlgorithm
+	definer       *auth.UserIdentity
+	ifNotExists   bool
+}
+
 func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool) {
 	switch strings.ToUpper(name) {
 	case ast.MaskingPolicyRestrictNameInsertIntoSelect:
@@ -98,6 +105,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	array             "ARRAY"
 	as                "AS"
 	asc               "ASC"
+	before            "BEFORE"
 	between           "BETWEEN"
 	bigIntType        "BIGINT"
 	binaryType        "BINARY"
@@ -133,6 +141,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	dayMinute         "DAY_MINUTE"
 	daySecond         "DAY_SECOND"
 	decimalType       "DECIMAL"
+	declare           "DECLARE"
 	defaultKwd        "DEFAULT"
 	delayed           "DELAYED"
 	deleteKwd         "DELETE"
@@ -145,6 +154,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	doubleType        "DOUBLE"
 	drop              "DROP"
 	dual              "DUAL"
+	each              "EACH"
 	elseKwd           "ELSE"
 	elseIfKwd         "ELSEIF"
 	enclosed          "ENCLOSED"
@@ -250,6 +260,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	precisionType     "PRECISION"
 	primary           "PRIMARY"
 	procedure         "PROCEDURE"
+	purge             "PURGE"
 	rangeKwd          "RANGE"
 	rank              "RANK"
 	read              "READ"
@@ -263,6 +274,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	replace           "REPLACE"
 	require           "REQUIRE"
 	restrict          "RESTRICT"
+	returnKwd         "RETURN"
 	revoke            "REVOKE"
 	right             "RIGHT"
 	rlike             "RLIKE"
@@ -336,6 +348,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	affinity                   "AFFINITY"
 	after                      "AFTER"
 	against                    "AGAINST"
+	aggregate                  "AGGREGATE"
 	ago                        "AGO"
 	algorithm                  "ALGORITHM"
 	always                     "ALWAYS"
@@ -408,6 +421,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	constraintCaraLog          "CONSTRAINT_CATALOG"
 	constraintName             "CONSTRAINT_NAME"
 	constraintSchema           "CONSTRAINT_SCHEMA"
+	contains                   "CONTAINS"
 	context                    "CONTEXT"
 	cpu                        "CPU"
 	csvBackslashEscape         "CSV_BACKSLASH_ESCAPE"
@@ -425,9 +439,9 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	datetimeType               "DATETIME"
 	day                        "DAY"
 	deallocate                 "DEALLOCATE"
-	declare                    "DECLARE"
 	definer                    "DEFINER"
 	delayKeyWrite              "DELAY_KEY_WRITE"
+	deterministic              "DETERMINISTIC"
 	diagnostics                "DIAGNOSTICS"
 	digest                     "DIGEST"
 	directory                  "DIRECTORY"
@@ -470,6 +484,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	fixed                      "FIXED"
 	flush                      "FLUSH"
 	following                  "FOLLOWING"
+	follows                    "FOLLOWS"
 	format                     "FORMAT"
 	found                      "FOUND"
 	full                       "FULL"
@@ -536,6 +551,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	minValue                   "MINVALUE"
 	minRows                    "MIN_ROWS"
 	mode                       "MODE"
+	modifies                   "MODIFIES"
 	modify                     "MODIFY"
 	month                      "MONTH"
 	mysqlErrno                 "MYSQL_ERRNO"
@@ -586,6 +602,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	plugins                    "PLUGINS"
 	point                      "POINT"
 	policy                     "POLICY"
+	precedes                   "PRECEDES"
 	preceding                  "PRECEDING"
 	prepare                    "PREPARE"
 	preserve                   "PRESERVE"
@@ -596,12 +613,12 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	profile                    "PROFILE"
 	profiles                   "PROFILES"
 	proxy                      "PROXY"
-	purge                      "PURGE"
 	quarter                    "QUARTER"
 	queries                    "QUERIES"
 	query                      "QUERY"
 	quick                      "QUICK"
 	rateLimit                  "RATE_LIMIT"
+	reads                      "READS"
 	rebuild                    "REBUILD"
 	recommend                  "RECOMMEND"
 	recover                    "RECOVER"
@@ -623,6 +640,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	restores                   "RESTORES"
 	resume                     "RESUME"
 	returned_sqlstate          "RETURNED_SQLSTATE"
+	returns                    "RETURNS"
 	reuse                      "REUSE"
 	reverse                    "REVERSE"
 	role                       "ROLE"
@@ -662,6 +680,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	slow                       "SLOW"
 	snapshot                   "SNAPSHOT"
 	some                       "SOME"
+	soname                     "SONAME"
 	source                     "SOURCE"
 	sqlBufferResult            "SQL_BUFFER_RESULT"
 	sqlCache                   "SQL_CACHE"
@@ -686,6 +705,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	status                     "STATUS"
 	storage                    "STORAGE"
 	strictFormat               "STRICT_FORMAT"
+	stringType                 "STRING"
 	subclassOrigin             "SUBCLASS_ORIGIN"
 	subject                    "SUBJECT"
 	subpartition               "SUBPARTITION"
@@ -1050,14 +1070,18 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	CreatePolicyStmt           "CREATE PLACEMENT POLICY statement"
 	CreateMaskingPolicyStmt    "CREATE MASKING POLICY statement"
 	CreateProcedureStmt        "CREATE PROCEDURE statement"
+	CreateTriggerStmt          "CREATE TRIGGER statement"
+	CreateStoredFunctionStmt   "CREATE FUNCTION statement for stored function"
 	AddQueryWatchStmt          "ADD QUERY WATCH statement"
 	CreateResourceGroupStmt    "CREATE RESOURCE GROUP statement"
 	CreateSequenceStmt         "CREATE SEQUENCE statement"
 	CreateStatisticsStmt       "CREATE STATISTICS statement"
 	DoStmt                     "Do statement"
 	DropDatabaseStmt           "DROP DATABASE statement"
+	DropFunctionStmt           "DROP FUNCTION statement"
 	DropIndexStmt              "DROP INDEX statement"
 	DropProcedureStmt          "DROP PROCEDURE statement"
+	DropTriggerStmt            "DROP TRIGGER statement"
 	DropQueryWatchStmt         "DROP QUERY WATCH statement"
 	DropResourceGroupStmt      "DROP RESOURCE GROUP statement"
 	DropStatisticsStmt         "DROP STATISTICS statement"
@@ -1144,6 +1168,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	ProcedureBlockContent      "The statement block in procedure expressed with 'Begin ... End'"
 	SimpleWhenThen             "Procedure case when then"
 	SearchWhenThen             "Procedure search when then"
+	ProcedureReturnStmt        "The return statement in stored function, expressed by return expr"
 	ProcedureIfstmt            "The if statement in procedure, expressed by if ... elseif .. else ... end if"
 	procedurceElseIfs          "The else block in procedure, expressed by elseif or else or nil"
 	ProcedureIf                "The if block in procedure, expressed by expr then statement procedurceElseIfs"
@@ -1303,6 +1328,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	LimitOption                            "Limit option could be integer or parameter marker."
 	Lines                                  "Lines clause"
 	LinesTerminated                        "Lines terminated by"
+	LoadableFunctionReturnType             "Return type of loadable function"
 	LoadDataSetSpecOpt                     "Optional load data specification"
 	LoadDataOptionListOpt                  "Optional load data option list"
 	LoadDataOptionList                     "Load data option list"
@@ -1467,6 +1493,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	TrafficCaptureOptList                  "Traffic capture option list"
 	TrafficReplayOpt                       "Traffic replay option"
 	TrafficReplayOptList                   "Traffic replay option list"
+	TriggerDefiner                         "Trigger definer"
+	TriggerEvent                           "Trigger event"
+	TriggerOrder                           "Trigger order"
+	TriggerTiming                          "Trigger timing"
 	LockType                               "Table locks type"
 	TransactionChar                        "Transaction characteristic"
 	TransactionChars                       "Transaction characteristic list"
@@ -1605,10 +1635,13 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	StatsOptionsOpt                        "Stats options"
 	DryRunOptions                          "Dry run options"
 	OptionalShardColumn                    "Optional shard column"
-	SpOptInout                             "Optional procedure param type"
+	ProcedureInOut                         "Procedure param type"
 	OptSpPdparams                          "Optional procedure param list"
+	OptStoredFunctionParams                "Optional stored function param list"
 	SpPdparams                             "Procedure params"
+	StoredFunctionParams                   "Stored function params"
 	SpPdparam                              "Procedure param"
+	StoredFunctionParam                    "Stored function param"
 	ProcedureOptDefault                    "Optional procedure variable default value"
 	ProcedureProcStmts                     "Procedure statement list"
 	ProcedureProcStmt1s                    "One more procedure statement"
@@ -1628,6 +1661,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	ProcedureAlterChistics                 "Attributes when alter stored procedures"
 	ProcedureName                          "Procedure Name"
 	RoutineDefiner                         "Routine definer"
+	CreateFunctionStmtPrefix               "Create function statement prefix"
 	SQLStateText                           "Sqlstate text"
 	SetSignalInformationOpt                "Signal information opt"
 	SignalInformationItemList              "Signal information list"
@@ -1641,7 +1675,6 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	StatementInformation                   "The diagnostics statement information"
 	ConditionInformation                   "The diagnostics condition information"
 	DiagnosticsInformationItemName         "The diagnostics condition information name"
-
 	SplitOptionBetween                     "Split index option, between format"
 	SplitIndexOption                       "Split index option in CREATE/ALTER table"
 	SplitIndexList                         "Split index option list in CREATE table"
@@ -1691,6 +1724,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 
 %type	<ident>
 	Identifier                      "identifier or unreserved keyword"
+	ProcedureCursorName             "Procedure cursor name"
 	NotKeywordToken                 "Tokens not mysql keyword but treated specially"
 	UnReservedKeyword               "MySQL unreserved keywords"
 	TiDBKeyword                     "TiDB added keywords"
@@ -1715,6 +1749,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	FieldTerminator                 "Field terminator"
 	FlashbackToNewName              "Flashback to new name"
 	HashString                      "Hashed string"
+	LoadableFunctionSoname          "SONAME clause of loadable function"
 	LikeOrIlikeEscapeOpt            "like or ilike escape option"
 	OptCharset                      "Optional Character setting"
 	OptCollate                      "Optional Collate setting"
@@ -5519,7 +5554,7 @@ CreateViewStmt:
 	}
 
 OrReplace:
-	/* EMPTY */
+	/* EMPTY */ %prec empty
 	{
 		$$ = false
 	}
@@ -7302,6 +7337,7 @@ UnReservedKeyword:
 	"ACTION"
 |	"ADD_COLUMNAR_REPLICA_ON_DEMAND"
 |	"ADVISE"
+|	"AGGREGATE"
 |	"ASCII"
 |	"APPLY"
 |	"ATTRIBUTE"
@@ -7338,12 +7374,14 @@ UnReservedKeyword:
 |	"COMPRESSED"
 |	"CONSISTENCY"
 |	"CONSISTENT"
+|	"CONTAINS"
 |	"CURRENT"
 |	"DATA"
 |	"DATE" %prec lowerThanStringLitToken
 |	"DATETIME"
 |	"DAY"
 |	"DEALLOCATE"
+|	"DETERMINISTIC"
 |	"DO"
 |	"DUPLICATE"
 |	"DYNAMIC"
@@ -7368,6 +7406,7 @@ UnReservedKeyword:
 |	"FIXED"
 |	"FLUSH"
 |	"FOLLOWING"
+|	"FOLLOWS"
 |	"FORMAT"
 |	"FULL"
 |	"GENERAL"
@@ -7385,10 +7424,12 @@ UnReservedKeyword:
 |	"PACK_KEYS"
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
+|	"PRECEDES"
 |	"PREPARE"
 |	"PRE_SPLIT_REGIONS"
 |	"PROXY"
 |	"QUICK"
+|	"READS"
 |	"REBUILD"
 |	"RECOMMEND"
 |	"REDUNDANT"
@@ -7396,6 +7437,7 @@ UnReservedKeyword:
 |	"REFRESH"
 |	"RESOURCE"
 |	"RESTART"
+|	"RETURNS"
 |	"ROLE"
 |	"ROLLBACK"
 |	"ROLLUP"
@@ -7405,8 +7447,10 @@ UnReservedKeyword:
 |	"SHARD_ROW_ID_BITS"
 |	"SHUTDOWN"
 |	"SNAPSHOT"
+|	"SONAME"
 |	"START"
 |	"STATUS"
+|	"STRING"
 |	"OPEN"
 |	"POINT"
 |	"SUBPARTITIONS"
@@ -7480,6 +7524,7 @@ UnReservedKeyword:
 |	"BINDING"
 |	"BINDINGS"
 |	"MODIFY"
+|	"MODIFIES"
 |	"EVENTS"
 |	"PARTITIONS"
 |	"NONE"
@@ -7655,7 +7700,6 @@ UnReservedKeyword:
 |	"OFF"
 |	"OPTIONAL"
 |	"REQUIRED"
-|	"PURGE"
 |	"SKIP"
 |	"LOCKED"
 |	"CLUSTER"
@@ -7670,7 +7714,6 @@ UnReservedKeyword:
 |	"PASSWORD_LOCK_TIME"
 |	"DIGEST"
 |	"REUSE" %prec lowerThanEq
-|	"DECLARE"
 |	"HANDLER"
 |	"FOUND"
 |	"CALIBRATE"
@@ -12354,6 +12397,13 @@ ShowStmt:
 			User: $4.(*auth.UserIdentity),
 		}
 	}
+|	"SHOW" "CREATE" "TRIGGER" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:      ast.ShowCreateTrigger,
+			Trigger: $4.(*ast.TableName),
+		}
+	}
 |	"SHOW" "MASKING" "POLICIES" "FOR" TableName WhereClauseOptional
 	{
 		stmt := &ast.ShowStmt{
@@ -12503,6 +12553,13 @@ ShowStmt:
 	{
 		$$ = &ast.ShowStmt{
 			Tp:        ast.ShowCreateProcedure,
+			Procedure: $4.(*ast.TableName),
+		}
+	}
+|	"SHOW" "CREATE" "FUNCTION" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:        ast.ShowCreateFunction,
 			Procedure: $4.(*ast.TableName),
 		}
 	}
@@ -13113,6 +13170,8 @@ Statement:
 |	CreatePolicyStmt
 |	CreateMaskingPolicyStmt
 |	CreateProcedureStmt
+|	CreateTriggerStmt
+|	CreateStoredFunctionStmt
 |	CreateResourceGroupStmt
 |	AddQueryWatchStmt
 |	CreateSequenceStmt
@@ -13120,9 +13179,11 @@ Statement:
 |	DistributeTableStmt
 |	DoStmt
 |	DropDatabaseStmt
+|	DropFunctionStmt
 |	DropIndexStmt
 |	DropTableStmt
 |	DropProcedureStmt
+|	DropTriggerStmt
 |	DropPolicyStmt
 |	DropSequenceStmt
 |	DropViewStmt
@@ -13977,7 +14038,7 @@ BitValueType:
 	}
 
 StringType:
-	Char FieldLen OptBinary
+	Char FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetFlen($2.(int))
@@ -13987,7 +14048,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	Char OptBinary
+|	Char OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetCharset($2.(*ast.OptBinary).Charset)
@@ -13996,7 +14057,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NChar FieldLen OptBinary
+|	NChar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetFlen($2.(int))
@@ -14006,7 +14067,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NChar OptBinary
+|	NChar OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetCharset($2.(*ast.OptBinary).Charset)
@@ -14015,7 +14076,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	Varchar FieldLen OptBinary
+|	Varchar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeVarchar)
 		tp.SetFlen($2.(int))
@@ -14025,7 +14086,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NVarchar FieldLen OptBinary
+|	NVarchar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeVarchar)
 		tp.SetFlen($2.(int))
@@ -14325,6 +14386,7 @@ FieldLen:
 	}
 
 OptFieldLen:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = types.UnspecifiedLength
 	}
@@ -14354,6 +14416,7 @@ FieldOpts:
 	}
 
 FloatOpt:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.FloatOpt{Flen: types.UnspecifiedLength, Decimal: types.UnspecifiedLength}
 	}
@@ -14398,6 +14461,7 @@ OptVectorElementType:
 	}
 
 OptBinary:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.OptBinary{
 			IsBinary: false,
@@ -16470,14 +16534,14 @@ CreateMaskingPolicyStmt:
 		}
 		state := $15.(*ast.MaskingPolicyState)
 		$$ = &ast.CreateMaskingPolicyStmt{
-			OrReplace:           $2.(bool),
-			IfNotExists:         $5.(bool),
-			PolicyName:          ast.NewCIStr($6),
-			Table:               $8.(*ast.TableName),
-			Column:              &ast.ColumnName{Name: ast.NewCIStr($10)},
-			Expr:                $13,
-			RestrictOps:         $14.(ast.MaskingPolicyRestrictOps),
-			MaskingPolicyState:  *state,
+			OrReplace:          $2.(bool),
+			IfNotExists:        $5.(bool),
+			PolicyName:         ast.NewCIStr($6),
+			Table:              $8.(*ast.TableName),
+			Column:             &ast.ColumnName{Name: ast.NewCIStr($10)},
+			Expr:               $13,
+			RestrictOps:        $14.(ast.MaskingPolicyRestrictOps),
+			MaskingPolicyState: *state,
 		}
 	}
 
@@ -17045,7 +17109,18 @@ SpPdparams:
 	}
 
 SpPdparam:
-	SpOptInout Identifier Type OptCollate
+	Identifier Type OptCollate
+	{
+		x := &ast.StoreParameter{
+			Paramstatus:     ast.MODE_IN,
+			ParamType:       $2.(*types.FieldType),
+			ParamName:       $1,
+			OmitParamStatus: true,
+		}
+		x.ParamType.SetCollate($3)
+		$$ = x
+	}
+|	ProcedureInOut Identifier Type OptCollate
 	{
 		x := &ast.StoreParameter{
 			Paramstatus: $1.(int),
@@ -17056,12 +17131,8 @@ SpPdparam:
 		$$ = x
 	}
 
-SpOptInout:
-	/* Empty */
-	{
-		$$ = ast.MODE_IN
-	}
-|	"IN"
+ProcedureInOut:
+	"IN"
 	{
 		$$ = ast.MODE_IN
 	}
@@ -17113,6 +17184,7 @@ ProcedureStatementStmt:
 |	ShowStmt
 |	SignalStmt
 |	GetDiagnosticsStmt
+|	DoStmt
 
 ProcedureCursorSelectStmt:
 	SelectStmt
@@ -17150,6 +17222,12 @@ ProcedureDeclIdents:
 		$$ = l
 	}
 
+ProcedureCursorName:
+	Identifier
+	{
+		$$ = $1
+	}
+
 ProcedureOptDefault:
 	/* Empty */
 	{
@@ -17176,7 +17254,7 @@ ProcedureDecl:
 		}
 		$$ = x
 	}
-|	"DECLARE" identifier "CURSOR" "FOR" ProcedureCursorSelectStmt
+|	"DECLARE" ProcedureCursorName "CURSOR" "FOR" ProcedureCursorSelectStmt
 	{
 		name := strings.ToLower($2)
 		$5.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
@@ -17268,7 +17346,7 @@ optValue:
 |	"VALUE"
 
 ProcedureOpenCur:
-	"OPEN" identifier
+	"OPEN" ProcedureCursorName
 	{
 		name := strings.ToLower($2)
 		$$ = &ast.ProcedureOpenCur{
@@ -17277,7 +17355,15 @@ ProcedureOpenCur:
 	}
 
 ProcedureFetchInto:
-	"FETCH" ProcedureOptFetchNo identifier "INTO" ProcedureFetchList
+	"FETCH" ProcedureCursorName "INTO" ProcedureFetchList
+	{
+		name := strings.ToLower($2)
+		$$ = &ast.ProcedureFetchInto{
+			CurName:   name,
+			Variables: $4.([]string),
+		}
+	}
+|	"FETCH" "FROM" ProcedureCursorName "INTO" ProcedureFetchList
 	{
 		name := strings.ToLower($3)
 		$$ = &ast.ProcedureFetchInto{
@@ -17285,21 +17371,23 @@ ProcedureFetchInto:
 			Variables: $5.([]string),
 		}
 	}
+|	"FETCH" "NEXT" "FROM" ProcedureCursorName "INTO" ProcedureFetchList
+	{
+		name := strings.ToLower($4)
+		$$ = &ast.ProcedureFetchInto{
+			CurName:   name,
+			Variables: $6.([]string),
+		}
+	}
 
 ProcedureCloseCur:
-	"CLOSE" identifier
+	"CLOSE" ProcedureCursorName
 	{
 		name := strings.ToLower($2)
 		$$ = &ast.ProcedureCloseCur{
 			CurName: name,
 		}
 	}
-
-ProcedureOptFetchNo:
-
-/* Empty */
-|	"NEXT" "FROM"
-|	"FROM"
 
 ProcedureFetchList:
 	identifier
@@ -17367,6 +17455,14 @@ ProcedureBlockContent:
 			ProcedureProcStmts: $3.([]ast.StmtNode),
 		}
 		$$ = x
+	}
+
+ProcedureReturnStmt:
+	"RETURN" Expression
+	{
+		$$ = &ast.ProcedureReturnStmt{
+			ReturnExpr: $2.(ast.ExprNode),
+		}
 	}
 
 ProcedureIfstmt:
@@ -17590,6 +17686,7 @@ ProcedureProcStmt:
 		$$ = $1
 	}
 |	ProcedureUnlabeledBlock
+|	ProcedureReturnStmt
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
 |	ProcedureUnlabelLoopBlock
@@ -17608,7 +17705,9 @@ ProcedureCreateChistics:
 |	ProcedureCreateChistics ProcedureCreateChistic
 	{
 		l := $1.([]ast.ProcedureCharacteristic)
-		l = append(l, $2.(ast.ProcedureCharacteristic))
+		if $2 != nil {
+			l = append(l, $2.(ast.ProcedureCharacteristic))
+		}
 		$$ = l
 	}
 
@@ -17640,6 +17739,41 @@ ProcedureChistic:
 			Security: ast.SecurityInvoker,
 		}
 	}
+|	"DETERMINISTIC"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"NOT" "DETERMINISTIC"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"NO" "SQL"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"READS" "SQL" "DATA"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"MODIFIES" "SQL" "DATA"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"CONTAINS" "SQL"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+|	"LANGUAGE" "SQL"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
 
 ProcedureAlterChistics:
 	{
@@ -17648,7 +17782,9 @@ ProcedureAlterChistics:
 |	ProcedureAlterChistics ProcedureChistic
 	{
 		l := $1.([]ast.ProcedureCharacteristic)
-		l = append(l, $2.(ast.ProcedureCharacteristic))
+		if $2 != nil {
+			l = append(l, $2.(ast.ProcedureCharacteristic))
+		}
 		$$ = l
 	}
 
@@ -17660,6 +17796,17 @@ RoutineDefiner:
 	{
 		parser.inProcedure = true
 		$$ = $1
+	}
+
+CreateFunctionStmtPrefix:
+	"CREATE" OrReplace ViewAlgorithm RoutineDefiner "FUNCTION" IfNotExists
+	{
+		$$ = &createFunctionPrefix{
+			orReplace:     $2.(bool),
+			viewAlgorithm: $3.(ast.ViewAlgorithm),
+			definer:       $4.(*auth.UserIdentity),
+			ifNotExists:   $6.(bool),
+		}
 	}
 
 /********************************************************************************************
@@ -17704,12 +17851,106 @@ CreateProcedureStmt:
 		startOffset := parser.startOffset(&yyS[yypt])
 		originStmt := $12
 		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
-		startOffset = parser.startOffset(&yyS[yypt-4])
-		if parser.src[startOffset] == '(' {
-			startOffset++
+		$$ = x
+	}
+
+/* Stored FUNCTION parameter declaration list */
+OptStoredFunctionParams:
+	/* Empty */
+	{
+		$$ = []*ast.StoreParameter{}
+	}
+|	StoredFunctionParams
+	{
+		$$ = $1
+	}
+
+StoredFunctionParams:
+	StoredFunctionParams ',' StoredFunctionParam
+	{
+		l := $1.([]*ast.StoreParameter)
+		l = append(l, $3.(*ast.StoreParameter))
+		$$ = l
+	}
+|	StoredFunctionParam
+	{
+		$$ = []*ast.StoreParameter{$1.(*ast.StoreParameter)}
+	}
+
+StoredFunctionParam:
+	Identifier Type OptCollate
+	{
+		x := &ast.StoreParameter{
+			Paramstatus:     ast.MODE_IN,
+			ParamType:       $2.(*types.FieldType),
+			ParamName:       $1,
+			OmitParamStatus: true,
 		}
-		endOffset := parser.startOffset(&yyS[yypt-2])
-		x.ProcedureParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
+		x.ParamType.SetCollate($3)
+		$$ = x
+	}
+
+CreateStoredFunctionStmt:
+	CreateFunctionStmtPrefix TableName '(' OptStoredFunctionParams ')' "RETURNS" Type ProcedureCreateChistics ProcedureProcStmt
+	{
+		prefix := $1.(*createFunctionPrefix)
+		if prefix.orReplace {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if prefix.viewAlgorithm != ast.AlgorithmUndefined {
+			v := prefix.viewAlgorithm
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:     prefix.ifNotExists,
+			Definer:         prefix.definer,
+			ProcedureName:   $2.(*ast.TableName),
+			ProcedureParam:  $4.([]*ast.StoreParameter),
+			Characteristics: $8.([]ast.ProcedureCharacteristic),
+			ProcedureBody:   $9,
+		}
+		parser.inProcedure = false
+		startOffset := parser.startOffset(&yyS[yypt])
+		originStmt := $9
+		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
+		x.FunctionInfo.RetType = $7.(*types.FieldType)
+		$$ = x
+	}
+|	CreateFunctionStmtPrefix Identifier "RETURNS" LoadableFunctionReturnType LoadableFunctionSoname
+	{
+		prefix := $1.(*createFunctionPrefix)
+		if prefix.orReplace {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if prefix.viewAlgorithm != ast.AlgorithmUndefined {
+			v := prefix.viewAlgorithm
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:   prefix.ifNotExists,
+			ProcedureName: &ast.TableName{Name: ast.NewCIStr($2)},
+		}
+		x.FunctionInfo.IsLoadable = true
+		x.FunctionInfo.LoadableReturnType = $4.(types.EvalType)
+		x.FunctionInfo.SoName = $5
+		parser.inProcedure = false
+		$$ = x
+	}
+|	"CREATE" "AGGREGATE" "FUNCTION" IfNotExists Identifier "RETURNS" LoadableFunctionReturnType LoadableFunctionSoname
+	{
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:   $4.(bool),
+			ProcedureName: &ast.TableName{Name: ast.NewCIStr($5)},
+		}
+		x.FunctionInfo.IsLoadable = true
+		x.FunctionInfo.Aggregate = true
+		x.FunctionInfo.LoadableReturnType = $7.(types.EvalType)
+		x.FunctionInfo.SoName = $8
+		parser.inProcedure = false
 		$$ = x
 	}
 
@@ -17724,6 +17965,14 @@ AlterProcedureStmt:
 			Characteristics: $4.([]ast.ProcedureCharacteristic),
 		}
 	}
+|	"ALTER" "FUNCTION" ProcedureName ProcedureAlterChistics
+	{
+		$$ = &ast.AlterProcedureStmt{
+			ProcedureName:   $3.(*ast.TableName),
+			Characteristics: $4.([]ast.ProcedureCharacteristic),
+			IsFunction:      true,
+		}
+	}
 
 /********************************************************************************************
 *  DROP PROCEDURE  [IF EXISTS] sp_name
@@ -17732,8 +17981,153 @@ DropProcedureStmt:
 	"DROP" "PROCEDURE" IfExists ProcedureName
 	{
 		$$ = &ast.DropProcedureStmt{
-			IfExists:      $3.(bool),
-			ProcedureName: $4.(*ast.TableName),
+			IfExists: $3.(bool),
+			Name:     $4.(*ast.TableName),
+		}
+	}
+
+/********************************************************************************************
+* https://dev.mysql.com/doc/refman/8.4/en/create-trigger.html
+*   CREATE
+*     [DEFINER = user]
+*     TRIGGER [IF NOT EXISTS] trigger_name
+*     trigger_time trigger_event
+*     ON tbl_name FOR EACH ROW
+*     [trigger_order]
+*     trigger_body
+*
+* trigger_time: { BEFORE | AFTER }
+*
+* trigger_event: { INSERT | UPDATE | DELETE }
+*
+* trigger_order: { FOLLOWS | PRECEDES } other_trigger_name
+********************************************************************************************/
+CreateTriggerStmt:
+	"CREATE" OrReplace ViewAlgorithm TriggerDefiner "TRIGGER" IfNotExists TableName TriggerTiming TriggerEvent "ON" TableName "FOR" "EACH" "ROW" TriggerOrder ProcedureProcStmt
+	{
+		if $2.(bool) {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if $3.(ast.ViewAlgorithm) != ast.AlgorithmUndefined {
+			v := $3.(ast.ViewAlgorithm)
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		parser.inProcedure = false
+		$$ = &ast.CreateTriggerStmt{
+			IfNotExists: $6.(bool),
+			Definer:     $4.(*auth.UserIdentity),
+			TriggerName: $7.(*ast.TableName),
+			Timing:      $8.(ast.TriggerTiming),
+			Event:       $9.(ast.TriggerEvent),
+			TableName:   $11.(*ast.TableName),
+			Order:       $15.(ast.TriggerOrder),
+			TriggerBody: $16.(ast.StmtNode),
+		}
+	}
+
+TriggerDefiner:
+	ViewDefiner
+	{
+		parser.inProcedure = true
+		$$ = $1
+	}
+
+TriggerTiming:
+	"BEFORE"
+	{
+		$$ = ast.TriggerTimingBefore
+	}
+|	"AFTER"
+	{
+		$$ = ast.TriggerTimingAfter
+	}
+
+TriggerEvent:
+	"INSERT"
+	{
+		$$ = ast.TriggerEventInsert
+	}
+|	"UPDATE"
+	{
+		$$ = ast.TriggerEventUpdate
+	}
+|	"DELETE"
+	{
+		$$ = ast.TriggerEventDelete
+	}
+
+TriggerOrder:
+	/* EMPTY */
+	{
+		$$ = ast.TriggerOrder{}
+	}
+|	"FOLLOWS" Identifier
+	{
+		$$ = ast.TriggerOrder{
+			OrderType:        ast.TriggerOrderFollows,
+			OtherTriggerName: ast.NewCIStr($2),
+		}
+	}
+|	"PRECEDES" Identifier
+	{
+		$$ = ast.TriggerOrder{
+			OrderType:        ast.TriggerOrderPrecedes,
+			OtherTriggerName: ast.NewCIStr($2),
+		}
+	}
+
+/********************************************************************************************
+* https://dev.mysql.com/doc/refman/8.4/en/drop-trigger.html
+********************************************************************************************/
+DropTriggerStmt:
+	"DROP" "TRIGGER" IfExists TableName
+	{
+		$$ = &ast.DropTriggerStmt{
+			IfExists:    $3.(bool),
+			TriggerName: $4.(*ast.TableName),
+		}
+	}
+
+LoadableFunctionReturnType:
+	"INTEGER"
+	{
+		$$ = types.ETInt
+	}
+|	"INT"
+	{
+		$$ = types.ETInt
+	}
+|	"REAL"
+	{
+		$$ = types.ETReal
+	}
+|	"DECIMAL"
+	{
+		$$ = types.ETDecimal
+	}
+|	"STRING"
+	{
+		$$ = types.ETString
+	}
+
+LoadableFunctionSoname:
+	"SONAME" stringLit
+	{
+		$$ = $2
+	}
+
+/********************************************************************
+ * DROP FUNCTION [IF EXISTS] function_name
+ *******************************************************************/
+DropFunctionStmt:
+	"DROP" "FUNCTION" IfExists TableName
+	{
+		$$ = &ast.DropProcedureStmt{
+			IfExists:   $3.(bool),
+			Name:       $4.(*ast.TableName),
+			IsFunction: true,
 		}
 	}
 

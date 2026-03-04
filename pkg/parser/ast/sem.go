@@ -142,6 +142,8 @@ const (
 	ShowCreateResourceGroupCommand = "SHOW CREATE RESOURCE GROUP"
 	// ShowCreateProcedureCommand represents SHOW CREATE PROCEDURE statement
 	ShowCreateProcedureCommand = "SHOW CREATE PROCEDURE"
+	// ShowCreateFunctionCommand represents SHOW CREATE FUNCTION statement
+	ShowCreateFunctionCommand = "SHOW CREATE FUNCTION"
 	// ShowDatabasesCommand represents SHOW DATABASES statement
 	ShowDatabasesCommand = "SHOW DATABASES"
 	// ShowTableCommand represents SHOW TABLES statement
@@ -174,6 +176,8 @@ const (
 	ShowPrivilegesCommand = "SHOW PRIVILEGES"
 	// ShowTriggersCommand represents SHOW TRIGGERS statement
 	ShowTriggersCommand = "SHOW TRIGGERS"
+	// ShowCreateTriggerCommand represents SHOW CREATE TRIGGER statement
+	ShowCreateTriggerCommand = "SHOW CREATE TRIGGER"
 	// ShowProcedureStatusCommand represents SHOW PROCEDURE STATUS statement
 	ShowProcedureStatusCommand = "SHOW PROCEDURE STATUS"
 	// ShowFunctionStatusCommand represents SHOW FUNCTION STATUS statement
@@ -468,6 +472,8 @@ const (
 	// ProcedureCommand represents all statements in procedure. It's too rough
 	// but still fine for now.
 	ProcedureCommand = "PROCEDURE"
+	// TriggerCommand represents TRIGGER statement.
+	TriggerCommand = "TRIGGER"
 	// SignalCommand represents SIGNAL statement
 	SignalCommand = "SIGNAL"
 	// GetDiagnosticsCommand represents GET DIAGNOSTICS statement
@@ -732,12 +738,16 @@ func (n *ShowStmt) SEMCommand() string {
 		return ShowCreateResourceGroupCommand
 	case ShowCreateProcedure:
 		return ShowCreateProcedureCommand
+	case ShowCreateFunction:
+		return ShowCreateFunctionCommand
 	case ShowDatabases:
 		return ShowDatabasesCommand
 	case ShowTables:
 		return ShowTableCommand
 	case ShowTableStatus:
 		return ShowTableStatusCommand
+	case ShowCreateTrigger:
+		return ShowCreateTriggerCommand
 	case ShowColumns:
 		return ShowColumnsCommand
 	case ShowIndex:
@@ -1361,4 +1371,19 @@ func (n *Signal) SEMCommand() string {
 // SEMCommand implements StmtNode interface for GetDiagnosticsStmt.
 func (stmt *GetDiagnosticsStmt) SEMCommand() string {
 	return GetDiagnosticsCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureReturnStmt) SEMCommand() string {
+	return ProcedureCommand
 }

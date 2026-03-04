@@ -709,7 +709,7 @@ SupportedTableLevelOptimizerHintName:
 |	"HASH_JOIN_BUILD"
 |	"HASH_JOIN_PROBE"
 |	"HYPO_INDEX"
-|   "FULL"
+|	"FULL"
 
 UnsupportedIndexLevelOptimizerHintName:
 	"INDEX_MERGE"
@@ -723,9 +723,9 @@ UnsupportedIndexLevelOptimizerHintName:
 
 SupportedIndexLevelOptimizerHintName:
 	"USE_INDEX"
-|   "INDEX"
+|	"INDEX"
 |	"IGNORE_INDEX"
-|   "NO_INDEX"
+|	"NO_INDEX"
 |	"USE_INDEX_MERGE"
 |	"FORCE_INDEX"
 |	"ORDER_INDEX"
@@ -863,5 +863,5 @@ Identifier:
 /* Oracle hint names */
 |	"INDEX"
 |	"NO_INDEX"
-|   "FULL"
+|	"FULL"
 %%

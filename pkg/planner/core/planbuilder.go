@@ -4030,8 +4030,12 @@ func (b *PlanBuilder) buildSimple(ctx context.Context, node ast.StmtNode) (base.
 			b.visitInfo = appendDynamicVisitInfo(b.visitInfo, []string{"RESOURCE_GROUP_ADMIN", "RESOURCE_GROUP_USER"}, false, err)
 		}
 	case *ast.DropProcedureStmt:
-		procName := fmt.Sprintf("%s.%s", ast.NewCIStr(b.ctx.GetSessionVars().CurrentDB).O, raw.ProcedureName.Name.O)
-		err := plannererrors.ErrSpDoesNotExist.GenWithStackByArgs("PROCEDURE", procName)
+		schema := raw.Name.Schema.O
+		if schema == "" {
+			schema = b.ctx.GetSessionVars().CurrentDB
+		}
+		procName := fmt.Sprintf("%s.%s", schema, raw.Name.Name.O)
+		err := plannererrors.ErrSpDoesNotExist.GenWithStackByArgs(raw.Type(), procName)
 		if !raw.IfExists {
 			return nil, err
 		}
