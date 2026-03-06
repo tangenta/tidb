@@ -35,6 +35,8 @@ const (
 	eeversion11 = 11
 	// eeversion12 solves the problem that the `mysql.login_history` table is created by open-source TiDB
 	eeversion12 = 12
+	// eeversion13 adds the table mysql.func for UDFs.
+	eeversion13 = 13
 )
 
 const (
@@ -45,7 +47,7 @@ const (
 
 // currentEEBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // Please make sure this is the largest version.
-var currentEEBootstrapVersion int64 = eeversion12
+var currentEEBootstrapVersion int64 = eeversion13
 
 var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeEEToVer2,
@@ -59,6 +61,7 @@ var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeToEEVer10,
 	upgradeToEEVer11,
 	upgradeToEEVer12,
+	upgradeToEEVer13,
 }
 
 func doPkdbDDLWorks(s sessionapi.Session) {
@@ -78,6 +81,8 @@ func doPkdbDDLWorks(s sessionapi.Session) {
 	// Create audit tables
 	mustExecute(s, audit.CreateFilterTableSQL)
 	mustExecute(s, audit.CreateFilterRuleTableSQL)
+	// Create mysql.func for loadable UDFs.
+	mustExecute(s, CreateFuncTable)
 }
 
 func doPkdbDMLWorks(s sessionapi.Session) {
@@ -159,6 +164,15 @@ const (
 		PRIMARY KEY (Host,User,Db,Routine_name,Routine_type) /*T![clustered_index] CLUSTERED */,
 		KEY Grantor (Grantor)
 	  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='Procedure privileges'`
+
+	// CreateFuncTable stores loadable user-defined functions (UDFs).
+	CreateFuncTable = `CREATE TABLE IF NOT EXISTS mysql.func (
+		name char(64) NOT NULL DEFAULT '',
+		ret tinyint NOT NULL DEFAULT '0',
+		dl char(128) NOT NULL DEFAULT '',
+		type enum('function','aggregate') NOT NULL,
+		PRIMARY KEY (name)
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='User defined functions'`
 
 	// CreateLSPolicies is used to create table tidb_ls_policies.
 	CreateLSPolicies = `CREATE TABLE IF NOT EXISTS mysql.tidb_ls_policies(
@@ -287,4 +301,11 @@ func upgradeToEEVer12(s sessionapi.Session, ver int64) {
 		return
 	}
 	doReentrantDDL(s, "ALTER TABLE `mysql`.`user` MODIFY COLUMN Max_user_connections INT UNSIGNED NOT NULL DEFAULT 0")
+}
+
+func upgradeToEEVer13(s sessionapi.Session, ver int64) {
+	if ver >= eeversion13 {
+		return
+	}
+	doReentrantDDL(s, CreateFuncTable)
 }

@@ -35,7 +35,7 @@ func TestCollectConflictsStepExecutor(t *testing.T) {
 	outSTMeta := &importinto.CollectConflictsStepMeta{}
 	require.NoError(t, json.Unmarshal(st.Meta, outSTMeta))
 	expectedSum := &importinto.Checksum{
-		Sum:  10819230675838565593,
+		Sum:  16114443508119636433,
 		KVs:  27,
 		Size: 909,
 	}

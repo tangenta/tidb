@@ -15,6 +15,7 @@ package mysql
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -455,12 +456,11 @@ func (m SQLMode) String() string {
 		return ""
 	}
 	var modes []string
-	for name, mode := range Str2SQLMode {
-		if m&mode != 0 {
+	for _, name := range sortedStr2SQLModeKeys {
+		if m&Str2SQLMode[name] != 0 {
 			modes = append(modes, name)
 		}
 	}
-	slices.Sort(modes)
 	return strings.Join(modes, ",")
 }
 
@@ -589,6 +589,12 @@ var Str2SQLMode = map[string]SQLMode{
 	"NO_ENGINE_SUBSTITUTION":     ModeNoEngineSubstitution,
 	"PAD_CHAR_TO_FULL_LENGTH":    ModePadCharToFullLength,
 	"ALLOW_INVALID_DATES":        ModeAllowInvalidDates,
+}
+
+var sortedStr2SQLModeKeys []string
+
+func init() {
+	sortedStr2SQLModeKeys = slices.Sorted(maps.Keys(Str2SQLMode))
 }
 
 // CombinationSQLMode is the special modes that provided as shorthand for combinations of mode values.

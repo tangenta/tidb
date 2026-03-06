@@ -1607,6 +1607,9 @@ func (b *Builder) applyDropSchemaV2(diff *model.SchemaDiff) []int64 {
 	if !ok {
 		return nil
 	}
+	if b.infoSchema.routineMap != nil {
+		delete(b.infoSchema.routineMap, di.Name.L)
+	}
 
 	tableIDs := make([]int64, 0, len(di.Deprecated.Tables))
 	tables, err := b.infoschemaV2.SchemaTableInfos(context.Background(), di.Name)

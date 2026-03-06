@@ -13,11 +13,6 @@
 
 package parser
 
-// ChangeDebugLevelForTest changes the debug level of the parser for test.
-func ChangeDebugLevelForTest(level int) {
-	yyDebug = level
-}
-
 func isLetter(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }

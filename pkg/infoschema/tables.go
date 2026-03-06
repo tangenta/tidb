@@ -97,7 +97,8 @@ const (
 	tablePlugins    = "PLUGINS"
 	// TableConstraints is the string constant of TABLE_CONSTRAINTS.
 	TableConstraints = "TABLE_CONSTRAINTS"
-	tableTriggers    = "TRIGGERS"
+	// TableTriggers is the string constant of TRIGGERS table.
+	TableTriggers = "TRIGGERS"
 	// TableUserPrivileges is the string constant of infoschema user privilege table.
 	TableUserPrivileges = "USER_PRIVILEGES"
 	// TableSchemaPrivileges provides information about schema privileges
@@ -277,7 +278,7 @@ var tableIDMap = map[string]int64{
 	// TableSessionVar:    autoid.InformationSchemaDBID + 14,
 	tablePlugins:          autoid.InformationSchemaDBID + 15,
 	TableConstraints:      autoid.InformationSchemaDBID + 16,
-	tableTriggers:         autoid.InformationSchemaDBID + 17,
+	TableTriggers:         autoid.InformationSchemaDBID + 17,
 	TableUserPrivileges:   autoid.InformationSchemaDBID + 18,
 	TableSchemaPrivileges: autoid.InformationSchemaDBID + 19,
 	TableTablePrivileges:  autoid.InformationSchemaDBID + 20,
@@ -2539,7 +2540,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableReferConst:                         referConstCols,
 	tablePlugins:                            pluginsCols,
 	TableConstraints:                        tableConstraintsCols,
-	tableTriggers:                           tableTriggersCols,
+	TableTriggers:                           tableTriggersCols,
 	TableUserPrivileges:                     tableUserPrivilegesCols,
 	TableSchemaPrivileges:                   tableSchemaPrivilegesCols,
 	TableTablePrivileges:                    tableTablePrivilegesCols,

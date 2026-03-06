@@ -41,13 +41,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/types"
 )
 
-type createFunctionPrefix struct {
-	orReplace     bool
-	viewAlgorithm ast.ViewAlgorithm
-	definer       *auth.UserIdentity
-	ifNotExists   bool
-}
-
 func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool) {
 	switch strings.ToUpper(name) {
 	case ast.MaskingPolicyRestrictNameInsertIntoSelect:

@@ -101,6 +101,7 @@ go_test(
         "//pkg/lightning/log",
         "//pkg/lightning/worker",
         "//pkg/objstore",
+        "//pkg/objstore/compressedio",
         "//pkg/objstore/mockobjstore",
         "//pkg/objstore/objectio",
         "//pkg/objstore/storeapi",
