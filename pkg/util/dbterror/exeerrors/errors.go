@@ -103,6 +103,7 @@ var (
 	ErrLoadDataInvalidOperation       = dbterror.ClassExecutor.NewStd(mysql.ErrLoadDataInvalidOperation)
 	ErrLoadDataLocalUnsupportedOption = dbterror.ClassExecutor.NewStd(mysql.ErrLoadDataLocalUnsupportedOption)
 	ErrLoadDataPreCheckFailed         = dbterror.ClassExecutor.NewStd(mysql.ErrLoadDataPreCheckFailed)
+	ErrUdfExists                      = dbterror.ClassExecutor.NewStd(mysql.ErrUdfExists)
 	ErrSpAlreadyExists                = dbterror.ClassExecutor.NewStd(mysql.ErrSpAlreadyExists)
 	ErrSpDoesNotExist                 = dbterror.ClassExecutor.NewStd(mysql.ErrSpDoesNotExist)
 	ErrSpDupParam                     = dbterror.ClassExecutor.NewStd(mysql.ErrSpDupParam)
@@ -120,6 +121,7 @@ var (
 	ErrSpDupHandler                   = dbterror.ClassOptimizer.NewStd(mysql.ErrSpDupHandler)
 	ErrSpCursorAfterHandler           = dbterror.ClassOptimizer.NewStd(mysql.ErrSpCursorAfterHandler)
 	ErrSpBadSQLstate                  = dbterror.ClassOptimizer.NewStd(mysql.ErrSpBadSQLstate)
+	ErrSpNoRetset                     = dbterror.ClassOptimizer.NewStd(mysql.ErrSpNoRetset)
 	ErrSpecificAccessDenied           = dbterror.ClassExecutor.NewStd(mysql.ErrSpecificAccessDenied)
 	ErrNoSuchUser                     = dbterror.ClassOptimizer.NewStd(mysql.ErrNoSuchUser)
 	ErrSpRecursionLimit               = dbterror.ClassExecutor.NewStd(mysql.ErrSpRecursionLimit)
@@ -132,4 +134,5 @@ var (
 
 	ErrGetStackedDaWithoutActiveHandler = dbterror.ClassExecutor.NewStd(mysql.ErrGetStackedDaWithoutActiveHandler)
 	ErrDaInvalidConditionNumber         = dbterror.ClassExecutor.NewStd(mysql.ErrDaInvalidConditionNumber)
+	ErrCantUpdateUsedTableInSfOrTrg     = dbterror.ClassExecutor.NewStd(mysql.ErrCantUpdateUsedTableInSfOrTrg)
 )

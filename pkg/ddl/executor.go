@@ -108,6 +108,7 @@ var errCheckConstraintIsOff = errors.NewNoStackError(vardef.TiDBEnableCheckConst
 // to DDL job table. Then jobScheduler will schedule them to run on workers
 // asynchronously in parallel. Executor will wait them to finish.
 type Executor interface {
+	pkdbExecutorExtension
 	CreateSchema(ctx sessionctx.Context, stmt *ast.CreateDatabaseStmt) error
 	AlterSchema(sctx sessionctx.Context, stmt *ast.AlterDatabaseStmt) error
 	DropSchema(ctx sessionctx.Context, stmt *ast.DropDatabaseStmt) error

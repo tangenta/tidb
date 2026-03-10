@@ -78,3 +78,41 @@ func (a *AlterProcedureArgs) decodeV1(job *Job) error {
 func GetAlterProcedureArgs(job *Job) (*AlterProcedureArgs, error) {
 	return getOrDecodeArgs[*AlterProcedureArgs](&AlterProcedureArgs{}, job)
 }
+
+// CreateTriggerArgs is the arguments for create trigger job.
+type CreateTriggerArgs struct {
+	TriggerInfo *TriggerInfo `json:"trigger_info,omitempty"`
+}
+
+func (a *CreateTriggerArgs) getArgsV1(*Job) []any {
+	return []any{a.TriggerInfo}
+}
+
+func (a *CreateTriggerArgs) decodeV1(job *Job) error {
+	a.TriggerInfo = &TriggerInfo{}
+	return errors.Trace(job.decodeArgs(a.TriggerInfo))
+}
+
+// GetCreateTriggerArgs gets the args for create trigger job.
+func GetCreateTriggerArgs(job *Job) (*CreateTriggerArgs, error) {
+	return getOrDecodeArgs[*CreateTriggerArgs](&CreateTriggerArgs{}, job)
+}
+
+// DropTriggerArgs is the arguments for drop trigger job.
+type DropTriggerArgs struct {
+	TriggerName ast.CIStr `json:"trigger_name,omitempty"`
+	IfExists    bool      `json:"if_exists,omitempty"`
+}
+
+func (a *DropTriggerArgs) getArgsV1(*Job) []any {
+	return []any{a.TriggerName, a.IfExists}
+}
+
+func (a *DropTriggerArgs) decodeV1(job *Job) error {
+	return errors.Trace(job.decodeArgs(&a.TriggerName, &a.IfExists))
+}
+
+// GetDropTriggerArgs gets the args for drop trigger job.
+func GetDropTriggerArgs(job *Job) (*DropTriggerArgs, error) {
+	return getOrDecodeArgs[*DropTriggerArgs](&DropTriggerArgs{}, job)
+}
