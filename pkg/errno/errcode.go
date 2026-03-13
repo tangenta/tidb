@@ -1173,6 +1173,7 @@ const (
 	ErrCheckPartialIndexWithoutFastCheck        = 8273
 	// Enterprise Edit errors.
 	ErrRowLabelUnAccessible = 8800
+	ErrProcedureDisabled    = 8801
 
 	// TiKV/PD/TiFlash errors.
 	ErrPDServerTimeout           = 9001

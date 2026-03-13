@@ -7,8 +7,9 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 )
 
-// ProcedureInfo provides meta data describing a stored procedure/function.
-// It mirrors the mysql.routines table schema, with additional state fields for DDL operations.
+// ProcedureInfo provides meta data describing a stored procedure/function. It
+// mirrors the mysql.routines table schema, with additional state fields for DDL
+// operations and executor convenience.
 type ProcedureInfo struct {
 	Schema ast.CIStr `json:"schema"`
 	Name   ast.CIStr `json:"name"`
@@ -35,7 +36,14 @@ type ProcedureInfo struct {
 	Options          *string `json:"options,omitempty"`
 	ExternalLanguage string  `json:"external_language"`
 
-	State SchemaState `json:"state"`
+	// above fields mirrors the mysql.routines table schema
+	//
+
+	// RetType is set when infoschema loads ProcedureInfo into memory. A stored
+	// function may have not nil RetType. Nil RetType for stored function means error
+	// happens in infoschema, it will be process again later.
+	RetType *types.FieldType `json:"ret_type"`
+	State   SchemaState      `json:"state"`
 }
 
 // LoadableFunctionInfo contains metadata for creating a loadable function.

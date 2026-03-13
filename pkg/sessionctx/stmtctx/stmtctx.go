@@ -470,6 +470,15 @@ type StatementContext struct {
 		HasFKCascades bool
 	}
 
+	TriggerCtx struct {
+		InTrigger bool
+	}
+
+	StoredFuncCtx struct {
+		sync.RWMutex
+		FuncName map[[2]string]*types.FieldType
+	}
+
 	// MPPQueryInfo stores some id and timestamp of current MPP query statement.
 	MPPQueryInfo struct {
 		QueryID              atomic2.Uint64
@@ -583,6 +592,7 @@ func (sc *StatementContext) Reset() bool {
 	} else {
 		sc.ExtraWarnHandler = contextutil.NewStaticWarnHandler(0)
 	}
+	sc.StoredFuncCtx.FuncName = nil
 	return true
 }
 
@@ -1119,6 +1129,7 @@ func (sc *StatementContext) CopyMuForCallProcedure(srcCtx *StatementContext) {
 	srcCtx.SyncExecDetails.MergeExecDetails(&d, nil)
 	srcCtx.MemTracker = sc.MemTracker
 	srcCtx.DiskTracker = sc.DiskTracker
+	srcCtx.SetTimeZone(sc.TimeZone())
 }
 
 // ResetForRetry resets the changed states during execution.

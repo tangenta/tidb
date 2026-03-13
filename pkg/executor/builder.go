@@ -338,22 +338,12 @@ func (b *executorBuilder) build(p base.Plan) exec.Executor {
 		return b.buildRecommendIndex(v)
 	case *plannercore.WorkloadRepoCreate:
 		return b.buildWorkloadRepoCreate(v)
-	case *plannercore.CreateProcedure:
-		if !vardef.TiDBEnableProcedureValue.Load() {
-			b.err = errors.New("if enterprise edition, please set global tidb_enable_procedure = ON")
-			return nil
-		}
-		return b.buildCreateProcedure(v)
-	case *plannercore.DropProcedure:
-		return b.buildDropProcedure(v)
 	case *plannercore.CallStmt:
 		if !vardef.TiDBEnableProcedureValue.Load() {
-			b.err = errors.New("if enterprise edition, please set global tidb_enable_procedure = ON")
+			b.err = exeerrors.ErrProcedureDisabled
 			return nil
 		}
 		return b.buildCallProcedure(v)
-	case *plannercore.AlterProcedure:
-		return b.buildAlterProcedure(v)
 	case *plannercore.Signal:
 		return b.buildSignalExec(v)
 	case *plannercore.GetDiagnostics:
@@ -1410,6 +1400,13 @@ func (b *executorBuilder) setTelemetryInfo(v *plannercore.DDL) {
 
 func (b *executorBuilder) buildDDL(v *plannercore.DDL) exec.Executor {
 	b.setTelemetryInfo(v)
+	switch v.Statement.(type) {
+	case *ast.CreateProcedureInfo, *ast.DropProcedureStmt, *ast.AlterProcedureStmt:
+		if !vardef.TiDBEnableProcedureValue.Load() {
+			b.err = exeerrors.ErrProcedureDisabled
+			return nil
+		}
+	}
 
 	e := &DDLExec{
 		BaseExecutor: exec.NewBaseExecutor(b.ctx, v.Schema(), v.ID()),
