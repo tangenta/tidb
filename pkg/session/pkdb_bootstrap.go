@@ -37,6 +37,8 @@ const (
 	eeversion12 = 12
 	// eeversion13 adds the table mysql.func for UDFs.
 	eeversion13 = 13
+	// eeversion14 reserve for LBAC implementation.
+	eeversion14 = 14
 )
 
 const (
@@ -62,6 +64,7 @@ var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeToEEVer11,
 	upgradeToEEVer12,
 	upgradeToEEVer13,
+	upgradeToEEVer14,
 }
 
 func doPkdbDDLWorks(s sessionapi.Session) {
@@ -308,4 +311,11 @@ func upgradeToEEVer13(s sessionapi.Session, ver int64) {
 		return
 	}
 	doReentrantDDL(s, CreateFuncTable)
+}
+
+func upgradeToEEVer14(s sessionapi.Session, ver int64) {
+	if ver >= eeversion14 {
+		return
+	}
+	// reserve for LBAC implementation.
 }

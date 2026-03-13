@@ -120,6 +120,10 @@ const (
 	ActionAlterTableAffinity                    ActionType = 78
 	ActionAlterTableSoftDeleteInfo              ActionType = 79 // reserve for soft-delete feature
 	ActionModifySchemaSoftDeleteAndActiveActive ActionType = 80 // reserve for soft-delete and active-active feature
+
+	// 200 ~ 255 are reserved for pkdb usage.
+	// 200 ~ 204 are reserved for udf.
+	// 205 ~ 207 are reserved for tablegroup.
 )
 
 // ActionMap is the map of DDL ActionType to string.
