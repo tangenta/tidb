@@ -173,6 +173,10 @@ func foldConstant(ctx BuildContext, expr Expression) (Expression, bool) {
 			// Stored functions may have side effects and should not be folded.
 			return expr, false
 		}
+		if _, ok := x.Function.(*loadableFuncSig); ok {
+			// Loadable functions may have side effects and should not be folded.
+			return expr, false
+		}
 		if function := specialFoldHandler[x.FuncName.L]; function != nil && !MaybeOverOptimized4PlanCache(ctx, expr) {
 			return function(ctx, x)
 		}
