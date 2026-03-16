@@ -21,14 +21,13 @@ This file provides guidance to agents working in this repository.
 
 | Task | Required action |
 | --- | --- |
-| Added/moved/renamed/removed Go files, changed Bazel files, updated Bazel test targets, or changed `go.mod`/`go.sum` | MUST run `make bazel_prepare` and include resulting Bazel metadata changes in the PR (for example `BUILD.bazel`, `**/*.bazel`, and `**/*.bzl`). |
 | Running package unit tests | SHOULD run targeted tests (`go test -run <TestName> -tags=intest,deadlock`) and avoid full-package runs unless needed. |
 | Unit tests in a package that uses failpoints | MUST enable failpoints before tests and disable afterward (see `docs/agents/testing-flow.md`). |
 | Recording integration tests | MUST use `pushd tests/integrationtest && ./run-tests.sh -r <TestName> && popd` (not `-record`; `-record` is for unit-test suites that explicitly support it). |
 | RealTiKV tests | MUST start playground in background, run tests, then clean up playground/data (see `docs/agents/testing-flow.md`). |
 | Bug fix | MUST add a regression test and verify it fails before fix and passes after fix. |
 | Fmt-only PR | MUST NOT run costly `realtikvtest`; local compilation is enough. |
-| Before finishing | MUST run `make bazel_lint_changed` if there are code changes. SHOULD self-review diff quality before finishing. |
+| Before finishing | SHOULD self-review diff quality before finishing. |
 
 ### Skills
 
@@ -40,7 +39,7 @@ This file provides guidance to agents working in this repository.
 
 1. Restate the task goal and acceptance criteria.
 2. Locate the owning subsystem and the closest existing tests (`Repository Map`, `Task -> Validation Matrix`).
-3. Decide prerequisites before running tests/build (`docs/agents/testing-flow.md` -> `Failpoint decision for unit tests`; `AGENTS.md` -> `Build Flow` -> `When make bazel_prepare is required`).
+3. Decide prerequisites before running tests/build (`docs/agents/testing-flow.md` -> `Failpoint decision for unit tests`).
 4. Pick the smallest valid validation set and prepare final reporting items (`Agent Output Contract`).
 5. If `AGENTS.md` or docs under `docs/agents/` changed, follow the checklist in `docs/agents/agents-review-guide.md` before finishing.
 
@@ -65,30 +64,6 @@ This file provides guidance to agents working in this repository.
   - MUST: Before making/reviewing any DDL changes in the DDL module, read `docs/agents/ddl/README.md` first and use it as the default map of the execution framework.
   - Debugging: You MAY reference `docs/agents/ddl/*`, but you MUST NOT treat it as authoritative. Treat it as hypotheses until verified in code/tests (avoid hallucination/outdated assumptions).
   - Doc drift: If implementation and `docs/agents/ddl/*` differ, you MUST update the docs to match reality and call it out in the PR/issue. Do not defer.
-
-## Build Flow
-
-### When `make bazel_prepare` is required
-
-Run `make bazel_prepare` before building when any of the following is true:
-
-- New workspace or fresh clone.
-- Bazel-related files changed (for example `WORKSPACE`, `DEPS.bzl`, `BUILD.bazel`, `MODULE.bazel`, `MODULE.bazel.lock`).
-- Any Go source file is added/removed/renamed/moved in the PR.
-- Go module dependencies changed (for example `go.mod`, `go.sum`), including adding third-party dependencies.
-- UT or RealTiKV tests were added and Bazel test targets were updated (for example `_test.go` in `srcs`, `shard_count`, or `tests/realtikvtest/**/BUILD.bazel` updates).
-- Local Bazel dependency/toolchain errors occurred.
-
-Recommended local build flow:
-
-```bash
-make bazel_prepare
-make bazel_bin
-make gogenerate   # optional: regenerate generated code
-go mod tidy       # optional: if go.mod/go.sum changed
-git fetch origin --prune
-make bazel_lint_changed # Optional: skip this step if the resolved Bazel target is //:all.
-```
 
 ## Task -> Validation Matrix
 
@@ -136,7 +111,6 @@ Typical package unit test command: `go test -run <TestName> -tags=intest,deadloc
 ### Tests and testdata
 
 - Prefer extending existing test suites and fixtures over creating new scaffolding.
-- Unit test suite size in one package SHOULD stay around 50 or fewer as a practical target; use `shard_count` in package `BUILD.bazel` as a reference when splitting.
 - Keep test changes minimal and deterministic; avoid broad golden/testdata churn unless required.
 - For planner predicate pushdown cases, keep SQL-only statements in `predicate_pushdown_suite_in.json` and put DDL in setup.
 - When recording outputs, verify changed result files before reporting completion.
