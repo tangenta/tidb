@@ -617,6 +617,7 @@ func TestDMLStmt(t *testing.T) {
 			WHERE stuff.value >= ALL (SELECT stuff.value
 			FROM stuff)`, true, "SELECT `stuff`.`id` FROM `stuff` WHERE `stuff`.`value`>=ALL (SELECT `stuff`.`value` FROM `stuff`)"},
 		{"BEGIN", true, "START TRANSACTION"},
+		{"BEGIN WORK", true, "START TRANSACTION"},
 		{"START TRANSACTION", true, "START TRANSACTION"},
 		// 45
 		{"COMMIT", true, "COMMIT"},
@@ -626,6 +627,7 @@ func TestDMLStmt(t *testing.T) {
 		{"COMMIT AND NO CHAIN RELEASE", true, "COMMIT RELEASE"},
 		{"COMMIT AND CHAIN NO RELEASE", true, "COMMIT AND CHAIN"},
 		{"COMMIT AND CHAIN RELEASE", false, ""},
+		{"COMMIT WORK", true, "COMMIT"},
 		{"ROLLBACK", true, "ROLLBACK"},
 		{"ROLLBACK AND NO CHAIN", true, "ROLLBACK"},
 		{"ROLLBACK NO RELEASE", true, "ROLLBACK"},
@@ -633,6 +635,7 @@ func TestDMLStmt(t *testing.T) {
 		{"ROLLBACK AND NO CHAIN RELEASE", true, "ROLLBACK RELEASE"},
 		{"ROLLBACK AND CHAIN NO RELEASE", true, "ROLLBACK AND CHAIN"},
 		{"ROLLBACK AND CHAIN RELEASE", false, ""},
+		{"ROLLBACK WORK", true, "ROLLBACK"},
 		{`BEGIN;
 			INSERT INTO foo VALUES (42, 3.14);
 			INSERT INTO foo VALUES (-1, 2.78);
@@ -824,6 +827,15 @@ func TestDMLStmt(t *testing.T) {
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' optionally enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
 		{"select a,b,a+b from t into outfile '/tmp/result.txt' fields terminated BY ',' enclosed BY '\"' lines starting by 'xy' terminated BY '\r'", true, "SELECT `a`,`b`,`a`+`b` FROM `t` INTO OUTFILE '/tmp/result.txt' FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES STARTING BY 'xy' TERMINATED BY '\r'"},
+		// select into var list
+		{"select 1 into @a", true, "SELECT 1 INTO @`a`"},
+		{"select 1 into @a from dual", true, "SELECT 1 INTO @`a`"},
+		{"select a into @a from t", true, "SELECT `a` INTO @`a` FROM `t`"},
+		{"select a, b into @a, @bc from t", true, "SELECT `a`,`b` INTO @`a`,@`bc` FROM `t`"},
+		{"select a, b+1 into @a, @bc from t", true, "SELECT `a`,`b`+1 INTO @`a`,@`bc` FROM `t`"},
+		{"select a into a from t", true, "SELECT `a` INTO `a` FROM `t`"},
+		{"select a, b into a, bc from t", true, "SELECT `a`,`b` INTO `a`,`bc` FROM `t`"},
+		{"select a, b+1 into a, bc from t", true, "SELECT `a`,`b`+1 INTO `a`,`bc` FROM `t`"},
 
 		// from join
 		{"SELECT * from t1, t2, t3", true, "SELECT * FROM ((`t1`) JOIN `t2`) JOIN `t3`"},
@@ -3016,9 +3028,14 @@ func TestDDL(t *testing.T) {
 		{"create table t (d date default date_format(now(),'%Y-%m'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m')))"},
 		{"create table t (d date default (date_format(now(),'%Y-%m')))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d')))"},
+		{"create table t (d date default date_format(now(),'%y%m%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')))"},
+		{"create table t (d date default date_format('2025-08-08 13:13:13','%y%m%d'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(_UTF8MB4'2025-08-08 13:13:13', _UTF8MB4'%y%m%d')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d %H.%i.%s'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d %H.%i.%s')))"},
 		{"create table t (d date default date_format(now(),'%Y-%m-%d %H:%i:%s'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%Y-%m-%d %H:%i:%s')))"},
 		{"create table t (d date default date_format(now(),'%b %d %Y %h:%i %p'))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (DATE_FORMAT(NOW(), _UTF8MB4'%b %d %Y %h:%i %p')))"},
+		{"create table t(id int default cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
+		{"create table t(id int default (cast((DATE_FORMAT(now(), '%y%m%d')) as unsigned)))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(NOW(), _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
+		{"create table t(id int default (cast((DATE_FORMAT('2025-08-08 13:13:13', '%y%m%d')) as unsigned)))", true, "CREATE TABLE `t` (`id` INT DEFAULT CAST((DATE_FORMAT(_UTF8MB4'2025-08-08 13:13:13', _UTF8MB4'%y%m%d')) AS UNSIGNED))"},
 		{"create table t (a varchar(32) default (replace(upper(uuid()), '-', '')))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(UPPER(UUID()), _UTF8MB4'-', _UTF8MB4'')))"},
 		{"create table t (a varchar(32) default replace(upper(uuid()), '-', ''))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(UPPER(UUID()), _UTF8MB4'-', _UTF8MB4'')))"},
 		{"create table t (a varchar(32) default (replace(convert(upper(uuid()) using utf8mb4), '-', '')))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (REPLACE(CONVERT(UPPER(UUID()) USING 'utf8mb4'), _UTF8MB4'-', _UTF8MB4'')))"},
@@ -8214,6 +8231,155 @@ func TestSplitPartition(t *testing.T) {
 		{`create table t (id BIGINT) SPLIT BETWEEN (0) AND (1000000) REGIONS 4`, true, "CREATE TABLE `t` (`id` BIGINT) SPLIT BETWEEN (0) AND (1000000) REGIONS 4"},
 		{`create table t (id BIGINT, INDEX idx(id)) SPLIT BETWEEN (0) AND (1000000) REGIONS 4 SPLIT INDEX idx BETWEEN (0) AND (1000000) REGIONS 2`, true, "CREATE TABLE `t` (`id` BIGINT,INDEX `idx`(`id`)) SPLIT BETWEEN (0) AND (1000000) REGIONS 4 SPLIT INDEX `idx` BETWEEN (0) AND (1000000) REGIONS 2"},
 		{`alter table t SPLIT BETWEEN (0) AND (1000000) REGIONS 3`, true, "ALTER TABLE `t` SPLIT BETWEEN (0) AND (1000000) REGIONS 3"},
+	}
+	RunTest(t, cases, false)
+}
+
+func TestTableSplitStmt(t *testing.T) {
+	table := []testCase{
+		// Valid cases
+		{"SELECT * FROM t TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"select * from t tablesplit ('a', 'b')", true, "SELECT * FROM `t` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` AS `t1` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t PARTITION (p0) TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`) TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t1 TABLESPLIT ('a', 'b'), t2", true, "SELECT * FROM (`t1` TABLESPLIT('a', 'b')) JOIN `t2`"},
+		{"SELECT * FROM t1, t2 TABLESPLIT ('a', 'b')", true, "SELECT * FROM (`t1`) JOIN `t2` TABLESPLIT('a', 'b')"},
+		{"SELECT * FROM t TABLESPLIT ('', 'b')", true, "SELECT * FROM `t` TABLESPLIT('', 'b')"},
+		{"SELECT * FROM t PARTITION (p0, p1) AS t1 TABLESPLIT ('a', 'b')", true, "SELECT * FROM `t` PARTITION(`p0`, `p1`) AS `t1` TABLESPLIT('a', 'b')"},
+
+		// Invalid cases
+		{"SELECT * FROM t TABLESPLIT", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a',)", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a', 'b', 'c')", false, ""},
+		{"SELECT * FROM t TABLESPLIT ('a' 'b')", false, ""},
+		{"SELECT * FROM t TABLESPLIT 'a', 'b'", false, ""},
+		{"SELECT * FROM t TABLESPLIT (a, b)", false, ""},
+		{"SELECT * FROM t TABLESPLIT (1, 2)", false, ""},
+	}
+
+	RunTest(t, table, false)
+}
+
+func TestStoredRoutines(t *testing.T) {
+	cases := []testCase{
+		{
+			`CREATE FUNCTION func_1(f1 DECIMAL(65, 30)) RETURNS DECIMAL(65,30)
+			SQL SECURITY INVOKER COMMENT 'this is simple'
+			BEGIN
+			RETURN f1;
+			END`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `func_1`(`f1` decimal(65,30)) RETURNS decimal(65,30) SQL SECURITY INVOKER COMMENT 'this is simple' BEGIN RETURN `f1`; END",
+		},
+		{
+			`CREATE FUNCTION fn1(a char) returns int deterministic return 1;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn1`(`a` char) RETURNS int RETURN 1",
+		},
+		{
+			`CREATE FUNCTION fn2() RETURNS varchar(100) NOT DETERMINISTIC RETURN 'test';`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn2`() RETURNS varchar(100) RETURN _UTF8MB4'test'",
+		},
+		{
+			`CREATE FUNCTION fn3(x INT, y INT) RETURNS INT READS SQL DATA BEGIN RETURN x + y; END;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn3`(`x` int, `y` int) RETURNS int BEGIN RETURN `x`+`y`; END",
+		},
+		{
+			`CREATE FUNCTION fn4(val DOUBLE) RETURNS DOUBLE MODIFIES SQL DATA RETURN val * 2;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn4`(`val` double) RETURNS double RETURN `val`*2",
+		},
+		{
+			`CREATE FUNCTION fn5() RETURNS INT NO SQL RETURN 42;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn5`() RETURNS int RETURN 42",
+		},
+		{
+			`CREATE FUNCTION fn6(a TEXT) RETURNS TEXT CONTAINS SQL RETURN UPPER(a);`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn6`(`a` text) RETURNS text RETURN UPPER(`a`)",
+		},
+		{
+			`CREATE DEFINER='user'@'host' FUNCTION fn7(x INT) RETURNS INT SQL SECURITY DEFINER RETURN x * x;`,
+			true,
+			"CREATE DEFINER = `user`@`host` FUNCTION `fn7`(`x` int) RETURNS int SQL SECURITY DEFINER RETURN `x`*`x`",
+		},
+		{
+			`CREATE FUNCTION fn8(p DECIMAL(10,2)) RETURNS DECIMAL(10,2) DETERMINISTIC READS SQL DATA SQL SECURITY INVOKER COMMENT 'square function' BEGIN RETURN p * p; END;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn8`(`p` decimal(10,2)) RETURNS decimal(10,2) SQL SECURITY INVOKER COMMENT 'square function' BEGIN RETURN `p`*`p`; END",
+		},
+		{
+			`CREATE FUNCTION fn9(d DATE) RETURNS DATE NOT DETERMINISTIC NO SQL RETURN d + INTERVAL 1 DAY;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn9`(`d` date) RETURNS date RETURN DATE_ADD(`d`, INTERVAL 1 DAY)",
+		},
+		{
+			`CREATE FUNCTION fn10(flag BOOLEAN) RETURNS VARCHAR(10) LANGUAGE SQL RETURN IF(flag, 'true', 'false');`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn10`(`flag` tinyint(1)) RETURNS varchar(10) RETURN IF(`flag`, _UTF8MB4'true', _UTF8MB4'false')",
+		},
+		{
+			`CREATE FUNCTION fn11() RETURNS JSON DETERMINISTIC RETURN JSON_OBJECT('key', 'value');`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn11`() RETURNS json RETURN JSON_OBJECT(_UTF8MB4'key', _UTF8MB4'value')",
+		},
+		{
+			`CREATE FUNCTION fn12(a INT, b INT, c INT) RETURNS INT BEGIN DECLARE result INT; SET result = a + b + c; RETURN result; END;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn12`(`a` int, `b` int, `c` int) RETURNS int BEGIN DECLARE `result` INT;SET `result`=`a`+`b`+`c`;RETURN `result`; END",
+		},
+		{
+			`CREATE FUNCTION fn13(str VARCHAR(255)) RETURNS INT DETERMINISTIC RETURN LENGTH(str);`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn13`(`str` varchar(255)) RETURNS int RETURN LENGTH(`str`)",
+		},
+		{
+			`CREATE FUNCTION fn14() RETURNS BIGINT UNSIGNED DETERMINISTIC RETURN 18446744073709551615;`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn14`() RETURNS bigint UNSIGNED RETURN 18446744073709551615",
+		},
+		{
+			`CREATE FUNCTION fn15(ts TIMESTAMP) RETURNS DATETIME MODIFIES SQL DATA SQL SECURITY DEFINER RETURN CONVERT_TZ(ts, '+00:00', '+08:00');`,
+			true,
+			"CREATE DEFINER = CURRENT_USER FUNCTION `fn15`(`ts` timestamp) RETURNS datetime SQL SECURITY DEFINER RETURN CONVERT_TZ(`ts`, _UTF8MB4'+00:00', _UTF8MB4'+08:00')",
+		},
+		{
+			`CREATE FUNCTION udf1 RETURNS INTEGER SONAME 'udf1.so';`,
+			true,
+			"CREATE FUNCTION `udf1` RETURNS INTEGER SONAME 'udf1.so'",
+		},
+		{
+			`CREATE FUNCTION udf2 RETURNS INTEGER NOT DETERMINISTIC READS SQL DATA SONAME 'udf2.so';`,
+			false,
+			"",
+		},
+		{
+			`CREATE AGGREGATE FUNCTION udf3 RETURNS STRING SONAME 'udf3.so';`,
+			true,
+			"CREATE AGGREGATE FUNCTION `udf3` RETURNS STRING SONAME 'udf3.so'",
+		},
+		{
+			`CREATE AGGREGATE FUNCTION udf4 RETURNS STRING DETERMINISTIC SONAME 'udf4.so';`,
+			false,
+			"",
+		},
+		{
+			`CREATE PROCEDURE sp6( )
+			BEGIN
+				declare e char default 'b';
+				declare next cursor for SELECT f1 from db_storedproc.t2;
+				declare continue handler for sqlstate '02000' set @x2 = 1;
+				open next;
+				fetch next into e;
+				close next;
+			END`,
+			true,
+			"CREATE DEFINER = CURRENT_USER PROCEDURE `sp6`() BEGIN DECLARE `e` CHAR DEFAULT _UTF8MB4'b';DECLARE NEXT CURSOR FOR SELECT `f1` FROM `db_storedproc`.`t2`;DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' SET @`x2`=1;OPEN NEXT;FETCH NEXT INTO E;CLOSE NEXT; END",
+		},
 	}
 	RunTest(t, cases, false)
 }

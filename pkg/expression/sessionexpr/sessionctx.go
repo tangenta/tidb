@@ -34,6 +34,8 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util"
 	contextutil "github.com/pingcap/tidb/pkg/util/context"
+	"github.com/pingcap/tidb/pkg/util/dbterror/exeerrors"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/intest"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/mathutil"
@@ -153,6 +155,25 @@ func (ctx *ExprContext) IntoStatic() *exprstatic.ExprContext {
 	return exprstatic.MakeExprContextStatic(ctx)
 }
 
+// LoadStoredFunction loads stored function info by schema and function name.
+func (ctx *ExprContext) LoadStoredFunction(schema, funcName string) (*exprctx.StoredFuncInfo, error) {
+	if schema == "" {
+		return nil, plannererrors.ErrNoDB
+	}
+	sc := ctx.sctx.GetSessionVars().StmtCtx
+	sc.UserFuncCtx.Lock()
+	defer sc.UserFuncCtx.Unlock()
+
+	if sc.UserFuncCtx.StoredFuncName == nil {
+		return nil, exeerrors.ErrSpDoesNotExist.FastGenByArgs("FUNCTION", schema+"."+funcName)
+	}
+	retType, ok := sc.UserFuncCtx.StoredFuncName[[2]string{schema, funcName}]
+	if !ok || retType == nil {
+		return nil, exeerrors.ErrSpDoesNotExist.FastGenByArgs("FUNCTION", schema+"."+funcName)
+	}
+	return &exprctx.StoredFuncInfo{RetType: retType}, nil
+}
+
 // EvalContext implements the `expression.EvalContext` interface to provide evaluation context in session.
 type EvalContext struct {
 	sctx  sessionctx.Context
@@ -165,6 +186,7 @@ func NewEvalContext(sctx sessionctx.Context) *EvalContext {
 	// set all optional properties
 	ctx.setOptionalProp(currentUserProp(sctx))
 	ctx.setOptionalProp(expropt.NewSessionVarsProvider(sctx))
+	ctx.setOptionalProp(stmtCleanupProp(sctx))
 	ctx.setOptionalProp(infoSchemaProp(sctx))
 	ctx.setOptionalProp(expropt.KVStorePropProvider(sctx.GetStore))
 	ctx.setOptionalProp(sqlExecutorProp(sctx))
@@ -374,6 +396,13 @@ func infoSchemaProp(sctx sessionctx.Context) expropt.InfoSchemaPropProvider {
 func sqlExecutorProp(sctx sessionctx.Context) expropt.SQLExecutorPropProvider {
 	return func() (expropt.SQLExecutor, error) {
 		return sctx.GetRestrictedSQLExecutor(), nil
+	}
+}
+
+func stmtCleanupProp(sctx sessionctx.Context) expropt.StmtCleanupPropProvider {
+	return func(cleanup func()) {
+		stmtCtx := sctx.GetSessionVars().StmtCtx
+		stmtCtx.RegisterUDFCleanup(cleanup)
 	}
 }
 

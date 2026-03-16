@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/property"
 	"github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/planner/util/costusage"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/statistics"
 	"github.com/pingcap/tidb/pkg/table"
@@ -230,12 +232,21 @@ type Execute struct {
 // Because GetVar use String to represent BinaryLiteral, here we need to convert string back to BinaryLiteral.
 func isGetVarBinaryLiteral(sctx base.PlanContext, expr expression.Expression) (res bool) {
 	scalarFunc, ok := expr.(*expression.ScalarFunction)
-	if ok && scalarFunc.FuncName.L == ast.GetVar {
-		name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
-		if err != nil || isNull {
-			res = false
-		} else if dt, ok2 := sctx.GetSessionVars().GetUserVarVal(name); ok2 {
-			res = dt.Kind() == types.KindBinaryLiteral
+	if ok {
+		if scalarFunc.FuncName.L == ast.GetVar {
+			name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
+			if err != nil || isNull {
+				res = false
+			} else if dt, ok2 := sctx.GetSessionVars().GetUserVarVal(name); ok2 {
+				res = dt.Kind() == types.KindBinaryLiteral
+			}
+		} else if scalarFunc.FuncName.L == ast.GetProcedureVar {
+			name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
+			if err != nil || isNull {
+				res = false
+			} else if _, dt, notFind := sctx.GetSessionVars().GetProcedureVariable(name); !notFind {
+				res = dt.Kind() == types.KindBinaryLiteral
+			}
 		}
 	}
 	return res
@@ -1441,4 +1452,64 @@ func IsAutoCommitTxn(vars *variable.SessionVars) bool {
 // AdminShowBDRRole represents a show bdr role plan.
 type AdminShowBDRRole struct {
 	physicalop.SimpleSchemaProducer
+}
+
+// CallStmt call plan
+type CallStmt struct {
+	physicalop.SimpleSchemaProducer
+	Callstmt        *ast.CallStmt
+	Is              infoschema.InfoSchema
+	ProcedureSQLMod string
+	// Whether the operating environment is in strict mode
+	IsStrictMode        bool
+	Plan                *ProcedurePlan
+	CachedProcedurePlan *RoutineCacahe
+}
+
+// SignalInfo record signal information item
+type SignalInfo struct {
+	Name int
+	Expr expression.Expression
+}
+
+// Signal create procedure plan
+type Signal struct {
+	physicalop.SimpleSchemaProducer
+	SQLState   string
+	SignalCons []*SignalInfo
+}
+
+// DiagnosticsStatement records the object of reading variables
+type DiagnosticsStatement struct {
+	Name       string
+	IsVariable bool
+	Con        int
+}
+
+// UpdateVariable saves the reading record
+func (state *DiagnosticsStatement) UpdateVariable(ctx sessionctx.Context, fd *types.FieldType, d types.Datum) error {
+	if state.IsVariable {
+		ctx.GetSessionVars().SetUserVarVal(state.Name, d)
+		ctx.GetSessionVars().SetUserVarType(state.Name, fd)
+	} else {
+		err := UpdateVariableVar(state.Name, d, ctx.GetSessionVars())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DiagnosticsCondition is condition information in get diagnostics statements
+type DiagnosticsCondition struct {
+	ConditionID expression.Expression
+	Cons        []*DiagnosticsStatement
+}
+
+// GetDiagnostics creates procedure plan
+type GetDiagnostics struct {
+	physicalop.SimpleSchemaProducer
+	Area       int
+	Statements []*DiagnosticsStatement
+	Con        *DiagnosticsCondition
 }

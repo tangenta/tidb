@@ -55,6 +55,8 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/unionexec"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/expression/aggregation"
+	"github.com/pingcap/tidb/pkg/extension"
+	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/metadef"
@@ -88,6 +90,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/execdetails"
 	"github.com/pingcap/tidb/pkg/util/intest"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tidb/pkg/util/ranger"
 	rangerctx "github.com/pingcap/tidb/pkg/util/ranger/context"
@@ -99,6 +102,7 @@ import (
 	"github.com/tikv/client-go/v2/tikv"
 	"github.com/tikv/client-go/v2/txnkv"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
+	"go.uber.org/zap"
 )
 
 // executorBuilder builds an Executor from a Plan.
@@ -334,6 +338,16 @@ func (b *executorBuilder) build(p base.Plan) exec.Executor {
 		return b.buildRecommendIndex(v)
 	case *plannercore.WorkloadRepoCreate:
 		return b.buildWorkloadRepoCreate(v)
+	case *plannercore.CallStmt:
+		if !vardef.TiDBEnableProcedureValue.Load() {
+			b.err = exeerrors.ErrProcedureDisabled
+			return nil
+		}
+		return b.buildCallProcedure(v)
+	case *plannercore.Signal:
+		return b.buildSignalExec(v)
+	case *plannercore.GetDiagnostics:
+		return b.buildGetDiagnosticsExec(v)
 	default:
 		if mp, ok := p.(testutil.MockPhysicalPlan); ok {
 			return mp.GetExecutor()
@@ -896,6 +910,7 @@ func (b *executorBuilder) buildShow(v *physicalop.PhysicalShow) exec.Executor {
 		CountWarningsOrErrors: v.CountWarningsOrErrors,
 		DBName:                ast.NewCIStr(v.DBName),
 		Table:                 v.Table,
+		Procedure:             v.Procedure,
 		Partition:             v.Partition,
 		Column:                v.Column,
 		IndexName:             v.IndexName,
@@ -978,6 +993,12 @@ func (b *executorBuilder) buildSimple(v *plannercore.Simple) exec.Executor {
 	}
 	base := exec.NewBaseExecutor(b.ctx, v.Schema(), v.ID())
 	base.SetInitCap(chunk.ZeroCapacity)
+	var extensions *extension.SessionExtensions
+	if e, err := extension.GetExtensions(); err != nil {
+		logutil.BgLogger().Warn("get extensions failed", zap.Error(err))
+	} else {
+		extensions = e.NewSessionExtensions()
+	}
 	e := &SimpleExec{
 		BaseExecutor:    base,
 		Statement:       v.Statement,
@@ -985,6 +1006,7 @@ func (b *executorBuilder) buildSimple(v *plannercore.Simple) exec.Executor {
 		IsFromRemote:    v.IsFromRemote,
 		is:              b.is,
 		staleTxnStartTS: v.StaleTxnStartTS,
+		extensions:      extensions,
 	}
 	return e
 }
@@ -1034,6 +1056,9 @@ func (b *executorBuilder) buildInsert(v *physicalop.Insert) exec.Executor {
 		SelectExec:                selectExec,
 		rowLen:                    v.RowLen,
 		ignoreErr:                 v.IgnoreErr,
+		PolicyName:                v.PolicyName,
+		UserLabel:                 v.UserLabel,
+		LabelColumn:               v.LabelColumn,
 	}
 	err := ivs.initInsertColumns()
 	if err != nil {
@@ -1375,6 +1400,13 @@ func (b *executorBuilder) setTelemetryInfo(v *plannercore.DDL) {
 
 func (b *executorBuilder) buildDDL(v *plannercore.DDL) exec.Executor {
 	b.setTelemetryInfo(v)
+	switch v.Statement.(type) {
+	case *ast.CreateProcedureInfo, *ast.DropProcedureStmt, *ast.AlterProcedureStmt:
+		if !vardef.TiDBEnableProcedureValue.Load() {
+			b.err = exeerrors.ErrProcedureDisabled
+			return nil
+		}
+	}
 
 	e := &DDLExec{
 		BaseExecutor: exec.NewBaseExecutor(b.ctx, v.Schema(), v.ID()),
@@ -2531,6 +2563,7 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 			strings.ToLower(infoschema.TableMemoryUsageOpsHistory),
 			strings.ToLower(infoschema.ClusterTableMemoryUsage),
 			strings.ToLower(infoschema.ClusterTableMemoryUsageOpsHistory),
+			strings.ToLower(infoschema.TableUserLoginHistory),
 			strings.ToLower(infoschema.TableResourceGroups),
 			strings.ToLower(infoschema.TableRunawayWatches),
 			strings.ToLower(infoschema.TableCheckConstraints),
@@ -2540,7 +2573,12 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 			strings.ToLower(infoschema.TableTiDBPlanCache),
 			strings.ToLower(infoschema.ClusterTableTiDBPlanCache),
 			strings.ToLower(infoschema.ClusterTableTiDBIndexUsage),
-			strings.ToLower(infoschema.TableKeyspaceMeta):
+			strings.ToLower(infoschema.TableKeyspaceMeta),
+			strings.ToLower(infoschema.TableRoutines),
+			strings.ToLower(infoschema.TableColumnPrivileges),
+			strings.ToLower(infoschema.TableTablePrivileges),
+			strings.ToLower(infoschema.TableSchemaPrivileges),
+			strings.ToLower(infoschema.TableRegions):
 			memTracker := memory.NewTracker(v.ID(), -1)
 			memTracker.AttachTo(b.ctx.GetSessionVars().StmtCtx.MemTracker)
 			return &MemTableReaderExec{
@@ -2624,6 +2662,21 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 					extractor:  extractor,
 					limit:      extractor.Limit,
 					memTracker: memTracker,
+				},
+			}
+		case strings.ToLower(infoschema.TableAuditLog), strings.ToLower(infoschema.ClusterTableAuditLog):
+			memTracker := memory.NewTracker(v.ID(), -1)
+			memTracker.AttachTo(b.ctx.GetSessionVars().StmtCtx.MemTracker)
+			return &MemTableReaderExec{
+				BaseExecutor: exec.NewBaseExecutor(b.ctx, v.Schema(), v.ID()),
+				table:        v.Table,
+				retriever: &auditLogRetriever{
+					table:      v.Table,
+					outputCols: v.Columns,
+					extractor:  v.Extractor.(*plannercore.AuditLogExtractor),
+					memTracker: memTracker,
+					auditLog:   audit.GlobalLogManager.GetLogPath(),
+					logType:    audit.GlobalLogManager.GetLogFormat(),
 				},
 			}
 		case strings.ToLower(infoschema.TableStorageStats):
@@ -2964,6 +3017,9 @@ func (b *executorBuilder) buildUpdate(v *physicalop.Update) exec.Executor {
 		tblColPosInfos:            v.TblColPosInfos,
 		assignFlag:                assignFlag,
 		IgnoreError:               v.IgnoreError,
+		PolicyName:                v.PolicyName,
+		LabelColumn:               v.LabelColumn,
+		UserLabel:                 v.UserLabel,
 	}
 	updateExec.fkChecks, b.err = buildTblID2FKCheckExecs(b.ctx, tblID2table, v.FKChecks)
 	if b.err != nil {
@@ -4013,6 +4069,7 @@ func (b *executorBuilder) buildTableReader(v *physicalop.PhysicalTableReader) ex
 		return nil
 	}
 
+	ret.tableSplit = v.TableSplit
 	ret.ranges = ts.Ranges
 	ret.groupedRanges = ts.GroupedRanges
 	ret.groupByColIdxs = ts.GroupByColIdxs
@@ -5016,6 +5073,7 @@ func (builder *dataReaderBuilder) buildTableReaderForIndexJoin(ctx context.Conte
 	if err != nil {
 		return nil, err
 	}
+	e.tableSplit = v.TableSplit
 	tbInfo := e.table.Meta()
 	if tbInfo.GetPartitionInfo() == nil || !builder.ctx.GetSessionVars().StmtCtx.UseDynamicPartitionPrune() {
 		if v.IsCommonHandle {

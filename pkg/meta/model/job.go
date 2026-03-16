@@ -123,6 +123,10 @@ const (
 	ActionCreateMaskingPolicy                   ActionType = 81
 	ActionAlterMaskingPolicy                    ActionType = 82
 	ActionDropMaskingPolicy                     ActionType = 83
+
+	// 200 ~ 255 are reserved for pkdb usage.
+	// 200 ~ 204 are reserved for udf.
+	// 205 ~ 207 are reserved for tablegroup.
 )
 
 // ActionMap is the map of DDL ActionType to string.

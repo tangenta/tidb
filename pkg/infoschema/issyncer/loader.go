@@ -208,7 +208,7 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 	// 4. No regenerated schema diff.
 	startTime := time.Now()
 	if !isV1V2Switch && currentSchemaVersion != 0 && neededSchemaVersion > currentSchemaVersion && neededSchemaVersion-currentSchemaVersion < LoadSchemaDiffVersionGapThreshold {
-		is, relatedChanges, diffTypes, err := l.tryLoadSchemaDiffs(useV2, m, currentSchemaVersion, neededSchemaVersion, startTS, schemaCacheSize)
+		is, relatedChanges, diffTypes, err := l.tryLoadSchemaDiffs(useV2, m, currentSchemaVersion, neededSchemaVersion, isSnapshot, startTS, schemaCacheSize)
 		if err == nil {
 			infoschema_metrics.LoadSchemaDurationLoadDiff.Observe(time.Since(startTime).Seconds())
 			isV2, _ := infoschema.IsV2(is)
@@ -266,7 +266,8 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 		data = infoschema.NewData()
 	}
 	builder := infoschema.NewBuilder(l, schemaCacheSize, l.sysExecutorFactory, data, useV2).
-		WithCrossKS(l.crossKS)
+		WithCrossKS(l.crossKS).
+		WithLoadableFunctionReload(!isSnapshot)
 	err = builder.InitWithDBInfos(schemas, policies, resourceGroups, neededSchemaVersion)
 	if err != nil {
 		return nil, false, currentSchemaVersion, nil, err
@@ -317,7 +318,7 @@ func (l *Loader) skipLoadingDiff(diff *model.SchemaDiff) bool {
 // Return true if the schema is loaded successfully.
 // Return false if the schema can not be loaded by schema diff, then we need to do full load.
 // The second returned value is the delta updated table and partition IDs.
-func (l *Loader) tryLoadSchemaDiffs(useV2 bool, m meta.Reader, usedVersion, newVersion int64, startTS, schemaCacheSize uint64) (infoschema.InfoSchema, *transaction.RelatedSchemaChange, []string, error) {
+func (l *Loader) tryLoadSchemaDiffs(useV2 bool, m meta.Reader, usedVersion, newVersion int64, isSnapshot bool, startTS, schemaCacheSize uint64) (infoschema.InfoSchema, *transaction.RelatedSchemaChange, []string, error) {
 	var diffs []*model.SchemaDiff
 	for usedVersion < newVersion {
 		usedVersion++
@@ -353,7 +354,8 @@ func (l *Loader) tryLoadSchemaDiffs(useV2 bool, m meta.Reader, usedVersion, newV
 	})
 
 	builder := infoschema.NewBuilder(l, schemaCacheSize, l.sysExecutorFactory, l.infoCache.Data, useV2).
-		WithCrossKS(l.crossKS)
+		WithCrossKS(l.crossKS).
+		WithLoadableFunctionReload(!isSnapshot)
 	err := builder.InitWithOldInfoSchema(l.infoCache.GetLatest())
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)

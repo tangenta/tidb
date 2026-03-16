@@ -18,8 +18,11 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -235,6 +238,55 @@ func TestUUIDTimestamp(t *testing.T) {
 				fmt.Sprintf("UUID_TIMESTAMP('%s') = %v (got %v)", tt.arg, tt.ret, r))
 		}
 	}
+}
+
+func TestUUIDShort(t *testing.T) {
+	ctx := createContext(t)
+	f, err := newFunctionForTest(ctx, ast.UUIDShort)
+	require.NoError(t, err)
+	_, err = f.Eval(ctx, chunk.Row{})
+	require.Error(t, err) // unknown sever id
+	_, err = funcs[ast.UUIDShort].getFunction(ctx, datumsToConstants(nil))
+	require.NoError(t, err)
+}
+
+func TestUUIDShortAllocator(t *testing.T) {
+	allocator := UUIDShortAllocator{
+		ts:    1760422595,
+		count: 0,
+	}
+	// basic test.
+	require.Equal(t, uint64(101592584165523456), allocator.next(1))
+
+	// concurrency test
+	now := time.Now().Unix()
+	allocator.ts = now
+	values := sync.Map{}
+	for i := 1; i < 100; i++ {
+		id := allocator.next(1)
+		_, loaded := values.LoadOrStore(id, true)
+		require.False(t, loaded, "duplicated value")
+	}
+	allocator.count = math.MaxUint32 - 100
+	var wg sync.WaitGroup
+	count := uint64(0)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				id := allocator.next(1)
+				_, loaded := values.LoadOrStore(id, true)
+				require.False(t, loaded, "duplicated value")
+				if atomic.AddUint64(&count, 1) > 10000 {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	require.True(t, 10000 < count)
+	require.True(t, now < allocator.ts)
 }
 
 func TestAnyValue(t *testing.T) {
@@ -720,4 +772,65 @@ func TestTidbShard(t *testing.T) {
 		_, err := fc.getFunction(ctx, datumsToConstants(args3))
 		require.Error(t, err)
 	}
+}
+
+func TestLoadableFunctionSoHandleRefCount(t *testing.T) {
+	ctx := createContext(t)
+
+	soName := "test_loadable_function_ref_count.so"
+	fakeHandle := unsafe.Pointer(uintptr(1))
+
+	udfSoHandleCache.mu.Lock()
+	_, existed := udfSoHandleCache.handles[soName]
+	inserted := false
+	if !existed {
+		udfSoHandleCache.handles[soName] = &soHandleRef{handle: fakeHandle, refs: 1}
+		inserted = true
+	}
+	udfSoHandleCache.mu.Unlock()
+	require.False(t, existed)
+
+	origDlclose := udfDlclose
+	var dlcloseCalls int64
+	udfDlclose = func(handle unsafe.Pointer) {
+		atomic.AddInt64(&dlcloseCalls, 1)
+	}
+	defer func() {
+		udfDlclose = origDlclose
+		if inserted {
+			udfSoHandleCache.mu.Lock()
+			delete(udfSoHandleCache.handles, soName)
+			udfSoHandleCache.mu.Unlock()
+		}
+	}()
+
+	def := &LoadableFunctionDef{
+		name:     "test_udf",
+		evalTp:   types.ETInt,
+		soName:   soName,
+		soHandle: fakeHandle,
+	}
+	sig := &loadableFuncSig{
+		baseBuiltinFunc: baseBuiltinFunc{
+			tp: types.NewFieldType(mysql.TypeLonglong),
+		},
+		def: def,
+	}
+	require.NoError(t, sig.initRuntime(ctx))
+	defer sig.cleanupRuntime()
+
+	def.Drop()
+	require.Equal(t, int64(0), atomic.LoadInt64(&dlcloseCalls))
+	udfSoHandleCache.mu.Lock()
+	entry, ok := udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.True(t, ok)
+	require.Equal(t, 1, entry.refs)
+
+	sig.cleanupRuntime()
+	require.Equal(t, int64(1), atomic.LoadInt64(&dlcloseCalls))
+	udfSoHandleCache.mu.Lock()
+	_, ok = udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.False(t, ok)
 }

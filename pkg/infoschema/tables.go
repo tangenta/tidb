@@ -97,17 +97,22 @@ const (
 	tablePlugins    = "PLUGINS"
 	// TableConstraints is the string constant of TABLE_CONSTRAINTS.
 	TableConstraints = "TABLE_CONSTRAINTS"
-	tableTriggers    = "TRIGGERS"
+	// TableTriggers is the string constant of TRIGGERS table.
+	TableTriggers = "TRIGGERS"
 	// TableUserPrivileges is the string constant of infoschema user privilege table.
-	TableUserPrivileges   = "USER_PRIVILEGES"
-	tableSchemaPrivileges = "SCHEMA_PRIVILEGES"
-	tableTablePrivileges  = "TABLE_PRIVILEGES"
-	tableColumnPrivileges = "COLUMN_PRIVILEGES"
+	TableUserPrivileges = "USER_PRIVILEGES"
+	// TableSchemaPrivileges provides information about schema privileges
+	TableSchemaPrivileges = "SCHEMA_PRIVILEGES"
+	// TableTablePrivileges provides information about table privileges
+	TableTablePrivileges = "TABLE_PRIVILEGES"
+	// TableColumnPrivileges provides information about column privileges
+	TableColumnPrivileges = "COLUMN_PRIVILEGES"
 	// TableEngines is the string constant of infoschema table.
 	TableEngines = "ENGINES"
 	// TableViews is the string constant of infoschema table.
-	TableViews          = "VIEWS"
-	tableRoutines       = "ROUTINES"
+	TableViews = "VIEWS"
+	// TableRoutines is the string constant of infoschema table.
+	TableRoutines       = "ROUTINES"
 	tableParameters     = "PARAMETERS"
 	tableEvents         = "EVENTS"
 	tableOptimizerTrace = "OPTIMIZER_TRACE"
@@ -134,6 +139,8 @@ const (
 	TableTiDBServersInfo = "TIDB_SERVERS_INFO"
 	// TableSlowQuery is the string constant of slow query memory table.
 	TableSlowQuery = "SLOW_QUERY"
+	// TableAuditLog is the string constant of audit log memory table.
+	TableAuditLog = "AUDIT_LOG"
 	// TableClusterInfo is the string constant of cluster info memory table.
 	TableClusterInfo = "CLUSTER_INFO"
 	// TableClusterConfig is the string constant of cluster configuration memory table.
@@ -206,6 +213,8 @@ const (
 	TableMemoryUsage = "MEMORY_USAGE"
 	// TableMemoryUsageOpsHistory is the memory control operators history.
 	TableMemoryUsageOpsHistory = "MEMORY_USAGE_OPS_HISTORY"
+	// TableUserLoginHistory is the history of user login.
+	TableUserLoginHistory = "User_LOGIN_HISTORY"
 	// TableResourceGroups is the metadata of resource groups.
 	TableResourceGroups = "RESOURCE_GROUPS"
 	// TableRunawayWatches is the query list of runaway watch.
@@ -224,6 +233,8 @@ const (
 	TableKeyspaceMeta = "KEYSPACE_META"
 	// TableSchemataExtensions is the table to show read only status of database.
 	TableSchemataExtensions = "SCHEMATA_EXTENSIONS"
+	// TableRegions is the string constant of table regions.
+	TableRegions = "TABLE_REGIONS"
 )
 
 const (
@@ -267,14 +278,14 @@ var tableIDMap = map[string]int64{
 	// TableSessionVar:    autoid.InformationSchemaDBID + 14,
 	tablePlugins:          autoid.InformationSchemaDBID + 15,
 	TableConstraints:      autoid.InformationSchemaDBID + 16,
-	tableTriggers:         autoid.InformationSchemaDBID + 17,
+	TableTriggers:         autoid.InformationSchemaDBID + 17,
 	TableUserPrivileges:   autoid.InformationSchemaDBID + 18,
-	tableSchemaPrivileges: autoid.InformationSchemaDBID + 19,
-	tableTablePrivileges:  autoid.InformationSchemaDBID + 20,
-	tableColumnPrivileges: autoid.InformationSchemaDBID + 21,
+	TableSchemaPrivileges: autoid.InformationSchemaDBID + 19,
+	TableTablePrivileges:  autoid.InformationSchemaDBID + 20,
+	TableColumnPrivileges: autoid.InformationSchemaDBID + 21,
 	TableEngines:          autoid.InformationSchemaDBID + 22,
 	TableViews:            autoid.InformationSchemaDBID + 23,
-	tableRoutines:         autoid.InformationSchemaDBID + 24,
+	TableRoutines:         autoid.InformationSchemaDBID + 24,
 	tableParameters:       autoid.InformationSchemaDBID + 25,
 	tableEvents:           autoid.InformationSchemaDBID + 26,
 	// Removed, see https://github.com/pingcap/tidb/issues/9154
@@ -420,7 +431,7 @@ func buildTableMeta(tableName string, cs []columnInfo) *model.TableInfo {
 		Collate: mysql.DefaultCollationName,
 	}
 	for offset, c := range cs {
-		if tblInfo.Name.O == ClusterTableSlowLog && mysql.HasPriKeyFlag(c.flag) {
+		if (tblInfo.Name.O == ClusterTableSlowLog || tblInfo.Name.O == ClusterTableAuditLog) && mysql.HasPriKeyFlag(c.flag) {
 			switch c.tp {
 			case mysql.TypeLong, mysql.TypeLonglong,
 				mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
@@ -986,6 +997,39 @@ var slowQueryCols = []columnInfo{
 	{name: variable.SlowLogQuerySQLStr, tp: mysql.TypeLongBlob, size: types.UnspecifiedLength},
 }
 
+var auditLogCols = []columnInfo{
+	{name: "TIME", tp: mysql.TypeTimestamp, size: 26, decimal: 6, flag: mysql.PriKeyFlag | mysql.NotNullFlag | mysql.BinaryFlag},
+	{name: "ID", tp: mysql.TypeVarchar, size: 64},
+	{name: "EVENT", tp: mysql.TypeVarchar, size: 256},
+	{name: "USER", tp: mysql.TypeVarchar, size: 64},
+	{name: "ROLES", tp: mysql.TypeVarchar, size: 256},
+	{name: "CONNECTION_ID", tp: mysql.TypeVarchar, size: 256},
+	{name: "TABLES", tp: mysql.TypeVarchar, size: 256},
+	{name: "STATUS_CODE", tp: mysql.TypeVarchar, size: 20},
+	{name: "REASON", tp: mysql.TypeVarchar, size: 256},
+
+	{name: "CURRENT_DB", tp: mysql.TypeVarchar, size: 64},
+	{name: "SQL_TEXT", tp: mysql.TypeVarchar, size: 1024},
+	{name: "EXECUTE_PARAMS", tp: mysql.TypeVarchar, size: 256},
+	{name: "AFFECTED_ROWS", tp: mysql.TypeVarchar, size: 256},
+
+	{name: "CONNECTION_TYPE", tp: mysql.TypeVarchar, size: 20},
+	{name: "PID", tp: mysql.TypeVarchar, size: 256},
+	{name: "SERVER_VERSION", tp: mysql.TypeVarchar, size: 100},
+	{name: "SSL_VERSION", tp: mysql.TypeVarchar, size: 64},
+	{name: "HOST_IP", tp: mysql.TypeVarchar, size: 64},
+	{name: "HOST_PORT", tp: mysql.TypeVarchar, size: 64},
+	{name: "CLIENT_IP", tp: mysql.TypeVarchar, size: 64},
+	{name: "CLIENT_PORT", tp: mysql.TypeVarchar, size: 64},
+	{name: "AUTH_METHOD", tp: mysql.TypeVarchar, size: 64},
+	{name: "CONN_ATTRS", tp: mysql.TypeVarchar, size: 200},
+
+	{name: "AUDIT_OP_TARGET", tp: mysql.TypeVarchar, size: 256},
+	{name: "AUDIT_OP_ARGS", tp: mysql.TypeVarchar, size: 256},
+
+	{name: "INFO", tp: mysql.TypeVarchar, size: 1024},
+}
+
 // TableTiDBHotRegionsCols is TiDB hot region mem table columns.
 var TableTiDBHotRegionsCols = []columnInfo{
 	{name: "TABLE_ID", tp: mysql.TypeLonglong, size: 21},
@@ -1090,6 +1134,20 @@ var TableTiKVRegionStatusCols = []columnInfo{
 	{name: "APPROXIMATE_KEYS", tp: mysql.TypeLonglong, size: 21},
 	{name: "REPLICATIONSTATUS_STATE", tp: mysql.TypeVarchar, size: 64},
 	{name: "REPLICATIONSTATUS_STATEID", tp: mysql.TypeLonglong, size: 21},
+}
+
+// TableRegionsCols is table regions mem table columns.
+var TableRegionsCols = []columnInfo{
+	{name: "REGION_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "START_KEY", tp: mysql.TypeBlob, size: types.UnspecifiedLength},
+	{name: "END_KEY", tp: mysql.TypeBlob, size: types.UnspecifiedLength},
+	{name: "TABLE_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "DB_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "TABLE_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "PARTITION_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "PARTITION_NAME", tp: mysql.TypeVarchar, size: 64},
+	{name: "APPROXIMATE_SIZE", tp: mysql.TypeLonglong, size: 21},
+	{name: "APPROXIMATE_KEYS", tp: mysql.TypeLonglong, size: 21},
 }
 
 // TableTiKVRegionPeersCols is TiKV region peers mem table columns.
@@ -1797,6 +1855,18 @@ var tableMemoryUsageOpsHistoryCols = []columnInfo{
 	{name: "SQL_TEXT", tp: mysql.TypeVarchar, size: 256},
 }
 
+var tableUserLoginHistoryCols = []columnInfo{
+	{name: "TIME", tp: mysql.TypeDatetime, size: 64},
+	{name: "SERVER_HOST", tp: mysql.TypeVarchar, size: 64},
+	{name: "USER", tp: mysql.TypeVarchar, size: 32},
+	{name: "USER_HOST", tp: mysql.TypeVarchar, size: 64},
+	{name: "DB", tp: mysql.TypeVarchar, size: 64},
+	{name: "CONNECTION_ID", tp: mysql.TypeLonglong, size: 21},
+	{name: "RESULT", tp: mysql.TypeVarchar, size: 16},
+	{name: "CLIENT_HOST", tp: mysql.TypeVarchar, size: 64},
+	{name: "DETAIL", tp: mysql.TypeVarchar, size: 1024},
+}
+
 var tableResourceGroupsCols = []columnInfo{
 	{name: "NAME", tp: mysql.TypeVarchar, size: resourcegroup.MaxGroupNameLength, flag: mysql.NotNullFlag},
 	{name: "RU_PER_SEC", tp: mysql.TypeVarchar, size: 21},
@@ -2470,14 +2540,14 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableReferConst:                         referConstCols,
 	tablePlugins:                            pluginsCols,
 	TableConstraints:                        tableConstraintsCols,
-	tableTriggers:                           tableTriggersCols,
+	TableTriggers:                           tableTriggersCols,
 	TableUserPrivileges:                     tableUserPrivilegesCols,
-	tableSchemaPrivileges:                   tableSchemaPrivilegesCols,
-	tableTablePrivileges:                    tableTablePrivilegesCols,
-	tableColumnPrivileges:                   tableColumnPrivilegesCols,
+	TableSchemaPrivileges:                   tableSchemaPrivilegesCols,
+	TableTablePrivileges:                    tableTablePrivilegesCols,
+	TableColumnPrivileges:                   tableColumnPrivilegesCols,
 	TableEngines:                            tableEnginesCols,
 	TableViews:                              tableViewsCols,
-	tableRoutines:                           tableRoutinesCols,
+	TableRoutines:                           tableRoutinesCols,
 	tableParameters:                         tableParametersCols,
 	tableEvents:                             tableEventsCols,
 	tableOptimizerTrace:                     tableOptimizerTraceCols,
@@ -2486,6 +2556,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableProcesslist:                        tableProcesslistCols,
 	TableTiDBIndexes:                        tableTiDBIndexesCols,
 	TableSlowQuery:                          slowQueryCols,
+	TableAuditLog:                           auditLogCols,
 	TableTiDBHotRegions:                     TableTiDBHotRegionsCols,
 	TableTiDBHotRegionsHistory:              TableTiDBHotRegionsHistoryCols,
 	TableTiKVStoreStatus:                    TableTiKVStoreStatusCols,
@@ -2537,6 +2608,8 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableTiDBIndexUsage:                     tableTiDBIndexUsage,
 	TableTiDBPlanCache:                      tablePlanCache,
 	TableKeyspaceMeta:                       tableKeyspaceMetaCols,
+	TableUserLoginHistory:                   tableUserLoginHistoryCols,
+	TableRegions:                            TableRegionsCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, _ func() (pools.Resource, error), meta *model.TableInfo) (table.Table, error) {

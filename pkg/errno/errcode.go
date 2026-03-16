@@ -822,6 +822,7 @@ const (
 	ErrMustChangePasswordLogin                               = 1862
 	ErrRowInWrongPartition                                   = 1863
 	ErrErrorLast                                             = 1863
+	ErrGetStackedDaWithoutActiveHandler                      = 3004
 	ErrForeignKeyCascadeDepthExceeded                        = 3008
 	ErrInvalidFieldSize                                      = 3013
 	ErrPasswordExpireAnonymousUser                           = 3016
@@ -863,6 +864,7 @@ const (
 	ErrInvalidJSONPathArrayCell                              = 3165
 	ErrInvalidEncryptionOption                               = 3184
 	ErrTooLongValueForType                                   = 3505
+	ErrTooLongRoutineComment                                 = 3511
 	ErrPKIndexCantBeInvisible                                = 3522
 	ErrGrantRole                                             = 3523
 	ErrRoleNotGranted                                        = 3530
@@ -944,7 +946,9 @@ const (
 	ErrEngineAttributeNotSupported                           = 3981
 	ErrJSONInBooleanContext                                  = 3986
 	ErrTableWithoutPrimaryKey                                = 3750
+	ErrForeignKeyWithCreateAsSelect                          = 3978
 	// MariaDB errors.
+	ErrSPvarNonintegerType                  = 4008
 	ErrOnlyOneDefaultPartionAllowed         = 4030
 	ErrWrongPartitionTypeExpectedSystemTime = 4113
 	ErrSystemVersioningWrongPartitions      = 4128
@@ -1169,6 +1173,12 @@ const (
 	ErrStorageClassInvalidSpec                  = 8271
 	ErrModifyColumnReferencedByPartialCondition = 8272
 	ErrCheckPartialIndexWithoutFastCheck        = 8273
+	// Enterprise Edit errors.
+	ErrRowLabelUnAccessible = 8800
+	ErrProcedureDisabled    = 8801
+
+	// 8802 ~ 8804 are reserved for LBAC errors.
+	// 8805 ~ 8809 are reserved for tablegroup errors.
 
 	// TiKV/PD/TiFlash errors.
 	ErrPDServerTimeout           = 9001

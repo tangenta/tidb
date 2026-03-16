@@ -21,6 +21,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/tidb/pkg/ddl/placement"
@@ -79,6 +80,10 @@ type infoSchema struct {
 type infoSchemaMisc struct {
 	// schemaMetaVersion is the version of schema, and we should check version when change schema.
 	schemaMetaVersion int64
+
+	// routineMap stores all stored procedure/function metadata.
+	// schemaName(lowercase) => (routineType + ":" + routineName(lowercase) => *model.ProcedureInfo)
+	routineMap map[string]map[string]*model.ProcedureInfo
 
 	// ruleBundleMap stores all placement rules
 	ruleBundleMap map[int64]*placement.Bundle
@@ -202,6 +207,7 @@ func (is *infoSchema) base() *infoSchema {
 func newInfoSchema(r autoid.Requirement) *infoSchema {
 	return &infoSchema{
 		infoSchemaMisc: infoSchemaMisc{
+			routineMap:       map[string]map[string]*model.ProcedureInfo{},
 			policyMap:        map[string]*model.PolicyInfo{},
 			resourceGroupMap: map[string]*model.ResourceGroupInfo{},
 			ruleBundleMap:    map[int64]*placement.Bundle{},
@@ -317,6 +323,35 @@ func (is *infoSchema) TableByID(_ stdctx.Context, id int64) (val table.Table, ok
 		return nil, false
 	}
 	return slice[idx], true
+}
+
+func routineKey(routineType, routineNameLower string) string {
+	return strings.ToUpper(routineType) + ":" + routineNameLower
+}
+
+// RoutineByName implements InfoSchema.RoutineByName.
+func (is *infoSchema) RoutineByName(schema, name ast.CIStr, routineType string) (*model.ProcedureInfo, bool) {
+	if is.routineMap == nil {
+		return nil, false
+	}
+	routines, ok := is.routineMap[schema.L]
+	if !ok {
+		return nil, false
+	}
+	routine, ok := routines[routineKey(routineType, name.L)]
+	return routine, ok
+}
+
+// SchemaRoutines implements InfoSchema.SchemaRoutines.
+func (is *infoSchema) SchemaRoutines(schema ast.CIStr) []*model.ProcedureInfo {
+	if is.routineMap == nil {
+		return nil
+	}
+	routines, ok := is.routineMap[schema.L]
+	if !ok {
+		return nil
+	}
+	return slices.Collect(maps.Values(routines))
 }
 
 // TableItemByID implements InfoSchema.TableItemByID.
@@ -485,7 +520,7 @@ func GetSequenceByName(is InfoSchema, schema, sequence ast.CIStr) (util.Sequence
 	return tbl.(util.SequenceTable), nil
 }
 
-func init() {
+func init2() {
 	// Initialize the information shema database and register the driver to `drivers`
 	dbID := autoid.InformationSchemaDBID
 	infoSchemaTables := make([]*model.TableInfo, 0, len(tableNameToColumns))

@@ -142,6 +142,8 @@ const (
 	ShowCreateResourceGroupCommand = "SHOW CREATE RESOURCE GROUP"
 	// ShowCreateProcedureCommand represents SHOW CREATE PROCEDURE statement
 	ShowCreateProcedureCommand = "SHOW CREATE PROCEDURE"
+	// ShowCreateFunctionCommand represents SHOW CREATE FUNCTION statement
+	ShowCreateFunctionCommand = "SHOW CREATE FUNCTION"
 	// ShowDatabasesCommand represents SHOW DATABASES statement
 	ShowDatabasesCommand = "SHOW DATABASES"
 	// ShowTableCommand represents SHOW TABLES statement
@@ -174,6 +176,8 @@ const (
 	ShowPrivilegesCommand = "SHOW PRIVILEGES"
 	// ShowTriggersCommand represents SHOW TRIGGERS statement
 	ShowTriggersCommand = "SHOW TRIGGERS"
+	// ShowCreateTriggerCommand represents SHOW CREATE TRIGGER statement
+	ShowCreateTriggerCommand = "SHOW CREATE TRIGGER"
 	// ShowProcedureStatusCommand represents SHOW PROCEDURE STATUS statement
 	ShowProcedureStatusCommand = "SHOW PROCEDURE STATUS"
 	// ShowFunctionStatusCommand represents SHOW FUNCTION STATUS statement
@@ -321,6 +325,8 @@ const (
 	AdminCreateWorkloadSnapshotCommand = "ADMIN CREATE WORKLOAD SNAPSHOT"
 	// AdminReloadClusterBindingsCommand represents ADMIN RELOAD CLUSTER BINDINGS statement
 	AdminReloadClusterBindingsCommand = "ADMIN RELOAD CLUSTER BINDINGS"
+	// AdminLBACEnableCommand represents ADMIN LBAC ENABLE statement
+	AdminLBACEnableCommand = "ADMIN LBAC ENABLE"
 )
 
 // BRIE Commands
@@ -466,6 +472,12 @@ const (
 	// ProcedureCommand represents all statements in procedure. It's too rough
 	// but still fine for now.
 	ProcedureCommand = "PROCEDURE"
+	// TriggerCommand represents TRIGGER statement.
+	TriggerCommand = "TRIGGER"
+	// SignalCommand represents SIGNAL statement
+	SignalCommand = "SIGNAL"
+	// GetDiagnosticsCommand represents GET DIAGNOSTICS statement
+	GetDiagnosticsCommand = "GET DIAGNOSTICS"
 	// UnknownCommand represents unknown statements
 	UnknownCommand = "UNKNOWN"
 	// SetOprCommand represents UNION/INTERSECT/EXCEPT statement
@@ -726,12 +738,16 @@ func (n *ShowStmt) SEMCommand() string {
 		return ShowCreateResourceGroupCommand
 	case ShowCreateProcedure:
 		return ShowCreateProcedureCommand
+	case ShowCreateFunction:
+		return ShowCreateFunctionCommand
 	case ShowDatabases:
 		return ShowDatabasesCommand
 	case ShowTables:
 		return ShowTableCommand
 	case ShowTableStatus:
 		return ShowTableStatusCommand
+	case ShowCreateTrigger:
+		return ShowCreateTriggerCommand
 	case ShowColumns:
 		return ShowColumnsCommand
 	case ShowIndex:
@@ -927,6 +943,8 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminCreateWorkloadSnapshotCommand
 	case AdminReloadClusterBindings:
 		return AdminReloadClusterBindingsCommand
+	case AdminLBACEnable:
+		return AdminLBACEnableCommand
 	default:
 		return UnknownCommand
 	}
@@ -1231,7 +1249,17 @@ func (n *ProcedureBlock) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
-func (n *ProcedureInfo) SEMCommand() string {
+func (n *CreateProcedureInfo) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureLoopStmt) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *AlterProcedureStmt) SEMCommand() string {
 	return ProcedureCommand
 }
 
@@ -1332,5 +1360,30 @@ func (n *ProcedureErrorVal) SEMCommand() string {
 
 // SEMCommand returns the command string for the statement.
 func (n *ProcedureErrorState) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand implements StmtNode interface for Signal.
+func (n *Signal) SEMCommand() string {
+	return SignalCommand
+}
+
+// SEMCommand implements StmtNode interface for GetDiagnosticsStmt.
+func (stmt *GetDiagnosticsStmt) SEMCommand() string {
+	return GetDiagnosticsCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureReturnStmt) SEMCommand() string {
 	return ProcedureCommand
 }
