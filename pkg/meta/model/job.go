@@ -120,6 +120,9 @@ const (
 	ActionAlterTableAffinity                    ActionType = 78
 	ActionAlterTableSoftDeleteInfo              ActionType = 79 // reserve for soft-delete feature
 	ActionModifySchemaSoftDeleteAndActiveActive ActionType = 80 // reserve for soft-delete and active-active feature
+	ActionCreateMaskingPolicy                   ActionType = 81
+	ActionAlterMaskingPolicy                    ActionType = 82
+	ActionDropMaskingPolicy                     ActionType = 83
 
 	// 200 ~ 255 are reserved for pkdb usage.
 	// 200 ~ 204 are reserved for udf.
@@ -203,6 +206,9 @@ var ActionMap = map[ActionType]string{
 	ActionAlterTableAffinity:                    "alter table affinity",
 	ActionAlterTableSoftDeleteInfo:              "alter soft delete info",
 	ActionModifySchemaSoftDeleteAndActiveActive: "modify schema soft delete and active active",
+	ActionCreateMaskingPolicy:                   "create masking policy",
+	ActionAlterMaskingPolicy:                    "alter masking policy",
+	ActionDropMaskingPolicy:                     "drop masking policy",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.
