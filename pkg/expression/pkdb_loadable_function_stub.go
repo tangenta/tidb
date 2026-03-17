@@ -77,6 +77,17 @@ func LoadUDF(soName, funcName string, funcRetType types.EvalType) (*LoadableFunc
 	return nil, loadableFunctionUnsupportedErr()
 }
 
+// ValidateLoadableFunctionDef validates whether the loadable function definition
+// can be registered as a UDF (for example, native name collision / return type).
+//
+// Non-cgo builds do not support loadable functions, so this always returns a
+// "not supported" error.
+func ValidateLoadableFunctionDef(def *LoadableFunctionDef) error {
+	logLoadableFunctionUnsupported()
+	_ = def
+	return loadableFunctionUnsupportedErr()
+}
+
 // CreateLoadableFunction registers a loadable function to the system.
 // Non-cgo builds do not support this feature.
 func CreateLoadableFunction(def *LoadableFunctionDef) (exist bool, err error) {

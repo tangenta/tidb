@@ -4954,6 +4954,8 @@ func (b *PlanBuilder) buildMemTable(_ context.Context, dbName ast.CIStr, tableIn
 			p.Extractor = &TiKVRegionStatusExtractor{tablesID: make([]int64, 0)}
 		case infoschema.TableRegions:
 			p.Extractor = &TableRegionsExtractor{}
+		case infoschema.TableTriggers:
+			p.Extractor = NewInfoSchemaTableTriggersExtractor()
 		}
 	}
 	return p, nil
@@ -5321,7 +5323,7 @@ func pruneAndBuildColPositionInfoForDelete(
 	names []*types.FieldName,
 	tblID2Handle map[int64][]util.HandleCols,
 	tblID2Table map[int64]table.Table,
-	hasFK bool,
+	hasTrigger bool,
 ) (physicalop.TblColPosInfoSlice, *bitset.BitSet, error) {
 	cols2PosInfos := make(physicalop.TblColPosInfoSlice, 0, len(tblID2Handle))
 	for tid, handleCols := range tblID2Handle {
@@ -5368,7 +5370,7 @@ func pruneAndBuildColPositionInfoForDelete(
 		// Use a very relax check for foreign key cascades and checks.
 		// If there's one table containing foreign keys, all of the tables would not do pruning.
 		// It should be strict in the future or just support pruning column when there is foreign key.
-		skipPruning := tblInfo.GetPartitionInfo() != nil || hasFK || nonPruned == nil
+		skipPruning := tblInfo.GetPartitionInfo() != nil || hasTrigger || nonPruned == nil
 		for _, idx := range tblInfo.Indices {
 			if len(idx.ConditionExprString) > 0 {
 				// If the index has a partial index condition, we can't prune the columns.
@@ -6113,7 +6115,8 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, ds *ast.DeleteStmt) (base
 	}
 
 	var nonPruned *bitset.BitSet
-	del.TblColPosInfos, nonPruned, err = pruneAndBuildColPositionInfoForDelete(preProjNames, tblID2Handle, tblID2table, len(del.FKCascades) > 0 || len(del.FKChecks) > 0)
+	hasTrigger := len(del.FKCascades) > 0 || len(del.FKChecks) > 0 || hasDeleteTriggers(tblID2table)
+	del.TblColPosInfos, nonPruned, err = pruneAndBuildColPositionInfoForDelete(preProjNames, tblID2Handle, tblID2table, hasTrigger)
 	if err != nil {
 		return nil, err
 	}
@@ -6144,6 +6147,17 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, ds *ast.DeleteStmt) (base
 	del.SelectPlan, _, err = DoOptimize(ctx, b.ctx, b.optFlag, p)
 
 	return del, err
+}
+
+func hasDeleteTriggers(tblID2table map[int64]table.Table) bool {
+	for _, tbl := range tblID2table {
+		for _, trg := range tbl.Meta().Triggers {
+			if trg.Event == ast.TriggerEventDelete {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func resolveIndicesForTblID2Handle(tblID2Handle map[int64][]util.HandleCols, schema *expression.Schema) (map[int64][]util.HandleCols, error) {

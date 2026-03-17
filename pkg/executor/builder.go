@@ -131,6 +131,8 @@ type executorBuilder struct {
 
 	// Used when building MPPGather.
 	encounterUnionScan bool
+
+	triggerExec *TriggerExec
 }
 
 // CTEStorages stores resTbl and iterInTbl for CTEExec.
@@ -344,6 +346,12 @@ func (b *executorBuilder) build(p base.Plan) exec.Executor {
 			return nil
 		}
 		return b.buildCallProcedure(v)
+	case *plannercore.TriggerProcedure:
+		if !vardef.TiDBEnableProcedureValue.Load() {
+			b.err = errors.New("if enterprise edition, please set global tidb_enable_procedure = ON")
+			return nil
+		}
+		return b.buildTriggerProcedure(v)
 	case *plannercore.Signal:
 		return b.buildSignalExec(v)
 	case *plannercore.GetDiagnostics:
@@ -911,6 +919,7 @@ func (b *executorBuilder) buildShow(v *physicalop.PhysicalShow) exec.Executor {
 		DBName:                ast.NewCIStr(v.DBName),
 		Table:                 v.Table,
 		Procedure:             v.Procedure,
+		Trigger:               v.Trigger,
 		Partition:             v.Partition,
 		Column:                v.Column,
 		IndexName:             v.IndexName,
@@ -1075,11 +1084,18 @@ func (b *executorBuilder) buildInsert(v *physicalop.Insert) exec.Executor {
 	}
 
 	if v.IsReplace {
-		return b.buildReplace(ivs)
+		replace := b.buildReplace(ivs)
+		if b.triggerExec != nil {
+			ivs.triggerExec = b.triggerExec.initTriggerExecWithOneTable(replace, v.Table, ast.TriggerEventInsert, ast.TriggerEventDelete)
+		}
+		return replace
 	}
 	insert := &InsertExec{
 		InsertValues: ivs,
 		OnDuplicate:  append(v.OnDuplicate, v.GenCols.OnDuplicates...),
+	}
+	if b.triggerExec != nil {
+		ivs.triggerExec = b.triggerExec.initTriggerExecWithOneTable(insert, v.Table, ast.TriggerEventInsert, ast.TriggerEventUpdate)
 	}
 	return insert
 }
@@ -1136,11 +1152,16 @@ func (b *executorBuilder) buildLoadData(v *plannercore.LoadData) exec.Executor {
 		return nil
 	}
 
-	return &LoadDataExec{
+	loadData := &LoadDataExec{
 		BaseExecutor:   base,
 		loadDataWorker: worker,
 		FileLocRef:     v.FileLocRef,
 	}
+
+	if b.triggerExec != nil {
+		worker.triggerExec = b.triggerExec.initTriggerExecWithOneTable(loadData, tbl, ast.TriggerEventInsert)
+	}
+	return loadData
 }
 
 func (b *executorBuilder) buildLoadStats(v *plannercore.LoadStats) exec.Executor {
@@ -2578,7 +2599,8 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 			strings.ToLower(infoschema.TableColumnPrivileges),
 			strings.ToLower(infoschema.TableTablePrivileges),
 			strings.ToLower(infoschema.TableSchemaPrivileges),
-			strings.ToLower(infoschema.TableRegions):
+			strings.ToLower(infoschema.TableRegions),
+			strings.ToLower(infoschema.TableTriggers):
 			memTracker := memory.NewTracker(v.ID(), -1)
 			memTracker.AttachTo(b.ctx.GetSessionVars().StmtCtx.MemTracker)
 			return &MemTableReaderExec{
@@ -3029,6 +3051,9 @@ func (b *executorBuilder) buildUpdate(v *physicalop.Update) exec.Executor {
 	if b.err != nil {
 		return nil
 	}
+	if b.triggerExec != nil {
+		updateExec.triggerExec = b.triggerExec.initTriggerExec(updateExec, tblID2table, ast.TriggerEventUpdate)
+	}
 	return updateExec
 }
 
@@ -3081,6 +3106,9 @@ func (b *executorBuilder) buildDelete(v *physicalop.Delete) exec.Executor {
 	deleteExec.fkCascades, b.err = b.buildTblID2FKCascadeExecs(tblID2table, v.FKCascades)
 	if b.err != nil {
 		return nil
+	}
+	if b.triggerExec != nil {
+		deleteExec.triggerExec = b.triggerExec.initTriggerExec(deleteExec, tblID2table, ast.TriggerEventDelete)
 	}
 	return deleteExec
 }

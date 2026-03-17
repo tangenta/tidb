@@ -144,6 +144,14 @@ func (e *LoadDataExec) Next(ctx context.Context, _ *chunk.Chunk) (err error) {
 	return nil
 }
 
+// GetTriggerExec implements WithTriggerSupport interface.
+func (e *LoadDataExec) GetTriggerExec() *TriggerExec {
+	if e.loadDataWorker != nil {
+		return e.loadDataWorker.triggerExec
+	}
+	return nil
+}
+
 type planInfo struct {
 	ID          int
 	Columns     []*ast.ColumnName
@@ -158,6 +166,8 @@ type LoadDataWorker struct {
 	planInfo   planInfo
 
 	table table.Table
+
+	triggerExec *TriggerExec
 }
 
 func setNonRestrictiveFlags(stmtCtx *stmtctx.StatementContext) {
@@ -353,6 +363,7 @@ func createInsertValues(e *LoadDataWorker) (insertVal *InsertValues, err error) 
 		insertColumns:  insertColumns,
 		rowLen:         len(insertColumns),
 		hasExtraHandle: hasExtraHandle,
+		triggerExec:    e.triggerExec,
 	}
 	if len(insertColumns) > 0 {
 		ret.initEvalBuffer()
@@ -574,6 +585,7 @@ func (w *encodeWorker) parserData2TableData(
 	}
 
 	// a new row buffer will be allocated in getRow
+	w.triggerSkip = true
 	newRow, err := w.getRow(ctx, row)
 	if err != nil {
 		if w.controller.Restrictive {
@@ -584,6 +596,7 @@ func (w *encodeWorker) parserData2TableData(
 		// TODO: should not return nil! caller will panic when lookup index
 		return nil, nil
 	}
+	w.triggerSkip = false
 
 	return newRow, nil
 }

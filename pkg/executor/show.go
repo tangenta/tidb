@@ -73,6 +73,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	contextutil "github.com/pingcap/tidb/pkg/util/context"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/dbterror/exeerrors"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/format"
@@ -98,6 +99,7 @@ type ShowExec struct {
 	Table             *resolve.TableNameW // Used for showing columns.
 	Partition         ast.CIStr           // Used for showing partition
 	Procedure         *ast.TableName
+	Trigger           *ast.TableName
 	Column            *ast.ColumnName      // Used for `desc table column`.
 	IndexName         ast.CIStr            // Used for show table regions.
 	ResourceGroupName ast.CIStr            // Used for showing resource group
@@ -192,6 +194,8 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowCreateTable()
 	case ast.ShowCreateProcedure, ast.ShowCreateFunction:
 		return e.fetchShowCreateProcdure(ctx, e.Tp)
+	case ast.ShowCreateTrigger:
+		return e.fetchShowCreateTrigger(ctx)
 	case ast.ShowCreateSequence:
 		return e.fetchShowCreateSequence()
 	case ast.ShowCreateUser:
@@ -225,7 +229,7 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 	case ast.ShowTableStatus:
 		return e.fetchShowTableStatus(ctx)
 	case ast.ShowTriggers:
-		return e.fetchShowTriggers()
+		return e.fetchShowTriggers(ctx)
 	case ast.ShowVariables:
 		return e.fetchShowVariables(ctx)
 	case ast.ShowWarnings:
@@ -2027,7 +2031,94 @@ func (e *ShowExec) fetchShowPrivileges() error {
 	return nil
 }
 
-func (*ShowExec) fetchShowTriggers() error {
+func (e *ShowExec) fetchShowCreateTrigger(ctx context.Context) error {
+	schemaName := e.DBName
+	if e.Trigger.Schema.L != "" {
+		schemaName = e.Trigger.Schema
+	}
+	if !e.is.SchemaExists(schemaName) {
+		return exeerrors.ErrBadDB.GenWithStackByArgs(schemaName)
+	}
+
+	checker := privilege.GetPrivilegeManager(e.Ctx())
+	activeRoles := e.Ctx().GetSessionVars().ActiveRoles
+
+	tblName, tblID, ok := infoschema.TableByTriggerName(e.is, schemaName, e.Trigger.Name)
+	if !ok {
+		return dbterror.ErrTrgDoesNotExist
+	}
+	hasTriggerPriv := checker == nil || checker.RequestVerification(activeRoles, schemaName.O, tblName.O, "", mysql.TriggerPriv)
+	if !hasTriggerPriv {
+		return exeerrors.ErrSpecificAccessDenied.GenWithStackByArgs("TRIGGER")
+	}
+
+	tbl, ok := e.is.TableByID(ctx, tblID)
+	if !ok {
+		return dbterror.ErrTrgDoesNotExist
+	}
+	for _, trig := range tbl.Meta().Triggers {
+		if trig.Name.L == e.Trigger.Name.L {
+			e.appendRow([]any{
+				trig.Name.O,
+				trig.SQLMode.String(),
+				trig.CreateSQL,
+				trig.CharacterSetClient,
+				trig.CollationConnection,
+				trig.DatabaseCollation,
+				ts2Time(trig.CreatedTimestamp, e.Ctx().GetSessionVars().Location()),
+			})
+			return nil
+		}
+	}
+	return dbterror.ErrTrgDoesNotExist
+}
+
+func (e *ShowExec) fetchShowTriggers(ctx context.Context) error {
+	checker := privilege.GetPrivilegeManager(e.Ctx())
+	if checker != nil && e.Ctx().GetSessionVars().User != nil {
+		if !checker.DBIsVisible(e.Ctx().GetSessionVars().ActiveRoles, e.DBName.O) {
+			return e.dbAccessDenied()
+		}
+	}
+	if !e.is.SchemaExists(e.DBName) {
+		return exeerrors.ErrBadDB.GenWithStackByArgs(e.DBName)
+	}
+	allTblInfos, err := e.is.SchemaTableInfos(ctx, e.DBName)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	allTriggers := make([]*model.TriggerInfo, 0)
+	activeRoles := e.Ctx().GetSessionVars().ActiveRoles
+	for _, tblInfo := range allTblInfos {
+		if checker != nil && !checker.RequestVerification(activeRoles, e.DBName.O, tblInfo.Name.O, "", mysql.TriggerPriv) {
+			continue
+		}
+		allTriggers = append(allTriggers, tblInfo.Triggers...)
+	}
+	slices.SortFunc(allTriggers, func(t1, t2 *model.TriggerInfo) int {
+		if t1.CreatedTimestamp < t2.CreatedTimestamp {
+			return -1
+		}
+		if t1.CreatedTimestamp > t2.CreatedTimestamp {
+			return 1
+		}
+		return 0
+	})
+	for _, trig := range allTriggers {
+		e.appendRow([]any{
+			trig.Name.O,
+			trig.Event.String(),
+			trig.Table.O,
+			trig.Body,
+			trig.Timing.String(),
+			ts2Time(trig.CreatedTimestamp, e.Ctx().GetSessionVars().Location()),
+			trig.SQLMode.String(),
+			trig.Definer.String(),
+			trig.CharacterSetClient,
+			trig.CollationConnection,
+			trig.DatabaseCollation,
+		})
+	}
 	return nil
 }
 

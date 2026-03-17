@@ -298,6 +298,8 @@ const (
 	// inCreateRoutine is set when visiting routine.
 	// skip table && execute precheck
 	inCreateRoutine
+	// inCreateOrDropTrigger is set when visiting create or drop trigger statement.
+	inCreateOrDropTrigger
 )
 
 // PreprocessorReturn is used to retain information obtained in the preprocessor.
@@ -584,6 +586,11 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		}
 	case *ast.CreateProcedureInfo:
 		p.flag |= inCreateRoutine
+	case *ast.CreateTriggerStmt:
+		p.flag |= inCreateOrDropTrigger
+		p.checkCreateTriggerGrammar(node)
+	case *ast.DropTriggerStmt:
+		p.flag |= inCreateOrDropTrigger
 	default:
 		p.flag &= ^parentIsJoin
 	}
@@ -1150,6 +1157,20 @@ func (p *preprocessor) checkCreateViewGrammar(stmt *ast.CreateViewStmt) {
 			p.err = dbterror.ErrWrongColumnName.GenWithStackByArgs(col)
 			return
 		}
+	}
+	if len(stmt.Definer.Username) > auth.UserNameMaxLength {
+		p.err = dbterror.ErrWrongStringLength.GenWithStackByArgs(stmt.Definer.Username, "user name", auth.UserNameMaxLength)
+		return
+	}
+	if len(stmt.Definer.Hostname) > auth.HostNameMaxLength {
+		p.err = dbterror.ErrWrongStringLength.GenWithStackByArgs(stmt.Definer.Hostname, "host name", auth.HostNameMaxLength)
+		return
+	}
+}
+
+func (p *preprocessor) checkCreateTriggerGrammar(stmt *ast.CreateTriggerStmt) {
+	if stmt.Definer == nil {
+		return
 	}
 	if len(stmt.Definer.Username) > auth.UserNameMaxLength {
 		p.err = dbterror.ErrWrongStringLength.GenWithStackByArgs(stmt.Definer.Username, "user name", auth.UserNameMaxLength)
@@ -1876,6 +1897,9 @@ func (p *preprocessor) handleTableName(tn *ast.TableName) {
 
 		tn.Schema = ast.NewCIStr(currentDB)
 	}
+	if p.flag&inCreateOrDropTrigger == inCreateOrDropTrigger {
+		return
+	}
 
 	if p.flag&inCreateOrDropTable > 0 {
 		// The table may not exist in create table or drop table statement.
@@ -1988,7 +2012,7 @@ func (p *preprocessor) resolveShowStmt(node *ast.ShowStmt) {
 }
 
 func (p *preprocessor) resolveExecuteStmt(node *ast.ExecuteStmt) {
-	if p.flag&inCreateRoutine == inCreateRoutine {
+	if p.flag&inCreateRoutine == inCreateRoutine || p.flag&inCreateOrDropTrigger == inCreateOrDropTrigger {
 		return
 	}
 	prepared, err := GetPreparedStmt(node, p.sctx.GetSessionVars())

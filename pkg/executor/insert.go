@@ -584,3 +584,8 @@ func (e *InsertExec) GetFKCascades() []*FKCascadeExec {
 func (e *InsertExec) HasFKCascades() bool {
 	return len(e.fkCascades) > 0
 }
+
+// GetTriggerExec implements WithTriggerSupport interface.
+func (e *InsertExec) GetTriggerExec() *TriggerExec {
+	return e.triggerExec
+}
