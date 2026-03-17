@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	"github.com/pingcap/tidb/pkg/ddl/logutil"
 	"github.com/pingcap/tidb/pkg/ddl/util"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/domain/serverinfo"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
@@ -369,6 +370,7 @@ func (s *etcdSyncer) WaitVersionSynced(ctx context.Context, jobID int64, latestV
 			// ctx is canceled or timeout.
 			return nil, errors.Trace(err)
 		}
+		pkdbrepl.CheckStandbyBlocking(ctx)
 
 		if vardef.IsMDLEnabled() {
 			res, synced, err := s.waitVersionSyncedWithMDL(ctx, jobID, latestVer, checkAssumedSvr)

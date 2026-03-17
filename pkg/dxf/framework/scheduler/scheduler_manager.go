@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/dxf/framework/dxfmetric"
 	"github.com/pingcap/tidb/pkg/dxf/framework/handle"
 	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
@@ -217,6 +218,7 @@ func (sm *Manager) scheduleTaskLoop() {
 	trace := traceevent.NewTrace()
 	ctx := tracing.WithFlightRecorder(sm.ctx, trace)
 	for {
+		pkdbrepl.CheckStandbyBlocking(sm.ctx)
 		select {
 		case <-sm.ctx.Done():
 			sm.logger.Info("schedule task loop exits")
@@ -494,6 +496,7 @@ func (sm *Manager) collectLoop() {
 	trace := traceevent.NewTrace()
 	ctx := tracing.WithFlightRecorder(sm.ctx, trace)
 	for {
+		pkdbrepl.CheckStandbyBlocking(sm.ctx)
 		select {
 		case <-sm.ctx.Done():
 			sm.logger.Info("collect loop exits")

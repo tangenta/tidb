@@ -49,6 +49,7 @@ import (
 	"github.com/pingcap/tidb/pkg/domain/crossks"
 	"github.com/pingcap/tidb/pkg/domain/globalconfigsync"
 	"github.com/pingcap/tidb/pkg/domain/infosync"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/domain/sqlsvrapi"
 	disthandle "github.com/pingcap/tidb/pkg/dxf/framework/handle"
 	"github.com/pingcap/tidb/pkg/dxf/framework/metering"
@@ -987,6 +988,12 @@ func (do *Domain) Init(
 		do.ddlExecutor = checker
 	}
 
+	// special step for log replication. Must use correct standby mode before any
+	// actions, because TiKV may have inconsistent data and we must use min resolved
+	// TS to read inside standby mode even for the first read.
+	pkdbrepl.InitStandby(do.ctx, do.etcdClient)
+	go pkdbrepl.WatchRestart(do.etcdClient, do.exit, do)
+
 	// step 1: prepare the info/schema syncer which domain reload needed.
 	pdCli, pdHTTPCli := do.GetPDClient(), do.GetPDHTTPClient()
 	skipRegisterToDashboard := config.GetGlobalConfig().SkipRegisterToDashboard
@@ -1100,6 +1107,9 @@ func (do *Domain) Start(startMode ddl.StartMode) error {
 	do.wg.Run(do.runawayManager.RunawayWatchSyncLoop, "runawayWatchSyncLoop")
 	do.wg.Run(do.auditComponentsLoop, "auditComponentsLoop")
 	do.wg.Run(do.requestUnitsWriterLoop, "requestUnitsWriterLoop")
+	do.wg.Run(func() {
+		pkdbrepl.WatchStandby(do.ctx, do.etcdClient, do)
+	}, "WatchStandby")
 	skipRegisterToDashboard := gCfg.SkipRegisterToDashboard
 	if !skipRegisterToDashboard {
 		do.wg.Run(func() {
@@ -1886,6 +1896,10 @@ func (do *Domain) globalBindHandleWorkerLoop(owner owner.Manager) {
 					logutil.BgLogger().Error("update bindinfo failed", zap.Error(err))
 				}
 			case <-gcBindTicker.C:
+				// GCBinding deletes rows from mysql.bind_info and should be skipped in standby mode.
+				if pkdbrepl.IsStandbyMode() {
+					continue
+				}
 				if !owner.IsOwner() {
 					continue
 				}
@@ -2492,6 +2506,9 @@ func (do *Domain) gcStatsWorker() {
 			do.gcStatsWorkerExitPreprocessing()
 			return
 		case <-gcStatsTicker.C:
+			if pkdbrepl.IsStandbyMode() {
+				continue
+			}
 			if !do.statsOwner.IsOwner() {
 				continue
 			}
@@ -2573,6 +2590,7 @@ func (do *Domain) autoAnalyzeWorker() {
 	for {
 		select {
 		case <-analyzeTicker.C:
+			pkdbrepl.CheckStandbyBlocking(do.ctx)
 			// In order to prevent tidb from being blocked by the auto analyze task during shutdown,
 			// a stopautoanalyze is added here for judgment.
 			//

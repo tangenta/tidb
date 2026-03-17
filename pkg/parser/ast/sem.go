@@ -327,6 +327,20 @@ const (
 	AdminReloadClusterBindingsCommand = "ADMIN RELOAD CLUSTER BINDINGS"
 	// AdminLBACEnableCommand represents ADMIN LBAC ENABLE statement
 	AdminLBACEnableCommand = "ADMIN LBAC ENABLE"
+	// AdminCreateLogReplicationCommand represents ADMIN CREATE LOG REPLICATION statement
+	AdminCreateLogReplicationCommand = "ADMIN CREATE LOG REPLICATION"
+	// AdminAlterLogReplicationCommand represents ADMIN ALTER LOG REPLICATION statement
+	AdminAlterLogReplicationCommand = "ADMIN ALTER LOG REPLICATION"
+	// AdminPauseLogReplicationCommand represents ADMIN PAUSE LOG REPLICATION statement
+	AdminPauseLogReplicationCommand = "ADMIN PAUSE LOG REPLICATION"
+	// AdminResumeLogReplicationCommand represents ADMIN RESUME LOG REPLICATION statement
+	AdminResumeLogReplicationCommand = "ADMIN RESUME LOG REPLICATION"
+	// AdminDropLogReplicationCommand represents ADMIN DROP LOG REPLICATION statement
+	AdminDropLogReplicationCommand = "ADMIN DROP LOG REPLICATION"
+	// AdminSwitchOverPrimaryCommand represents ADMIN SWITCHOVER PRIMARY statement
+	AdminSwitchOverPrimaryCommand = "ADMIN SWITCHOVER PRIMARY"
+	// AdminActivateStandbyCommand represents ADMIN ACTIVATE STANDBY statement
+	AdminActivateStandbyCommand = "ADMIN ACTIVATE STANDBY"
 )
 
 // BRIE Commands
@@ -945,6 +959,20 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminReloadClusterBindingsCommand
 	case AdminLBACEnable:
 		return AdminLBACEnableCommand
+	case AdminCreateLogReplication:
+		return AdminCreateLogReplicationCommand
+	case AdminAlterLogReplication:
+		return AdminAlterLogReplicationCommand
+	case AdminPauseLogReplication:
+		return AdminPauseLogReplicationCommand
+	case AdminResumeLogReplication:
+		return AdminResumeLogReplicationCommand
+	case AdminDropLogReplication:
+		return AdminDropLogReplicationCommand
+	case AdminSwitchOverPrimary:
+		return AdminSwitchOverPrimaryCommand
+	case AdminActivateStandby:
+		return AdminActivateStandbyCommand
 	default:
 		return UnknownCommand
 	}

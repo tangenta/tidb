@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/meta"
 	"github.com/pingcap/tidb/pkg/meta/metadef"
@@ -703,6 +704,8 @@ func (pq *AnalysisPriorityQueue) run() {
 	})
 
 	for {
+		pkdbrepl.CheckStandbyBlocking(pq.ctx)
+
 		// NOTE: We check the context error here to handle the case where the context has been canceled,
 		// allowing us to exit the goroutine as soon as possible.
 		if ctxErr := pq.ctx.Err(); ctxErr != nil {

@@ -34,6 +34,7 @@ import (
 	sess "github.com/pingcap/tidb/pkg/ddl/session"
 	"github.com/pingcap/tidb/pkg/ddl/systable"
 	"github.com/pingcap/tidb/pkg/ddl/util"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
@@ -837,6 +838,8 @@ func (w *worker) runOneJobStep(
 
 	r := tracing.StartRegion(jobCtx.ctx, "ddlWorker.runOneJobStep")
 	defer r.End()
+
+	pkdbrepl.CheckStandbyBlocking(jobCtx.ctx)
 
 	// Mock for run ddl job panic.
 	failpoint.Inject("mockPanicInRunDDLJob", func(failpoint.Value) {})

@@ -235,6 +235,14 @@ const (
 	TableSchemataExtensions = "SCHEMATA_EXTENSIONS"
 	// TableRegions is the string constant of table regions.
 	TableRegions = "TABLE_REGIONS"
+	// TableLogReplStatusGlobal is the table to show the global log replication status.
+	TableLogReplStatusGlobal = "LR_STATUS_GLOBAL"
+	// TableLogReplClusterStatusGlobal is the table to show the global log replication cluster status.
+	TableLogReplClusterStatusGlobal = "LR_CLUSTER_STATUS_GLOBAL"
+	// TableLogReplWorkflowHistoryGlobal is the table to show the global workflow history.
+	TableLogReplWorkflowHistoryGlobal = "LR_WORKFLOW_HISTORY_GLOBAL"
+	// TableLogReplStatusLocal is the table to show the local log replication status.
+	TableLogReplStatusLocal = "LR_STATUS_LOCAL"
 )
 
 const (
@@ -2610,6 +2618,10 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableKeyspaceMeta:                       tableKeyspaceMetaCols,
 	TableUserLoginHistory:                   tableUserLoginHistoryCols,
 	TableRegions:                            TableRegionsCols,
+	TableLogReplStatusGlobal:                TableLogReplStatusGlobalCols,
+	TableLogReplClusterStatusGlobal:         TableLogReplClusterStatusGlobalCols,
+	TableLogReplWorkflowHistoryGlobal:       TableLogReplWorkflowHistoryGlobalCols,
+	TableLogReplStatusLocal:                 TableLogReplStatusLocalCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, _ func() (pools.Resource, error), meta *model.TableInfo) (table.Table, error) {

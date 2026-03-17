@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/config/kerneltype",
         "//pkg/domain/infosync",
+        "//pkg/domain/pkdb_repl",
         "//pkg/domain/serverinfo",
         "//pkg/dxf/framework/dxfmetric",
         "//pkg/dxf/framework/handle",

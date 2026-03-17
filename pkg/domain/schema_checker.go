@@ -17,6 +17,8 @@ package domain
 import (
 	"time"
 
+	"github.com/pingcap/errors"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/infoschema/validatorapi"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/tikv/client-go/v2/tikv"
@@ -73,6 +75,11 @@ func (s *SchemaChecker) CheckBySchemaVer(txnTS uint64, startSchemaVer tikv.Schem
 			metrics.SchemaLeaseErrorCounter.WithLabelValues("changed").Inc()
 			return relatedChange, ErrInfoSchemaChanged
 		case validatorapi.ResultUnknown:
+			// TODO(lance6716): not sure why DDL will meet this error. But since DDL will be
+			// rejected later, we just return that error for now.
+			if pkdbrepl.IsStandbyMode() {
+				return nil, errors.New("cluster is in standby mode")
+			}
 			time.Sleep(schemaOutOfDateRetryInterval)
 		}
 	}

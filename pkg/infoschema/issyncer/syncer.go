@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/ddl/schemaver"
 	"github.com/pingcap/tidb/pkg/ddl/systable"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/infoschema/issyncer/mdldef"
 	"github.com/pingcap/tidb/pkg/infoschema/validatorapi"
@@ -316,6 +317,11 @@ func (s *Syncer) SyncLoop(ctx context.Context) {
 				s.logger.Error("reload schema in loop failed", zap.Error(err))
 			}
 			s.deferFn.check()
+		case <-pkdbrepl.StandbyInfoSchemaReloadTickCh:
+			err := s.Reload()
+			if err != nil {
+				s.logger.Error("reload schema in loop failed", zap.Error(err))
+			}
 		case _, ok := <-syncer.GlobalVersionCh():
 			err := s.Reload()
 			if err != nil {
@@ -418,12 +424,26 @@ func (s *Syncer) Reload() error {
 	defer s.m.Unlock()
 
 	startTime := time.Now()
-	ver, err := s.store.CurrentVersion(kv.GlobalTxnScope)
-	if err != nil {
-		return err
+	var version uint64
+	if pkdbrepl.IsStandbyMode() {
+		realStore, ok := s.store.(kv.StorageWithPD)
+		if !ok {
+			return errors.New("standby replication requires pd client")
+		}
+		ts, _, err := realStore.GetPDHTTPClient().GetMinResolvedTSByStoresIDs(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+		version = ts
+	} else {
+		ver, err := s.store.CurrentVersion(kv.GlobalTxnScope)
+		if err != nil {
+			return err
+		}
+
+		version = ver.Ver
 	}
 
-	version := ver.Ver
 	is, hitCache, oldSchemaVersion, changes, err := s.loader.LoadWithTS(version, false)
 	if err != nil {
 		if version = getFlashbackStartTSFromErrorMsg(err); version != 0 {
@@ -462,7 +482,7 @@ func (s *Syncer) Reload() error {
 	sub := time.Since(startTime)
 	// Reload interval is lease / 2, if load schema time elapses more than this interval,
 	// some query maybe responded by ErrInfoSchemaExpired error.
-	if sub > (lease/2) && lease > 0 {
+	if sub > (lease/2) && lease > 0 && !pkdbrepl.IsStandbyMode() {
 		// If it is a full load and there are a lot of tables, this is likely to happen.
 		s.logger.Warn("loading schema takes a long time", zap.Duration("take time", sub))
 

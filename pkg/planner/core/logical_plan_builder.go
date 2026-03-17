@@ -4956,6 +4956,14 @@ func (b *PlanBuilder) buildMemTable(_ context.Context, dbName ast.CIStr, tableIn
 			p.Extractor = &TableRegionsExtractor{}
 		case infoschema.TableTriggers:
 			p.Extractor = NewInfoSchemaTableTriggersExtractor()
+		case infoschema.TableLogReplStatusGlobal:
+			p.Extractor = &LogReplStatusGlobalExtractor{}
+		case infoschema.TableLogReplClusterStatusGlobal:
+			p.Extractor = &LogReplClusterStatusGlobalExtractor{}
+		case infoschema.TableLogReplWorkflowHistoryGlobal:
+			p.Extractor = &LogReplWorkflowHistoryGlobalExtractor{}
+		case infoschema.TableLogReplStatusLocal:
+			p.Extractor = &LogReplStatusLocalExtractor{}
 		}
 	}
 	return p, nil
