@@ -9,11 +9,12 @@ func init() {
 	tableIDMap[TableUserLoginHistory] = autoid.ReservedTablesBaseID
 	tableIDMap[ClusterTableAuditLog] = autoid.ReservedTablesBaseID + 1
 	tableIDMap[TableAuditLog] = autoid.ReservedTablesBaseID + 2
-	tableIDMap[TableRegions] = autoid.ReservedTablesBaseID + 3
-	tableIDMap[TableLogReplStatusGlobal] = autoid.ReservedTablesBaseID + 4
-	tableIDMap[TableLogReplClusterStatusGlobal] = autoid.ReservedTablesBaseID + 5
-	tableIDMap[TableLogReplWorkflowHistoryGlobal] = autoid.ReservedTablesBaseID + 6
-	tableIDMap[TableLogReplStatusLocal] = autoid.ReservedTablesBaseID + 7
+	// there's a hole of autoid.ReservedTablesBaseID + 3. Can be reused later
+	tableIDMap[TableRegions] = autoid.ReservedTablesBaseID + 4
+	tableIDMap[TableLogReplStatusGlobal] = autoid.ReservedTablesBaseID + 5
+	tableIDMap[TableLogReplClusterStatusGlobal] = autoid.ReservedTablesBaseID + 6
+	tableIDMap[TableLogReplWorkflowHistoryGlobal] = autoid.ReservedTablesBaseID + 7
+	tableIDMap[TableLogReplStatusLocal] = autoid.ReservedTablesBaseID + 8
 
 	init2()
 }
