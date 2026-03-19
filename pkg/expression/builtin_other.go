@@ -53,6 +53,7 @@ var (
 	_ functionClass = &getProcedureRealVarFunctionClass{}
 	_ functionClass = &getProcedureDecimalVarFunctionClass{}
 	_ functionClass = &getProcedureTimeVarFunctionClass{}
+	_ functionClass = &getProcedureDurationVarFunctionClass{}
 	_ functionClass = &getProcedureStringVarFunctionClass{}
 )
 
@@ -98,6 +99,7 @@ var (
 	_ builtinFunc = &builtinGetProcedureRealVarSig{}
 	_ builtinFunc = &builtinGetProcedureDecimalVarSig{}
 	_ builtinFunc = &builtinGetProcedureTimeVarSig{}
+	_ builtinFunc = &builtinGetProcedureDurationVarSig{}
 )
 
 // UpdateVariableVar converts data types like columns.
@@ -1967,6 +1969,20 @@ type setProcedureVarFunctionClass struct {
 	baseFunctionClass
 }
 
+func captureProcedureContext(sessVars *variable.SessionVars) *variable.ProcedureContext {
+	if pCtx := sessVars.GetProcedureContext(); pCtx != nil {
+		return pCtx.Context
+	}
+	return nil
+}
+
+func restoreProcedureContext(sessVars *variable.SessionVars, pCtx *variable.ProcedureContext) error {
+	if pCtx == nil {
+		return nil
+	}
+	return sessVars.SetProcedureContext(pCtx)
+}
+
 func (c *setProcedureVarFunctionClass) getFunction(ctx BuildContext, args []Expression) (sig builtinFunc, err error) {
 	if err = c.verifyArgs(args); err != nil {
 		return nil, err
@@ -2018,7 +2034,16 @@ func (b *builtinSetProcedureStringVarSig) evalString(ctx EvalContext, row chunk.
 	if isNull || err != nil {
 		return "", isNull, err
 	}
+	sessVars, err := b.GetSessionVars(ctx)
+	if err != nil {
+		return "", isNull, err
+	}
+	originalCtx := captureProcedureContext(sessVars)
 	datum, err := b.args[1].Eval(ctx, row)
+	restoreErr := restoreProcedureContext(sessVars, originalCtx)
+	if err == nil && restoreErr != nil {
+		err = restoreErr
+	}
 	isNull = datum.IsNull()
 	if isNull || err != nil {
 		return "", isNull, err
@@ -2029,10 +2054,6 @@ func (b *builtinSetProcedureStringVarSig) evalString(ctx EvalContext, row chunk.
 		datum.SetCollation(collation)
 	}
 	res, err = datum.ToString()
-	if err != nil {
-		return "", isNull, err
-	}
-	sessVars, err := b.GetSessionVars(ctx)
 	if err != nil {
 		return "", isNull, err
 	}
@@ -2061,16 +2082,21 @@ func (b *builtinSetProcedureRealVarSig) evalReal(ctx EvalContext, row chunk.Row)
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
+	sessVars, err := b.GetSessionVars(ctx)
+	if err != nil {
+		return 0, isNull, err
+	}
+	originalCtx := captureProcedureContext(sessVars)
 	datum, err := b.args[1].Eval(ctx, row)
+	restoreErr := restoreProcedureContext(sessVars, originalCtx)
+	if err == nil && restoreErr != nil {
+		err = restoreErr
+	}
 	isNull = datum.IsNull()
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
 	res = datum.GetFloat64()
-	sessVars, err := b.GetSessionVars(ctx)
-	if err != nil {
-		return 0, isNull, err
-	}
 	err = UpdateVariableVar(varName, datum, sessVars)
 	return res, false, err
 }
@@ -2095,16 +2121,21 @@ func (b *builtinSetProcedureDecimalVarSig) evalDecimal(ctx EvalContext, row chun
 	if isNull || err != nil {
 		return nil, isNull, err
 	}
+	sessVars, err := b.GetSessionVars(ctx)
+	if err != nil {
+		return nil, isNull, err
+	}
+	originalCtx := captureProcedureContext(sessVars)
 	datum, err := b.args[1].Eval(ctx, row)
+	restoreErr := restoreProcedureContext(sessVars, originalCtx)
+	if err == nil && restoreErr != nil {
+		err = restoreErr
+	}
 	isNull = datum.IsNull()
 	if isNull || err != nil {
 		return nil, isNull, err
 	}
 	res := datum.GetMysqlDecimal()
-	sessVars, err := b.GetSessionVars(ctx)
-	if err != nil {
-		return nil, isNull, err
-	}
 	err = UpdateVariableVar(varName, datum, sessVars)
 	return res, false, err
 }
@@ -2129,16 +2160,21 @@ func (b *builtinSetProcedureIntVarSig) evalInt(ctx EvalContext, row chunk.Row) (
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
+	sessVars, err := b.GetSessionVars(ctx)
+	if err != nil {
+		return 0, isNull, err
+	}
+	originalCtx := captureProcedureContext(sessVars)
 	datum, err := b.args[1].Eval(ctx, row)
+	restoreErr := restoreProcedureContext(sessVars, originalCtx)
+	if err == nil && restoreErr != nil {
+		err = restoreErr
+	}
 	isNull = datum.IsNull()
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
 	res := datum.GetInt64()
-	sessVars, err := b.GetSessionVars(ctx)
-	if err != nil {
-		return 0, isNull, err
-	}
 	err = UpdateVariableVar(varName, datum, sessVars)
 	return res, false, err
 }
@@ -2163,15 +2199,20 @@ func (b *builtinSetProcedureTimeVarSig) evalTime(ctx EvalContext, row chunk.Row)
 	if isNull || err != nil {
 		return types.ZeroTime, isNull, err
 	}
-	datum, err := b.args[1].Eval(ctx, row)
-	if err != nil || datum.IsNull() {
-		return types.ZeroTime, datum.IsNull(), handleInvalidTimeError(ctx, err)
-	}
-	res := datum.GetMysqlTime()
 	sessVars, err := b.GetSessionVars(ctx)
 	if err != nil {
 		return types.ZeroTime, isNull, err
 	}
+	originalCtx := captureProcedureContext(sessVars)
+	datum, err := b.args[1].Eval(ctx, row)
+	restoreErr := restoreProcedureContext(sessVars, originalCtx)
+	if err == nil && restoreErr != nil {
+		err = restoreErr
+	}
+	if err != nil || datum.IsNull() {
+		return types.ZeroTime, datum.IsNull(), handleInvalidTimeError(ctx, err)
+	}
+	res := datum.GetMysqlTime()
 	err = UpdateVariableVar(varName, datum, sessVars)
 	return res, false, err
 }
@@ -2189,6 +2230,8 @@ func BuildGetProcedureVarFunction(ctx BuildContext, expr Expression, retType *ty
 		fc = &getProcedureRealVarFunctionClass{getVarFunctionClass{baseFunctionClass{ast.GetProcedureVar, 1, 1}, retType}}
 	case types.ETDatetime, types.ETTimestamp:
 		fc = &getProcedureTimeVarFunctionClass{getVarFunctionClass{baseFunctionClass{ast.GetProcedureVar, 1, 1}, retType}}
+	case types.ETDuration:
+		fc = &getProcedureDurationVarFunctionClass{getVarFunctionClass{baseFunctionClass{ast.GetProcedureVar, 1, 1}, retType}}
 	default:
 		fc = &getProcedureStringVarFunctionClass{getVarFunctionClass{baseFunctionClass{ast.GetProcedureVar, 1, 1}, retType}}
 	}
@@ -2477,4 +2520,54 @@ func (b *builtinGetProcedureTimeVarSig) evalTime(ctx EvalContext, row chunk.Row)
 		return types.ZeroTime, false, errors.Errorf("getprocedurevar should not find variable:%s", varName)
 	}
 	return types.ZeroTime, true, nil
+}
+
+type getProcedureDurationVarFunctionClass struct {
+	getVarFunctionClass
+}
+
+func (c *getProcedureDurationVarFunctionClass) getFunction(ctx BuildContext, args []Expression) (sig builtinFunc, err error) {
+	if err = c.verifyArgs(args); err != nil {
+		return nil, err
+	}
+	bf, err := newBaseBuiltinFuncWithTp(ctx, c.funcName, args, types.ETDuration, types.ETString)
+	if err != nil {
+		return nil, err
+	}
+	bf.setDecimalAndFlenForTime(c.tp.GetDecimal())
+	sig = &builtinGetProcedureDurationVarSig{baseBuiltinFunc: bf}
+	return sig, nil
+}
+
+type builtinGetProcedureDurationVarSig struct {
+	baseBuiltinFunc
+	expropt.SessionVarsPropReader
+}
+
+func (b *builtinGetProcedureDurationVarSig) RequiredOptionalEvalProps() OptionalEvalPropKeySet {
+	return b.SessionVarsPropReader.RequiredOptionalEvalProps()
+}
+
+func (b *builtinGetProcedureDurationVarSig) Clone() builtinFunc {
+	newSig := &builtinGetProcedureDurationVarSig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
+}
+
+func (b *builtinGetProcedureDurationVarSig) evalDuration(ctx EvalContext, row chunk.Row) (types.Duration, bool, error) {
+	sessionVars, err := b.GetSessionVars(ctx)
+	if err != nil {
+		return types.Duration{}, true, err
+	}
+	varName, isNull, err := b.args[0].EvalString(ctx, row)
+	if isNull || err != nil {
+		return types.Duration{}, isNull, err
+	}
+
+	if _, v, notFind := sessionVars.GetProcedureVariable(varName); !notFind && !v.IsNull() {
+		return v.GetMysqlDuration(), false, nil
+	} else if notFind {
+		return types.Duration{}, false, errors.Errorf("getprocedurevar should not find variable:%s", varName)
+	}
+	return types.Duration{}, true, nil
 }

@@ -90,6 +90,10 @@ func (b *Builder) reloadRoutines() error {
 		defUTF8 := row.GetString(3)
 		sqlModeStr := row.GetSet(9).String()
 
+		var retType *types.FieldType
+		if routineType == "FUNCTION" {
+			retType = getStoredFuncRetType(defUTF8, sqlModeStr)
+		}
 		procInfo := &model.ProcedureInfo{
 			Schema: ast.NewCIStr(schemaName),
 			Name:   ast.NewCIStr(routineName),
@@ -116,7 +120,7 @@ func (b *Builder) reloadRoutines() error {
 			Options:          options,
 			ExternalLanguage: row.GetString(17),
 
-			RetType: getStoredFuncRetType(defUTF8, sqlModeStr),
+			RetType: retType,
 			State:   model.StatePublic,
 		}
 		routines, ok := newRoutineMap[procInfo.Schema.L]
@@ -141,6 +145,7 @@ func getStoredFuncRetType(defUTF8, sqlModeStr string) *types.FieldType {
 	}
 
 	p := parser.GetParser()
+	defer parser.DestroyParser(p)
 	p.SetSQLMode(sqlMode)
 	createFnSQL := "create function p() " + defUTF8
 	stmt, err := p.ParseOneStmt(createFnSQL, "", "")

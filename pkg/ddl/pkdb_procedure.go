@@ -4,6 +4,7 @@ package ddl
 
 import (
 	"context"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -14,12 +15,15 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/privilege"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbterror/exeerrors"
 )
 
@@ -74,6 +78,10 @@ func (e *executor) CreateProcedure(ctx sessionctx.Context, stmt *ast.CreateProce
 		return nil
 	}
 
+	if err := validateRoutineTypes(stmt); err != nil {
+		return err
+	}
+
 	procName := stmt.ProcedureName.Name
 	procSchema := stmt.ProcedureName.Schema
 	dbInfo, ok := is.SchemaByName(procSchema)
@@ -111,8 +119,12 @@ func (e *executor) CreateProcedure(ctx sessionctx.Context, stmt *ast.CreateProce
 	bodyStr := stmt.ProcedureBody.Text()
 	routineType := "PROCEDURE"
 	if stmt.FunctionInfo.RetType != nil {
+		retTypeStr, err := formatRoutineReturnType(stmt.FunctionInfo.RetType)
+		if err != nil {
+			return err
+		}
 		routineType = "FUNCTION"
-		bodyStr = "RETURNS " + stmt.FunctionInfo.RetType.String() + " " + bodyStr
+		bodyStr = "RETURNS " + retTypeStr + " " + bodyStr
 	}
 
 	sqlMode, ok := ctx.GetSessionVars().GetSystemVar(vardef.SQLModeVar)
@@ -220,6 +232,149 @@ func (e *executor) CreateProcedure(ctx sessionctx.Context, stmt *ast.CreateProce
 		}
 	}
 	return nil
+}
+
+func formatRoutineReturnType(tp *types.FieldType) (string, error) {
+	retType := tp.CompactStr()
+	switch {
+	case mysql.HasUnsignedFlag(tp.GetFlag()) && tp.GetType() != mysql.TypeBit && tp.GetType() != mysql.TypeYear:
+		retType += " unsigned"
+	}
+	if mysql.HasZerofillFlag(tp.GetFlag()) {
+		retType += " zerofill"
+	}
+	if mysql.HasBinaryFlag(tp.GetFlag()) && tp.GetType() != mysql.TypeString {
+		retType += " binary"
+	}
+	return retType, nil
+}
+
+type routineTypeValidator struct {
+	err error
+}
+
+func (v *routineTypeValidator) Enter(in ast.Node) (ast.Node, bool) {
+	if v.err != nil {
+		return in, true
+	}
+	switch x := in.(type) {
+	case *ast.StoreParameter:
+		v.err = validateRoutineFieldType(x.ParamName, x.ParamType)
+	case *ast.ProcedureDecl:
+		for _, name := range x.DeclNames {
+			if v.err = validateRoutineFieldType(name, x.DeclType); v.err != nil {
+				break
+			}
+		}
+	}
+	return in, v.err != nil
+}
+
+func (*routineTypeValidator) Leave(in ast.Node) (ast.Node, bool) {
+	return in, true
+}
+
+func validateRoutineTypes(stmt *ast.CreateProcedureInfo) error {
+	validator := &routineTypeValidator{}
+	stmt.Accept(validator)
+	if validator.err != nil {
+		return validator.err
+	}
+	if stmt.FunctionInfo.RetType != nil {
+		return validateRoutineFieldType("", stmt.FunctionInfo.RetType)
+	}
+	return nil
+}
+
+func validateRoutineFieldType(name string, tp *types.FieldType) error {
+	if tp == nil {
+		return nil
+	}
+	if tp.GetFlen() > math.MaxUint32 {
+		return types.ErrTooBigDisplayWidth.GenWithStack("Display width out of range for column '%s' (max = %d)", name, math.MaxUint32)
+	}
+
+	switch tp.GetType() {
+	case mysql.TypeString:
+		if tp.GetFlen() != types.UnspecifiedLength && tp.GetFlen() > mysql.MaxFieldCharLength {
+			return types.ErrTooBigFieldLength.GenWithStack("Column length too big for column '%s' (max = %d); use BLOB or TEXT instead", name, mysql.MaxFieldCharLength)
+		}
+	case mysql.TypeVarchar:
+		if len(tp.GetCharset()) != 0 {
+			if err := types.IsVarcharTooBigFieldLength(tp.GetFlen(), name, tp.GetCharset()); err != nil {
+				return err
+			}
+		}
+	case mysql.TypeFloat, mysql.TypeDouble:
+		if tp.GetDecimal() == types.UnspecifiedLength {
+			if tp.GetType() == mysql.TypeFloat && tp.GetFlen() > mysql.MaxDoublePrecisionLength {
+				return types.ErrWrongFieldSpec.GenWithStackByArgs(name)
+			}
+		} else {
+			if tp.GetDecimal() > mysql.MaxFloatingTypeScale {
+				return types.ErrTooBigScale.GenWithStackByArgs(tp.GetDecimal(), name, mysql.MaxFloatingTypeScale)
+			}
+			if tp.GetFlen() > mysql.MaxFloatingTypeWidth || tp.GetFlen() == 0 {
+				return types.ErrTooBigDisplayWidth.GenWithStackByArgs(name, mysql.MaxFloatingTypeWidth)
+			}
+			if tp.GetFlen() < tp.GetDecimal() {
+				return types.ErrMBiggerThanD.GenWithStackByArgs(name)
+			}
+		}
+	case mysql.TypeSet:
+		if len(tp.GetElems()) > mysql.MaxTypeSetMembers {
+			return types.ErrTooBigSet.GenWithStack("Too many strings for column %s and SET", name)
+		}
+		for _, str := range tp.GetElems() {
+			if strings.Contains(str, ",") {
+				return types.ErrIllegalValueForType.GenWithStackByArgs(types.TypeStr(tp.GetType()), str)
+			}
+		}
+	case mysql.TypeNewDecimal:
+		if tp.GetDecimal() > mysql.MaxDecimalScale {
+			return types.ErrTooBigScale.GenWithStackByArgs(tp.GetDecimal(), name, mysql.MaxDecimalScale)
+		}
+		if tp.GetFlen() > mysql.MaxDecimalWidth {
+			return types.ErrTooBigPrecision.GenWithStackByArgs(tp.GetFlen(), name, mysql.MaxDecimalWidth)
+		}
+		if tp.GetFlen() < tp.GetDecimal() {
+			return types.ErrMBiggerThanD.GenWithStackByArgs(name)
+		}
+	case mysql.TypeBit:
+		if tp.GetFlen() <= 0 {
+			return types.ErrInvalidFieldSize.GenWithStackByArgs(name)
+		}
+		if tp.GetFlen() > mysql.MaxBitDisplayWidth {
+			return types.ErrTooBigDisplayWidth.GenWithStackByArgs(name, mysql.MaxBitDisplayWidth)
+		}
+	}
+
+	if err := checkColumnAttributes(name, tp); err != nil {
+		return err
+	}
+
+	collation := tp.GetCollate()
+	if collation == "" && tp.GetCharset() != "" {
+		defaultCollation, err := charset.GetDefaultCollation(tp.GetCharset())
+		if err != nil {
+			return err
+		}
+		collation = defaultCollation
+	}
+	col := table.ToColumn(&model.ColumnInfo{
+		Name:      ast.NewCIStr(name),
+		FieldType: *tp.Clone(),
+	})
+	if err := checkColumnFieldLength(col); err != nil {
+		return err
+	}
+	if collation == "" {
+		collation = col.GetCollate()
+	}
+	if collation == "" {
+		collation = mysql.DefaultCollationName
+	}
+	return checkColumnValueConstraint(col, collation)
 }
 
 func (e *executor) DropProcedure(ctx sessionctx.Context, stmt *ast.DropProcedureStmt) error {

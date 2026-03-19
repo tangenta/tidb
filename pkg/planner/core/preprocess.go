@@ -248,7 +248,7 @@ func preloadUserStoredFunction(ctx context.Context, sctx sessionctx.Context, fun
 			}
 			definition := rows[0].GetString(0)
 			createFnSQL := "create function p() " + definition
-			sqlModeStr := rows[0].GetString(1)
+			sqlModeStr := rows[0].GetSet(1).String()
 			sqlExec := sctx.GetRestrictedSQLExecutor()
 			_, _, err = sqlExec.ExecRestrictedSQL(internalExecCtx, nil, "SET SQL_MODE = '"+sqlModeStr+"'")
 			if err != nil {
