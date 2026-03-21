@@ -373,6 +373,9 @@ type Job struct {
 	// It's only used by modify column and not the accurate value.
 	NeedReorg bool `json:"-"`
 
+	FullSchemaName ast.CIStr `json:"full_schema_name"`
+	FullTableName  ast.CIStr `json:"full_table_name"`
+
 	// it's a temporary place to cache job args.
 	// when Version is JobVersion2, Args contains a single element of type JobArgs.
 	args []any
@@ -457,6 +460,22 @@ type Job struct {
 	// LastSchemaVersion records the latest schema version returned by runOneJobStep.
 	// If it is zero, for non-MDL scenario, scheduler can skip waitVersionSyncedWithoutMDL.
 	LastSchemaVersion int64 `json:"last_schema_version"`
+}
+
+// GetSchemaName returns the schema name of the job.
+func (job *Job) GetSchemaName() ast.CIStr {
+	if len(job.FullSchemaName.L) > 0 && len(job.FullSchemaName.O) > 0 {
+		return job.FullSchemaName
+	}
+	return ast.NewCIStr(job.SchemaName)
+}
+
+// GetTableName returns the table name of the job.
+func (job *Job) GetTableName() ast.CIStr {
+	if len(job.FullTableName.L) > 0 && len(job.FullTableName.O) > 0 {
+		return job.FullTableName
+	}
+	return ast.NewCIStr(job.TableName)
 }
 
 // FinishTableJob is called when a job is finished.
@@ -1336,7 +1355,7 @@ func (tz *TimeZoneLocation) GetLocation() (*time.Location, error) {
 	return tz.location, err
 }
 
-// JobW is a wrapper of model.Job, it contains the job and the binary representation
+// JobW is a wrapper of ast.Job, it contains the job and the binary representation
 // of the job.
 type JobW struct {
 	*Job

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/pkg/extension"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
@@ -116,7 +117,8 @@ func (e *GrantExec) checkRoutineLegality(ctx context.Context, internalSession se
 }
 
 func (e *GrantExec) checkTableOrColumnExists(tbl table.Table, dbName string) error {
-	if tbl.Meta().Name.L != strings.ToLower(e.Level.TableName) {
+	// TODO(lower_case_table_names): support case sensitive table name in GrantExec Level.
+	if !model.NameEqual(tbl.Meta().Name, ast.NewCIStr(e.Level.TableName)) {
 		return infoschema.ErrTableNotExists.GenWithStackByArgs(dbName, e.Level.TableName)
 	}
 	for _, p := range e.Privs {
@@ -173,6 +175,7 @@ func (e *GrantExec) Next(ctx context.Context, _ *chunk.Chunk) error {
 			}
 			dbNameStr := ast.NewCIStr(dbName)
 			schema := e.Ctx().GetDomain().(*domain.Domain).InfoSchema()
+			// TODO(lower_case_table_names): support case sensitive table name in GrantExec Level.
 			tbl, err := schema.TableByName(ctx, dbNameStr, ast.NewCIStr(e.Level.TableName))
 			// Allow GRANT on non-existent table with at least create privilege, see issue #28533 #29268
 			if err != nil {
@@ -1003,6 +1006,7 @@ func getTargetSchemaAndTable(ctx context.Context, sctx sessionctx.Context, dbNam
 		}
 	}
 	name := ast.NewCIStr(tableName)
+	// TODO(lower_case_table_names): handle case sensitivity.
 	tbl, err := is.TableByName(ctx, ast.NewCIStr(dbName), name)
 	if terror.ErrorEqual(err, infoschema.ErrTableNotExists) {
 		return dbName, nil, err

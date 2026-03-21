@@ -38,8 +38,8 @@ type RecoverTableInfo struct {
 	DropJobID     int64
 	SnapshotTS    uint64
 	AutoIDs       AutoIDGroup
-	OldSchemaName string
-	OldTableName  string
+	OldSchemaName ast.CIStr
+	OldTableName  ast.CIStr
 }
 
 // RecoverSchemaInfo contains information needed by DDL.RecoverSchema.

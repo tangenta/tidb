@@ -112,7 +112,7 @@ type MetaOnlyInfoSchema interface {
 	SchemaSimpleTableInfos(ctx stdctx.Context, schema ast.CIStr) ([]*model.TableNameInfo, error)
 	ListTablesWithSpecialAttribute(filter SpecialAttributeFilter) []TableInfoResult
 	// GetTableReferredForeignKeys gets the table's ReferredFKInfo by lowercase schema and table name.
-	GetTableReferredForeignKeys(schema, table string) []*model.ReferredFKInfo
+	GetTableReferredForeignKeys(schema, table ast.CIStr) []*model.ReferredFKInfo
 	Misc
 }
 

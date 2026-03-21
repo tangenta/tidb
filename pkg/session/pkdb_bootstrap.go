@@ -39,6 +39,8 @@ const (
 	eeversion13 = 13
 	// eeversion14 reserve for LBAC implementation.
 	eeversion14 = 14
+	// eeversion15 adds the support for lower_case_table_names in EE.
+	eeversion15 = 15
 )
 
 const (
@@ -49,7 +51,7 @@ const (
 
 // currentEEBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // Please make sure this is the largest version.
-var currentEEBootstrapVersion int64 = eeversion13
+var currentEEBootstrapVersion int64 = eeversion15
 
 var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeEEToVer2,
@@ -65,6 +67,7 @@ var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeToEEVer12,
 	upgradeToEEVer13,
 	upgradeToEEVer14,
+	upgradeToEEVer15,
 }
 
 func doPkdbDDLWorks(s sessionapi.Session) {
@@ -306,6 +309,13 @@ func upgradeToEEVer12(s sessionapi.Session, ver int64) {
 	doReentrantDDL(s, "ALTER TABLE `mysql`.`user` MODIFY COLUMN Max_user_connections INT UNSIGNED NOT NULL DEFAULT 0")
 }
 
+func writeLowerCaseTableNamesParameter(s sessionapi.Session, val int) {
+	comment := "lower_case_table_names value. Do not edit it."
+	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, %?) ON DUPLICATE KEY UPDATE VARIABLE_VALUE=%?`,
+		mysql.SystemDB, mysql.TiDBTable, lowerCaseTableNames, val, comment, val,
+	)
+}
+
 func upgradeToEEVer13(s sessionapi.Session, ver int64) {
 	if ver >= eeversion13 {
 		return
@@ -318,4 +328,12 @@ func upgradeToEEVer14(s sessionapi.Session, ver int64) {
 		return
 	}
 	// reserve for LBAC implementation.
+}
+
+func upgradeToEEVer15(s sessionapi.Session, ver int64) {
+	if ver >= eeversion15 {
+		return
+	}
+	// Forbid updating lower_case_table_names for existing clusters.
+	writeLowerCaseTableNamesParameter(s, 2)
 }

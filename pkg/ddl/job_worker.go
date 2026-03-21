@@ -1124,13 +1124,13 @@ func (w *worker) runOneJobStep(
 // and store in vardef if possible.
 func (w *worker) loadGlobalVars(varName ...string) error {
 	// Get sessionctx from context resource pool.
-	var ctx sessionctx.Context
-	ctx, err := w.sessPool.Get()
+	var sctx sessionctx.Context
+	sctx, err := w.sessPool.Get()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer w.sessPool.Put(ctx)
-	return util.LoadGlobalVars(ctx, varName...)
+	defer w.sessPool.Put(sctx)
+	return util.LoadGlobalVars(context.Background(), sctx, varName)
 }
 
 func toTError(err error) *terror.Error {

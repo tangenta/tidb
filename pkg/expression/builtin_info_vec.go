@@ -35,15 +35,15 @@ func (b *builtinDatabaseSig) vectorized() bool {
 func (b *builtinDatabaseSig) vecEvalString(ctx EvalContext, input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 
-	currentDB := ctx.CurrentDB()
+	currentDB := ctx.CurrentDBCI()
 	result.ReserveString(n)
-	if currentDB == "" {
-		for range n {
+	if currentDB.L == "" {
+		for i := 0; i < n; i++ {
 			result.AppendNull()
 		}
 	} else {
-		for range n {
-			result.AppendString(currentDB)
+		for i := 0; i < n; i++ {
+			result.AppendString(currentDB.L)
 		}
 	}
 	return nil

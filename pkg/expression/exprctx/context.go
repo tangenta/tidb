@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/pkg/errctx"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
@@ -75,6 +76,8 @@ type EvalContext interface {
 	Location() *time.Location
 	// CurrentDB return the current database name
 	CurrentDB() string
+	// CurrentDBCI returns the current database name in ast.CIStr
+	CurrentDBCI() ast.CIStr
 	// CurrentTime returns the current time.
 	// Multiple calls for CurrentTime() should return the same value for the same `CtxID`.
 	CurrentTime() (time.Time, error)

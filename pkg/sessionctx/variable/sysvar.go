@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/join/joinversion"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -3972,6 +3973,9 @@ var defaultSysVars = []*SysVar{
 			return nil
 		},
 	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.LowerCaseTableNames, Value: vardef.DefLowerCaseTableNames, Type: vardef.TypeInt, MinValue: 0, MaxValue: 2, ReadOnly: true, GetGlobal: func(ctx context.Context, sv *SessionVars) (string, error) {
+		return strconv.Itoa(model.GetLowerCaseTableNames()), nil
+	}},
 }
 
 // GlobalSystemVariableInitialValue gets the default value for a system variable including ones that are dynamically set (e.g. based on the store)

@@ -880,6 +880,10 @@ type SessionVars struct {
 	// CurrentDB is the default database of this session.
 	CurrentDB string
 
+	// CurrentDBCI is the CIStr version of CurrentDB.
+	// TODO(lower_case_table_names): remove CurrentDB and only use this.
+	CurrentDBCI ast.CIStr
+
 	// CurrentDBChanged indicates if the CurrentDB has been updated, and if it is we should print it into
 	// the slow log to make it be compatible with MySQL, https://github.com/pingcap/tidb/issues/17846.
 	CurrentDBChanged bool
@@ -3117,6 +3121,7 @@ func (s *SessionVars) EncodeSessionStates(_ context.Context, sessionStates *sess
 	// Encode other session contexts.
 	sessionStates.PreparedStmtID = s.preparedStmtID
 	sessionStates.Status = s.status.Load()
+	// TODO(lower_case_table_names): use model.CIStr to store database name.
 	sessionStates.CurrentDB = s.CurrentDB
 	sessionStates.LastTxnInfo = s.LastTxnInfo
 	if s.LastQueryInfo.StartTS != 0 {
@@ -3152,7 +3157,9 @@ func (s *SessionVars) DecodeSessionStates(_ context.Context, sessionStates *sess
 	// Decode other session contexts.
 	s.preparedStmtID = sessionStates.PreparedStmtID
 	s.status.Store(sessionStates.Status)
+	// TODO(lower_case_table_names): use model.CIStr to store database name.
 	s.CurrentDB = sessionStates.CurrentDB
+	s.CurrentDBCI = ast.NewCIStr(sessionStates.CurrentDB)
 	s.LastTxnInfo = sessionStates.LastTxnInfo
 	if sessionStates.LastQueryInfo != nil {
 		s.LastQueryInfo = *sessionStates.LastQueryInfo

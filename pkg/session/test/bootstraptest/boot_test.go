@@ -405,7 +405,7 @@ func TestAnalyzeVersionUpgradeFrom300To500(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV3, ver300)
-	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBAnalyzeVersion))
+	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBAnalyzeVersion))
 	session.MustExec(t, seV3, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV3)
@@ -413,7 +413,7 @@ func TestAnalyzeVersionUpgradeFrom300To500(t *testing.T) {
 	require.Equal(t, int64(ver300), ver)
 
 	// We are now in 3.0.0, check tidb_analyze_version should not exist.
-	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBAnalyzeVersion))
+	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBAnalyzeVersion))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -458,7 +458,7 @@ func TestIndexMergeUpgradeFrom300To540(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV3, ver300)
-	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableIndexMerge))
+	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableIndexMerge))
 	session.MustExec(t, seV3, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV3)
@@ -466,7 +466,7 @@ func TestIndexMergeUpgradeFrom300To540(t *testing.T) {
 	require.Equal(t, int64(ver300), ver)
 
 	// We are now in 3.0.0, check tidb_enable_index_merge should not exist.
-	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableIndexMerge))
+	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableIndexMerge))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -524,7 +524,7 @@ func testIndexMergeUpgradeFrom400To540(t *testing.T, enable bool) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV4, ver400)
-	session.MustExec(t, seV4, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", vardef.Off, vardef.TiDBEnableIndexMerge))
+	session.MustExec(t, seV4, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", vardef.Off, vardef.TiDBEnableIndexMerge))
 	session.MustExec(t, seV4, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV4)
@@ -532,7 +532,7 @@ func testIndexMergeUpgradeFrom400To540(t *testing.T, enable bool) {
 	require.Equal(t, int64(ver400), ver)
 
 	// We are now in 4.0.0, tidb_enable_index_merge is off.
-	res := session.MustExecToRecodeSet(t, seV4, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableIndexMerge))
+	res := session.MustExecToRecodeSet(t, seV4, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableIndexMerge))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -592,7 +592,7 @@ func TestTiDBOptRangeMaxSizeWhenUpgrading(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV630, ver94)
-	session.MustExec(t, seV630, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBOptRangeMaxSize))
+	session.MustExec(t, seV630, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBOptRangeMaxSize))
 	session.MustExec(t, seV630, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV630)
@@ -600,7 +600,7 @@ func TestTiDBOptRangeMaxSizeWhenUpgrading(t *testing.T) {
 	require.Equal(t, int64(ver94), ver)
 
 	// We are now in 6.3.0, check tidb_opt_range_max_size should not exist.
-	res := session.MustExecToRecodeSet(t, seV630, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBOptRangeMaxSize))
+	res := session.MustExecToRecodeSet(t, seV630, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBOptRangeMaxSize))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -654,7 +654,7 @@ func TestTiDBOptAdvancedJoinHintWhenUpgrading(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV660, ver134)
-	session.MustExec(t, seV660, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBOptAdvancedJoinHint))
+	session.MustExec(t, seV660, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBOptAdvancedJoinHint))
 	session.MustExec(t, seV660, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV660)
@@ -662,7 +662,7 @@ func TestTiDBOptAdvancedJoinHintWhenUpgrading(t *testing.T) {
 	require.Equal(t, int64(ver134), ver)
 
 	// We are now in 6.6.0, check tidb_opt_advanced_join_hint should not exist.
-	res := session.MustExecToRecodeSet(t, seV660, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBOptAdvancedJoinHint))
+	res := session.MustExecToRecodeSet(t, seV660, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBOptAdvancedJoinHint))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -716,7 +716,7 @@ func TestTiDBCostModelUpgradeFrom300To650(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV3, ver300)
-	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBCostModelVersion))
+	session.MustExec(t, seV3, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBCostModelVersion))
 	session.MustExec(t, seV3, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV3)
@@ -724,7 +724,7 @@ func TestTiDBCostModelUpgradeFrom300To650(t *testing.T) {
 	require.Equal(t, int64(ver300), ver)
 
 	// We are now in 3.0.0, check TiDBCostModelVersion should not exist.
-	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBCostModelVersion))
+	res := session.MustExecToRecodeSet(t, seV3, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBCostModelVersion))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -772,7 +772,7 @@ func TestTiDBCostModelUpgradeFrom610To650(t *testing.T) {
 			err = txn.Commit(context.Background())
 			require.NoError(t, err)
 			session.RevertVersionAndVariables(t, seV61, ver61)
-			session.MustExec(t, seV61, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "1", vardef.TiDBCostModelVersion))
+			session.MustExec(t, seV61, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "1", vardef.TiDBCostModelVersion))
 			session.MustExec(t, seV61, "commit")
 			store.SetOption(session.StoreBootstrappedKey, nil)
 			ver, err := session.GetBootstrapVersion(seV61)
@@ -780,7 +780,7 @@ func TestTiDBCostModelUpgradeFrom610To650(t *testing.T) {
 			require.Equal(t, int64(ver61), ver)
 
 			// We are now in 6.1, tidb_cost_model_version is 1.
-			res := session.MustExecToRecodeSet(t, seV61, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBCostModelVersion))
+			res := session.MustExecToRecodeSet(t, seV61, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBCostModelVersion))
 			chk := res.NewChunk(nil)
 			err = res.Next(ctx, chk)
 			require.NoError(t, err)
@@ -843,7 +843,7 @@ func TestIndexJoinMultiPatternByUpgrade650To840(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	session.RevertVersionAndVariables(t, seV7, ver650)
-	session.MustExec(t, seV7, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableINLJoinInnerMultiPattern))
+	session.MustExec(t, seV7, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableINLJoinInnerMultiPattern))
 	session.MustExec(t, seV7, "commit")
 	store.SetOption(session.StoreBootstrappedKey, nil)
 	ver, err := session.GetBootstrapVersion(seV7)
@@ -851,7 +851,7 @@ func TestIndexJoinMultiPatternByUpgrade650To840(t *testing.T) {
 	require.Equal(t, int64(ver650), ver)
 
 	// We are now in 6.5.0, check tidb_enable_inl_join_inner_multi_pattern should not exist.
-	res := session.MustExecToRecodeSet(t, seV7, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableINLJoinInnerMultiPattern))
+	res := session.MustExecToRecodeSet(t, seV7, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableINLJoinInnerMultiPattern))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)

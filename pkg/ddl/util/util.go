@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/etcd"
@@ -181,9 +182,16 @@ func UpdateDeleteRange(sctx sessionctx.Context, dr DelRangeTask, newStartKey, ol
 	return errors.Trace(err)
 }
 
+// LoadDDLReorgVars loads ddl reorg variable from mysql.global_variables.
+func LoadDDLReorgVars(ctx context.Context, sctx sessionctx.Context) error {
+	// close issue #21391
+	// variable.TiDBRowFormatVersion is used to encode the new row for column type change.
+	return LoadGlobalVars(ctx, sctx, []string{vardef.TiDBDDLReorgWorkerCount, vardef.TiDBDDLReorgBatchSize, vardef.TiDBRowFormatVersion})
+}
+
 // LoadGlobalVars loads global variable from mysql.global_variables.
-func LoadGlobalVars(sctx sessionctx.Context, varNames ...string) error {
-	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnDDL)
+func LoadGlobalVars(ctx context.Context, sctx sessionctx.Context, varNames []string) error {
+	ctx = kv.WithInternalSourceType(ctx, kv.InternalTxnDDL)
 	e := sctx.GetRestrictedSQLExecutor()
 	var buf strings.Builder
 	buf.WriteString(loadGlobalVarsSQL)

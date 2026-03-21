@@ -328,6 +328,9 @@ type Config struct {
 
 	// MeteringConfigURI is the URI for metering configuration.
 	MeteringStorageURI string `toml:"metering-storage-uri" json:"metering-storage-uri"`
+
+	// LowerCaseTableNamesOnFirstBootstrap indicates how table names are stored on disk and compared.
+	LowerCaseTableNamesOnFirstBootstrap int `toml:"lower-case-table-names" json:"lower-case-table-names"`
 }
 
 // UpdateTempStoragePath is to update the `TempStoragePath` if port/statusPort was changed
@@ -1156,6 +1159,7 @@ var defaultConf = Config{
 	TiDBEnableExitCheck:                  false,
 	InMemSlowQueryTopNNum:                30,
 	InMemSlowQueryRecentNum:              500,
+	LowerCaseTableNamesOnFirstBootstrap:  2,
 }
 
 var (

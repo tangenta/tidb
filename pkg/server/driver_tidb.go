@@ -416,15 +416,19 @@ func (tc *TiDBContext) DecodeSessionStates(ctx context.Context, _ sessionctx.Con
 	sessionVars := tc.Session.GetSessionVars()
 	savedPreparedStmtID := sessionVars.GetNextPreparedStmtID()
 	savedCurrentDB := sessionVars.CurrentDB
+	savedCurrentDBCI := sessionVars.CurrentDBCI
 	defer func() {
 		sessionVars.SetNextPreparedStmtID(savedPreparedStmtID - 1)
 		sessionVars.CurrentDB = savedCurrentDB
+		sessionVars.CurrentDBCI = savedCurrentDBCI
 	}()
 
 	for id, preparedStmtInfo := range sessionStates.PreparedStmts {
 		// Set the next id and currentDB manually.
 		sessionVars.SetNextPreparedStmtID(id - 1)
 		sessionVars.CurrentDB = preparedStmtInfo.StmtDB
+		// TODO(lower_case_table_names): update preparedStmtInfo struct to use StmtDBCI instead of StmtDB string.
+		sessionVars.CurrentDBCI = ast.NewCIStr(preparedStmtInfo.StmtDB)
 		if preparedStmtInfo.Name == "" {
 			// Binary protocol: add to sessionVars.PreparedStmts and TiDBContext.stmts.
 			stmt, _, _, err := tc.Prepare(preparedStmtInfo.StmtText)

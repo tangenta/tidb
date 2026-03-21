@@ -1785,6 +1785,7 @@ const (
 	DefTiDBMemArbitratorQueryReservedText             = "0"
 	DefTiDBMemArbitratorWaitAverse                    = "0"
 	DefTiDBIndexLookUpPushDownPolicy                  = IndexLookUpPushDownPolicyHintOnly
+	DefLowerCaseTableNames                            = "2"
 )
 
 // Process global variables.
@@ -1867,7 +1868,7 @@ var (
 
 	// DefTiDBServerMemoryLimit indicates the default value of TiDBServerMemoryLimit(TotalMem * 80%).
 	// It should be a const and shouldn't be modified after tidb is started.
-	DefTiDBServerMemoryLimit           = serverMemoryLimitDefaultValue()
+	DefTiDBServerMemoryLimit           = ServerMemoryLimitDefaultValue()
 	GOGCTunerThreshold                 = atomic.NewFloat64(DefTiDBGOGCTunerThreshold)
 	PasswordValidationLength           = atomic.NewInt32(8)
 	PasswordValidationMixedCaseCount   = atomic.NewInt32(1)
@@ -1878,13 +1879,13 @@ var (
 	TTLDeleteBatchSize                 = atomic.NewInt64(DefTiDBTTLDeleteBatchSize)
 	TTLDeleteRateLimit                 = atomic.NewInt64(DefTiDBTTLDeleteRateLimit)
 	TTLJobScheduleWindowStartTime      = atomic.NewTime(
-		mustParseTime(
+		MustParseTime(
 			FullDayTimeFormat,
 			DefTiDBTTLJobScheduleWindowStartTime,
 		),
 	)
 	TTLJobScheduleWindowEndTime = atomic.NewTime(
-		mustParseTime(
+		MustParseTime(
 			FullDayTimeFormat,
 			DefTiDBTTLJobScheduleWindowEndTime,
 		),
@@ -1931,7 +1932,8 @@ var (
 	EnableBindingUsage         = atomic.NewBool(DefTiDBEnableBindingUsage)
 )
 
-func serverMemoryLimitDefaultValue() string {
+// ServerMemoryLimitDefaultValue returns the memory limit for the server.
+func ServerMemoryLimitDefaultValue() string {
 	total, err := memory.MemTotal()
 	if err == nil && total != 0 {
 		return "80%"
@@ -1939,7 +1941,8 @@ func serverMemoryLimitDefaultValue() string {
 	return "0"
 }
 
-func mustParseTime(layout string, str string) time.Time {
+// MustParseTime parses a time string with the given layout and returns a time.Time object. It panics if the parsing fails.
+func MustParseTime(layout string, str string) time.Time {
 	time, err := time.ParseInLocation(layout, str, time.UTC)
 	if err != nil {
 		panic(fmt.Sprintf("%s is not in %s duration format", str, layout))

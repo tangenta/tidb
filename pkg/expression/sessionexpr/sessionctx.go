@@ -271,6 +271,11 @@ func (ctx *EvalContext) CurrentDB() string {
 	return ctx.sctx.GetSessionVars().CurrentDB
 }
 
+// CurrentDBCI returns the current database name
+func (ctx *EvalContext) CurrentDBCI() ast.CIStr {
+	return ctx.sctx.GetSessionVars().CurrentDBCI
+}
+
 // CurrentTime returns the current time
 func (ctx *EvalContext) CurrentTime() (time.Time, error) {
 	return getStmtTimestamp(ctx.sctx)

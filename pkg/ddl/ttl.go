@@ -109,7 +109,7 @@ func checkTTLInfoValid(schema ast.CIStr, tblInfo *model.TableInfo, foreignKeyChe
 
 	if foreignKeyCheckIs != nil {
 		// checks even when the foreign key check is not enabled, to keep safe
-		if referredFK := checkTableHasForeignKeyReferred(foreignKeyCheckIs, schema.L, tblInfo.Name.L, nil, true); referredFK != nil {
+		if referredFK := checkTableHasForeignKeyReferred(foreignKeyCheckIs, schema, tblInfo.Name, nil, true); referredFK != nil {
 			return dbterror.ErrUnsupportedTTLReferencedByFK
 		}
 	}

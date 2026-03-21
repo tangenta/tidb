@@ -607,7 +607,6 @@ var noopSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: "information_schema_stats_expiry", Value: "86400"},
 	{Scope: vardef.ScopeGlobal, Name: vardef.ThreadPoolSize, Value: "16", Type: vardef.TypeUnsigned, MinValue: 1, MaxValue: 64},
 	{Scope: vardef.ScopeNone, Name: "lower_case_file_system", Value: "1"},
-	{Scope: vardef.ScopeNone, Name: vardef.LowerCaseTableNames, Value: "2"},
 
 	// for compatibility purpose, we should leave them alone.
 	// TODO: Follow the Terminology Updates of MySQL after their changes arrived.

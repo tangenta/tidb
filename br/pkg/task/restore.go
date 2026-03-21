@@ -2376,7 +2376,7 @@ func PreCheckTableClusterIndex(
 		if job.Type == model.ActionCreateTable {
 			tableInfo := job.BinlogInfo.TableInfo
 			if tableInfo != nil {
-				oldTableInfo, err := restore.GetTableSchema(dom, ast.NewCIStr(job.SchemaName), tableInfo.Name)
+				oldTableInfo, err := restore.GetTableSchema(dom, job.GetSchemaName(), tableInfo.Name)
 				// table exists in database
 				if err == nil {
 					if tableInfo.IsCommonHandle != oldTableInfo.IsCommonHandle {

@@ -570,7 +570,7 @@ func TestTiDBGCAwareUpgradeFrom630To650(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV63, ver63)
-	MustExec(t, seV63, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "1", vardef.TiDBEnableGCAwareMemoryTrack))
+	MustExec(t, seV63, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "1", vardef.TiDBEnableGCAwareMemoryTrack))
 	MustExec(t, seV63, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV63)
@@ -578,7 +578,7 @@ func TestTiDBGCAwareUpgradeFrom630To650(t *testing.T) {
 	require.Equal(t, int64(ver63), ver)
 
 	// We are now in 6.3, tidb_enable_gc_aware_memory_track is ON.
-	res := MustExecToRecodeSet(t, seV63, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableGCAwareMemoryTrack))
+	res := MustExecToRecodeSet(t, seV63, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableGCAwareMemoryTrack))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -598,7 +598,7 @@ func TestTiDBGCAwareUpgradeFrom630To650(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 6.5.
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableGCAwareMemoryTrack))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableGCAwareMemoryTrack))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -628,7 +628,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_1(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV132, ver132)
-	MustExec(t, seV132, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBServerMemoryLimit))
+	MustExec(t, seV132, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBServerMemoryLimit))
 	MustExec(t, seV132, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV132)
@@ -636,7 +636,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_1(t *testing.T) {
 	require.Equal(t, int64(ver132), ver)
 
 	// We are now in 6.5.0, tidb_server_memory_limit is 0.
-	res := MustExecToRecodeSet(t, seV132, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBServerMemoryLimit))
+	res := MustExecToRecodeSet(t, seV132, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBServerMemoryLimit))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -656,7 +656,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_1(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 6.5.1+.
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBServerMemoryLimit))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBServerMemoryLimit))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -686,7 +686,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_2(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV132, ver132)
-	MustExec(t, seV132, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "70%", vardef.TiDBServerMemoryLimit))
+	MustExec(t, seV132, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "70%", vardef.TiDBServerMemoryLimit))
 	MustExec(t, seV132, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV132)
@@ -694,7 +694,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_2(t *testing.T) {
 	require.Equal(t, int64(ver132), ver)
 
 	// We are now in 6.5.0, tidb_server_memory_limit is "70%".
-	res := MustExecToRecodeSet(t, seV132, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBServerMemoryLimit))
+	res := MustExecToRecodeSet(t, seV132, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBServerMemoryLimit))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -714,7 +714,7 @@ func TestTiDBServerMemoryLimitUpgradeTo651_2(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 6.5.1+.
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBServerMemoryLimit))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBServerMemoryLimit))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -773,10 +773,10 @@ func TestTiDBGlobalVariablesDefaultValueUpgradeFrom630To660(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV630, ver630)
-	MustExec(t, seV630, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnableForeignKey))
-	MustExec(t, seV630, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "OFF", vardef.ForeignKeyChecks))
-	MustExec(t, seV630, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnableHistoricalStats))
-	MustExec(t, seV630, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnablePlanReplayerCapture))
+	MustExec(t, seV630, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnableForeignKey))
+	MustExec(t, seV630, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "OFF", vardef.ForeignKeyChecks))
+	MustExec(t, seV630, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnableHistoricalStats))
+	MustExec(t, seV630, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "OFF", vardef.TiDBEnablePlanReplayerCapture))
 	MustExec(t, seV630, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV630)
@@ -787,7 +787,7 @@ func TestTiDBGlobalVariablesDefaultValueUpgradeFrom630To660(t *testing.T) {
 	upgradeVars := []string{vardef.TiDBEnableForeignKey, vardef.ForeignKeyChecks, vardef.TiDBEnableHistoricalStats, vardef.TiDBEnablePlanReplayerCapture}
 	varsValueList := []string{"OFF", "OFF", "OFF", "OFF"}
 	for i := range upgradeVars {
-		res := MustExecToRecodeSet(t, seV630, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", upgradeVars[i]))
+		res := MustExecToRecodeSet(t, seV630, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", upgradeVars[i]))
 		chk := res.NewChunk(nil)
 		err = res.Next(ctx, chk)
 		require.NoError(t, err)
@@ -810,7 +810,7 @@ func TestTiDBGlobalVariablesDefaultValueUpgradeFrom630To660(t *testing.T) {
 	// We are now in 6.6.0.
 	varsValueList = []string{"ON", "ON", "ON", "ON"}
 	for i := range upgradeVars {
-		res := MustExecToRecodeSet(t, seV660, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", upgradeVars[i]))
+		res := MustExecToRecodeSet(t, seV660, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", upgradeVars[i]))
 		chk := res.NewChunk(nil)
 		err = res.Next(ctx, chk)
 		require.NoError(t, err)
@@ -843,7 +843,7 @@ func TestTiDBStoreBatchSizeUpgradeFrom650To660(t *testing.T) {
 			err = txn.Commit(context.Background())
 			require.NoError(t, err)
 			RevertVersionAndVariables(t, seV65, ver65)
-			MustExec(t, seV65, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBStoreBatchSize))
+			MustExec(t, seV65, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBStoreBatchSize))
 			MustExec(t, seV65, "commit")
 			store.SetOption(StoreBootstrappedKey, nil)
 			ver, err := GetBootstrapVersion(seV65)
@@ -851,7 +851,7 @@ func TestTiDBStoreBatchSizeUpgradeFrom650To660(t *testing.T) {
 			require.Equal(t, int64(ver65), ver)
 
 			// We are now in 6.5, tidb_store_batch_size is 0.
-			res := MustExecToRecodeSet(t, seV65, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBStoreBatchSize))
+			res := MustExecToRecodeSet(t, seV65, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBStoreBatchSize))
 			chk := res.NewChunk(nil)
 			err = res.Next(ctx, chk)
 			require.NoError(t, err)
@@ -1008,7 +1008,7 @@ func TestTiDBNonPrepPlanCacheUpgradeFrom540To700(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV54, ver54)
-	MustExec(t, seV54, fmt.Sprintf("delete from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
+	MustExec(t, seV54, fmt.Sprintf("delete from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
 	MustExec(t, seV54, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV54)
@@ -1016,7 +1016,7 @@ func TestTiDBNonPrepPlanCacheUpgradeFrom540To700(t *testing.T) {
 	require.Equal(t, int64(ver54), ver)
 
 	// We are now in 5.4, check TiDBCostModelVersion should not exist.
-	res := MustExecToRecodeSet(t, seV54, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
+	res := MustExecToRecodeSet(t, seV54, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1033,7 +1033,7 @@ func TestTiDBNonPrepPlanCacheUpgradeFrom540To700(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 7.0
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBEnableNonPreparedPlanCache))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1042,7 +1042,7 @@ func TestTiDBNonPrepPlanCacheUpgradeFrom540To700(t *testing.T) {
 	require.Equal(t, 2, row.Len())
 	require.Equal(t, "OFF", row.GetString(1)) // tidb_enable_non_prepared_plan_cache = off
 
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBNonPreparedPlanCacheSize))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBNonPreparedPlanCacheSize))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1072,7 +1072,7 @@ func TestTiDBStatsLoadPseudoTimeoutUpgradeFrom610To650(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV61, ver61)
-	MustExec(t, seV61, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBStatsLoadPseudoTimeout))
+	MustExec(t, seV61, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBStatsLoadPseudoTimeout))
 	MustExec(t, seV61, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV61)
@@ -1080,7 +1080,7 @@ func TestTiDBStatsLoadPseudoTimeoutUpgradeFrom610To650(t *testing.T) {
 	require.Equal(t, int64(ver61), ver)
 
 	// We are now in 6.1, tidb_stats_load_pseudo_timeout is OFF.
-	res := MustExecToRecodeSet(t, seV61, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBStatsLoadPseudoTimeout))
+	res := MustExecToRecodeSet(t, seV61, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBStatsLoadPseudoTimeout))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1100,7 +1100,7 @@ func TestTiDBStatsLoadPseudoTimeoutUpgradeFrom610To650(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 6.5.
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBStatsLoadPseudoTimeout))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBStatsLoadPseudoTimeout))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1127,7 +1127,7 @@ func TestTiDBTiDBOptTiDBOptimizerEnableNAAJWhenUpgradingToVer138(t *testing.T) {
 	err = m.FinishBootstrap(int64(ver137))
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV137, ver137)
-	MustExec(t, seV137, "update mysql.GLOBAL_VARIABLES set variable_value='OFF' where variable_name='tidb_enable_null_aware_anti_join'")
+	MustExec(t, seV137, "update mysql.global_variables set variable_value='OFF' where variable_name='tidb_enable_null_aware_anti_join'")
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 
@@ -1136,7 +1136,7 @@ func TestTiDBTiDBOptTiDBOptimizerEnableNAAJWhenUpgradingToVer138(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(ver137), ver)
 
-	res := MustExecToRecodeSet(t, seV137, "select * from mysql.GLOBAL_VARIABLES where variable_name='tidb_enable_null_aware_anti_join'")
+	res := MustExecToRecodeSet(t, seV137, "select * from mysql.global_variables where variable_name='tidb_enable_null_aware_anti_join'")
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1155,7 +1155,7 @@ func TestTiDBTiDBOptTiDBOptimizerEnableNAAJWhenUpgradingToVer138(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, currentBootstrapVersion, ver)
 
-	res = MustExecToRecodeSet(t, seCurVer, "select * from mysql.GLOBAL_VARIABLES where variable_name='tidb_enable_null_aware_anti_join'")
+	res = MustExecToRecodeSet(t, seCurVer, "select * from mysql.global_variables where variable_name='tidb_enable_null_aware_anti_join'")
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1220,7 +1220,7 @@ func TestTiDBLoadBasedReplicaReadThresholdUpgradingToVer141(t *testing.T) {
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV70, ver70)
-	MustExec(t, seV70, fmt.Sprintf("update mysql.GLOBAL_VARIABLES set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBLoadBasedReplicaReadThreshold))
+	MustExec(t, seV70, fmt.Sprintf("update mysql.global_variables set variable_value='%s' where variable_name='%s'", "0", vardef.TiDBLoadBasedReplicaReadThreshold))
 	MustExec(t, seV70, "commit")
 	store.SetOption(StoreBootstrappedKey, nil)
 	ver, err := GetBootstrapVersion(seV70)
@@ -1228,7 +1228,7 @@ func TestTiDBLoadBasedReplicaReadThresholdUpgradingToVer141(t *testing.T) {
 	require.Equal(t, int64(ver70), ver)
 
 	// We are now in 7.0, tidb_load_based_replica_read_threshold is 0.
-	res := MustExecToRecodeSet(t, seV70, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBLoadBasedReplicaReadThreshold))
+	res := MustExecToRecodeSet(t, seV70, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBLoadBasedReplicaReadThreshold))
 	chk := res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1248,7 +1248,7 @@ func TestTiDBLoadBasedReplicaReadThresholdUpgradingToVer141(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// We are now in 7.1.
-	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.GLOBAL_VARIABLES where variable_name='%s'", vardef.TiDBLoadBasedReplicaReadThreshold))
+	res = MustExecToRecodeSet(t, seCurVer, fmt.Sprintf("select * from mysql.global_variables where variable_name='%s'", vardef.TiDBLoadBasedReplicaReadThreshold))
 	chk = res.NewChunk(nil)
 	err = res.Next(ctx, chk)
 	require.NoError(t, err)
@@ -1277,7 +1277,7 @@ func TestTiDBPlanCacheInvalidationOnFreshStatsWhenUpgradingToVer144(t *testing.T
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV143, ver143)
 	// simulate a real ver143 where `tidb_plan_cache_invalidation_on_fresh_stats` doesn't exist yet
-	MustExec(t, seV143, "delete from mysql.GLOBAL_VARIABLES where variable_name='tidb_plan_cache_invalidation_on_fresh_stats'")
+	MustExec(t, seV143, "delete from mysql.global_variables where variable_name='tidb_plan_cache_invalidation_on_fresh_stats'")
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	store.SetOption(StoreBootstrappedKey, nil)
@@ -1293,7 +1293,7 @@ func TestTiDBPlanCacheInvalidationOnFreshStatsWhenUpgradingToVer144(t *testing.T
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// the value in the table is set to OFF automatically
-	res := MustExecToRecodeSet(t, seCurVer, "select * from mysql.GLOBAL_VARIABLES where variable_name='tidb_plan_cache_invalidation_on_fresh_stats'")
+	res := MustExecToRecodeSet(t, seCurVer, "select * from mysql.global_variables where variable_name='tidb_plan_cache_invalidation_on_fresh_stats'")
 	chk := res.NewChunk(nil)
 	require.NoError(t, res.Next(ctx, chk))
 	require.Equal(t, 1, chk.NumRows())
@@ -1474,7 +1474,7 @@ func TestTiDBUpgradeToVer209(t *testing.T) {
 	require.NoError(t, err)
 	RevertVersionAndVariables(t, seV198, ver198)
 	// simulate a real ver198 where `tidb_resource_control_strict_mode` doesn't exist yet
-	MustExec(t, seV198, "delete from mysql.GLOBAL_VARIABLES where variable_name='tidb_resource_control_strict_mode'")
+	MustExec(t, seV198, "delete from mysql.global_variables where variable_name='tidb_resource_control_strict_mode'")
 	err = txn.Commit(context.Background())
 	require.NoError(t, err)
 	store.SetOption(StoreBootstrappedKey, nil)
@@ -1490,7 +1490,7 @@ func TestTiDBUpgradeToVer209(t *testing.T) {
 	require.Equal(t, currentBootstrapVersion, ver)
 
 	// the value in the table is set to OFF automatically
-	res := MustExecToRecodeSet(t, seCurVer, "select * from mysql.GLOBAL_VARIABLES where variable_name='tidb_resource_control_strict_mode'")
+	res := MustExecToRecodeSet(t, seCurVer, "select * from mysql.global_variables where variable_name='tidb_resource_control_strict_mode'")
 	chk := res.NewChunk(nil)
 	require.NoError(t, res.Next(ctx, chk))
 	require.Equal(t, 1, chk.NumRows())

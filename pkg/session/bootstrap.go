@@ -121,6 +121,8 @@ const (
 	tidbDefOOMAction = "default_oom_action"
 	// The variable name in mysql.tidb table and it records the current DDLTableVersion
 	tidbDDLTableVersion = "ddl_table_version"
+	// The variable name in mysql.tidb table and it records the lower_case_table_names value.
+	lowerCaseTableNames = "lower_case_table_names"
 	// The variable name in mysql.tidb table and it records the cluster id of this cluster
 	tidbClusterID = "cluster_id"
 )
@@ -516,6 +518,8 @@ func doDMLWorks(s sessionapi.Session) {
 	writeSystemTZ(s)
 
 	writeNewCollationParameter(s, config.GetGlobalConfig().NewCollationsEnabledOnFirstBootstrap)
+
+	writeLowerCaseTableNamesParameter(s, config.GetGlobalConfig().LowerCaseTableNamesOnFirstBootstrap)
 
 	writeStmtSummaryVars(s)
 
