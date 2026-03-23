@@ -115,7 +115,11 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeNone, Name: vardef.SystemTimeZone, Value: "CST"},
 	{Scope: vardef.ScopeNone, Name: vardef.Hostname, Value: vardef.DefHostname},
 	{Scope: vardef.ScopeNone, Name: vardef.Port, Value: "4000", Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: math.MaxUint16},
-	{Scope: vardef.ScopeNone, Name: vardef.VersionComment, Value: "TiDB Server (Apache License 2.0) " + versioninfo.TiDBEdition + " Edition, MySQL 8.0 compatible"},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.VersionComment, Value: "TiDB Server (Apache License 2.0) " + versioninfo.TiDBEdition + " Edition, MySQL 8.0 compatible", GetSession: func(s *SessionVars) (string, error) {
+		comment := "TiDB Server (Apache License 2.0) " + versioninfo.TiDBEdition + " Edition, MySQL compatible"
+		comment += s.LogHistory
+		return comment, nil
+	}},
 	{Scope: vardef.ScopeNone, Name: vardef.Version, Value: mysql.ServerVersion},
 	{Scope: vardef.ScopeNone, Name: vardef.DataDir, Value: "/usr/local/mysql/data/"},
 	{Scope: vardef.ScopeNone, Name: vardef.Socket, Value: ""},
