@@ -210,15 +210,15 @@ func TestProcedureSwitch(t *testing.T) {
 	tk.MustExec("create table t1 (id int)")
 	tk.MustGetErrCode("set tidb_enable_procedure = OFF ", 1229)
 	tk.MustExec("set global tidb_enable_procedure = OFF")
-	tk.MustGetErrMsg("create procedure t1() begin insert into t1 value(@a); end", "[executor:8801]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
-	tk.MustGetErrMsg("create function f1() returns int return 1", "[executor:8801]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
+	tk.MustGetErrMsg("create procedure t1() begin insert into t1 value(@a); end", "[executor:8810]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
+	tk.MustGetErrMsg("create function f1() returns int return 1", "[executor:8810]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
 	tk.MustGetErrCode("call t1", 1305)
 	tk.MustExec("set global tidb_enable_procedure = ON")
 	tk.MustExec("create function f1() returns int return 1")
 	tk.MustExec("create procedure t1() begin insert into t1 value(@a); end")
 	tk.MustExec("set global tidb_enable_procedure = OFF")
-	tk.MustGetErrMsg("call t1", "[executor:8801]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
-	tk.MustGetErrMsg("select f1()", "[executor:8801]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
+	tk.MustGetErrMsg("call t1", "[executor:8810]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
+	tk.MustGetErrMsg("select f1()", "[executor:8810]Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`")
 }
 
 func TestStoredFunctionCallDoesNotLeakStateBetweenCalls(t *testing.T) {

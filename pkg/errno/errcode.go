@@ -1175,10 +1175,12 @@ const (
 	ErrCheckPartialIndexWithoutFastCheck        = 8273
 	// Enterprise Edit errors.
 	ErrRowLabelUnAccessible = 8800
-	ErrProcedureDisabled    = 8801
+	ErrInvalidValueOfType   = 8801
 
 	// 8802 ~ 8804 are reserved for LBAC errors.
 	// 8805 ~ 8809 are reserved for tablegroup errors.
+
+	ErrProcedureDisabled = 8810
 
 	// TiKV/PD/TiFlash errors.
 	ErrPDServerTimeout           = 9001

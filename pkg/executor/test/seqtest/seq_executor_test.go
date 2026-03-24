@@ -1004,8 +1004,10 @@ func TestBatchInsertDelete(t *testing.T) {
 	r = tk.MustQuery("select count(*) from batch_insert;")
 	r.Check(testkit.Rows("640"))
 
+	kv.TxnTotalSizeLimit.Store(originLimit)
 	tk.MustExec("drop table if exists com_batch_insert")
 	tk.MustExec("create table com_batch_insert (c int)")
+	kv.TxnTotalSizeLimit.Store(8050)
 	sql := "insert into com_batch_insert values "
 	values := make([]string, 0, 200)
 	for range 200 {

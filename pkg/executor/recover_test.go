@@ -654,13 +654,13 @@ func TestFlashbackSchema(t *testing.T) {
 func TestFlashbackSchemaWithManyTables(t *testing.T) {
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/meta/autoid/mockAutoIDChange", `return(true)`)
 
+	store := testkit.CreateMockStore(t, mockstore.WithStoreType(mockstore.EmbedUnistore))
+
 	backup := kv.TxnEntrySizeLimit.Load()
 	kv.TxnEntrySizeLimit.Store(50000)
 	t.Cleanup(func() {
 		kv.TxnEntrySizeLimit.Store(backup)
 	})
-
-	store := testkit.CreateMockStore(t, mockstore.WithStoreType(mockstore.EmbedUnistore))
 
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("set @@global.tidb_ddl_error_count_limit = 2")

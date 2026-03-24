@@ -49,6 +49,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"aes_encrypt",
 		"and", // operator
 		"any_value",
+		"array_element",
 		"ascii",
 		"asin",
 		"atan",
