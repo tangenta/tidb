@@ -2905,7 +2905,7 @@ func (cc *clientConn) Flush(ctx context.Context) error {
 // AllowIPConnection return whether the client ip is allowed to connect.
 func (cc *clientConn) AllowIPConnection() bool {
 	// always return true when disable whitelist plugin
-	if !cc.server.cfg.Security.EnableWhiteListPlugin {
+	if !vardef.EnableWhitelist.Load() {
 		return true
 	}
 	return cc.ipAllowed
@@ -2914,7 +2914,7 @@ func (cc *clientConn) AllowIPConnection() bool {
 // SetAllowIPConnection set whether the client ip is allowed to connect.
 func (cc *clientConn) SetAllowIPConnection(allowed bool) {
 	// always set true when disable whitelist plugin
-	if !cc.server.cfg.Security.EnableWhiteListPlugin {
+	if !vardef.EnableWhitelist.Load() {
 		cc.ipAllowed = true
 		return
 	}

@@ -3980,6 +3980,14 @@ var defaultSysVars = []*SysVar{
 	{Scope: vardef.ScopeGlobal, Name: vardef.LowerCaseTableNames, Value: vardef.DefLowerCaseTableNames, Type: vardef.TypeInt, MinValue: 0, MaxValue: 2, ReadOnly: true, GetGlobal: func(ctx context.Context, sv *SessionVars) (string, error) {
 		return strconv.Itoa(model.GetLowerCaseTableNames()), nil
 	}},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBEnableWhitelist, Value: BoolToOnOff(vardef.DefPKDBEnableWhitelist), Type: vardef.TypeBool,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			vardef.EnableWhitelist.Store(TiDBOptOn(val))
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.EnableWhitelist.Load()), nil
+		},
+	},
 }
 
 // GlobalSystemVariableInitialValue gets the default value for a system variable including ones that are dynamically set (e.g. based on the store)

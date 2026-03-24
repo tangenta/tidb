@@ -920,6 +920,7 @@ func setGlobalVars() {
 		setInstanceVar(vardef.TiDBSchemaCacheSize, cfg.Instance.SchemaCacheSize)
 	}
 
+	variable.SetSysVar(vardef.PKDBEnableWhitelist, variable.BoolToOnOff(cfg.Security.EnableWhiteListPlugin))
 	variable.SetSysVar(vardef.TiDBForcePriority, mysql.Priority2Str[priority])
 	variable.SetSysVar(vardef.TiDBOptDistinctAggPushDown, variable.BoolToOnOff(cfg.Performance.DistinctAggPushDown))
 	variable.SetSysVar(vardef.TiDBOptProjectionPushDown, variable.BoolToOnOff(cfg.Performance.ProjectionPushDown))
