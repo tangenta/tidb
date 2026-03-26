@@ -295,6 +295,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"weekofyear",
 		"weight_string",
 		"xor",
+		"xpath",
 		"year",
 		"yearweek",
 	}

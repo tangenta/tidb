@@ -761,6 +761,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	work                       "WORK"
 	workload                   "WORKLOAD"
 	x509                       "X509"
+	xml                        "XML"
 	yearType                   "YEAR"
 
 	/* The following tokens belong to NotKeywordToken. Notice: make sure these tokens are contained in NotKeywordToken. */
@@ -7594,6 +7595,7 @@ UnReservedKeyword:
 |	"SUBJECT"
 |	"ISSUER"
 |	"X509"
+|	"XML"
 |	"NEVER"
 |	"EXPIRE"
 |	"ACCOUNT"
@@ -14271,6 +14273,14 @@ StringType:
 		tp.SetCharset(charset.CharsetBin)
 		tp.SetCollate(charset.CollationBin)
 		tp.SetSubType(mysql.SubTypeArray)
+		$$ = tp
+	}
+|	"XML"
+	{
+		tp := types.NewFieldType(mysql.TypeLongBlob)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSubType(mysql.SubTypeXML)
 		$$ = tp
 	}
 |	"LONG" Varchar OptCharsetWithOptBinary

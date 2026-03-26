@@ -693,6 +693,7 @@ var Keywords = []KeywordsType{
 	{"WORK", false, "unreserved"},
 	{"WORKLOAD", false, "unreserved"},
 	{"X509", false, "unreserved"},
+	{"XML", false, "unreserved"},
 	{"YEAR", false, "unreserved"},
 	{"ACTIVATE", false, "tidb"},
 	{"ADMIN", false, "tidb"},
