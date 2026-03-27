@@ -33,6 +33,8 @@ const (
 	TiDBXEnablePDLocalCall = "tidbx_enable_pd_local_call"
 	// PKDBEnableWhitelist indicates whether to enable the whitelist feature.
 	PKDBEnableWhitelist = "pkdb_whitelist"
+	// PKDBExtraDataType indicates whether to enable extra data types.
+	PKDBExtraDataType = "pkdb_extra_data_type"
 )
 
 // Default TiDB system variable values.
@@ -50,7 +52,8 @@ const (
 
 	DefTiDBXEnableLocalRPCOpt        = false
 	DefTiDBXEnableScheduleLeaderRule = false
-	DefPKDBEnableWhitelist             = false
+	DefPKDBEnableWhitelist           = false
+	DefPKDBExtraDataType             = false
 )
 
 // UnspecifiedServerID indicates the unspecified server id.
@@ -60,5 +63,5 @@ const UnspecifiedServerID = 0
 var (
 	EnableScheduleLeaderRule                = atomic.NewBool(DefTiDBXEnableScheduleLeaderRule)
 	EnableScheduleLeaderRuleFn func(v bool) = nil
-	EnableWhitelist            = atomic.NewBool(DefPKDBEnableWhitelist)
+	EnableWhitelist                         = atomic.NewBool(DefPKDBEnableWhitelist)
 )

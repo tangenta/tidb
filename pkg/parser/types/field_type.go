@@ -19,6 +19,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
@@ -38,6 +39,8 @@ const (
 // length is deprecated, referring this issue #6688 for more details.
 var (
 	TiDBStrictIntegerDisplayWidth bool
+	// EnableExtraDataType controls whether extra data types like ARRAY/XML are enabled.
+	EnableExtraDataType atomic.Bool
 )
 
 // FieldType records field type information.
@@ -326,6 +329,9 @@ func (ft *FieldType) IsArray() bool {
 
 // SetSubType sets the subtype of the FieldType.
 func (ft *FieldType) SetSubType(subType byte) {
+	if !EnableExtraDataType.Load() {
+		return
+	}
 	ft.subType = subType
 }
 
@@ -755,7 +761,7 @@ func HasCharset(ft *FieldType) bool {
 // for json
 type jsonFieldType struct {
 	Tp               byte
-	SubType          byte
+	SubType          byte `json:",omitempty"`
 	Flag             uint
 	Flen             int
 	Decimal          int

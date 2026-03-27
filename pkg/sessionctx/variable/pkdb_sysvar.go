@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	parsertypes "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 )
 
@@ -38,6 +39,23 @@ var pkdbSysVars = []*SysVar{
 			return nil
 		},
 		IsHintUpdatableVerified: true,
+	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBEnableWhitelist, Value: BoolToOnOff(vardef.DefPKDBEnableWhitelist), Type: vardef.TypeBool,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			vardef.EnableWhitelist.Store(TiDBOptOn(val))
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.EnableWhitelist.Load()), nil
+		},
+	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBExtraDataType, Value: BoolToOnOff(vardef.DefPKDBExtraDataType), Type: vardef.TypeBool,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			enabled := TiDBOptOn(val)
+			parsertypes.EnableExtraDataType.Store(enabled)
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return BoolToOnOff(parsertypes.EnableExtraDataType.Load()), nil
+		},
 	},
 }
 
