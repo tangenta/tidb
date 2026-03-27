@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/testkit"
+	"github.com/pingcap/tidb/pkg/util/dbterror/exeerrors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -553,4 +554,22 @@ func TestTriggerResetStmtCtxDoesNotLeakStmtTypeFlags(t *testing.T) {
 	require.False(t, stmtCtx.InSelectStmt)
 
 	tk.MustQuery("select v from u where id = 1").Check(testkit.Rows("1"))
+}
+
+func TestSetTxnIsolationLevel(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+
+	tk.MustExec("set global pkdb_eal = on")
+	t.Cleanup(func() {
+		tk.MustExec("set global pkdb_eal = off")
+	})
+
+	tk.MustExec("BEGIN")
+	tk.MustExec("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+	tk.MustExec("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+	tk.MustExec("set global pkdb_eal = off")
+	tk.MustGetDBError("SET TRANSACTION ISOLATION LEVEL READ COMMITTED", exeerrors.ErrCantChangeTxCharacteristics)
+	tk.MustExec("COMMIT")
+	tk.MustExec("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
 }

@@ -33,6 +33,8 @@ const (
 	TiDBXEnablePDLocalCall = "tidbx_enable_pd_local_call"
 	// PKDBEnableWhitelist indicates whether to enable the whitelist feature.
 	PKDBEnableWhitelist = "pkdb_whitelist"
+	// PKDBEnableEAL indicates whether to enable the EAL feature.
+	PKDBEnableEAL = "pkdb_eal"
 	// PKDBExtraDataType indicates whether to enable extra data types.
 	PKDBExtraDataType = "pkdb_extra_data_type"
 )
@@ -53,6 +55,7 @@ const (
 	DefTiDBXEnableLocalRPCOpt        = false
 	DefTiDBXEnableScheduleLeaderRule = false
 	DefPKDBEnableWhitelist           = false
+	DefPKDBEnableEAL                 = false
 	DefPKDBExtraDataType             = false
 )
 
@@ -64,4 +67,5 @@ var (
 	EnableScheduleLeaderRule                = atomic.NewBool(DefTiDBXEnableScheduleLeaderRule)
 	EnableScheduleLeaderRuleFn func(v bool) = nil
 	EnableWhitelist                         = atomic.NewBool(DefPKDBEnableWhitelist)
+	EnableEAL                               = atomic.NewBool(DefPKDBEnableEAL)
 )

@@ -48,6 +48,14 @@ var pkdbSysVars = []*SysVar{
 			return BoolToOnOff(vardef.EnableWhitelist.Load()), nil
 		},
 	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBEnableEAL, Value: BoolToOnOff(vardef.DefPKDBEnableEAL), Type: vardef.TypeBool,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			vardef.EnableEAL.Store(TiDBOptOn(val))
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.EnableEAL.Load()), nil
+		},
+	},
 	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBExtraDataType, Value: BoolToOnOff(vardef.DefPKDBExtraDataType), Type: vardef.TypeBool,
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			enabled := TiDBOptOn(val)
