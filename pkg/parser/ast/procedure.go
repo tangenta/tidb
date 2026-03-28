@@ -1507,7 +1507,7 @@ func (n *ProcedureJump) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("ITERATE ")
 	}
 
-	ctx.WriteString(n.Name)
+	ctx.WriteName(n.Name)
 	return nil
 }
 
