@@ -3038,6 +3038,16 @@ func (er *expressionRewriter) appendColumnVisited(columnVisited *types.FieldName
 	if b != nil && b.is != nil && infoschema.TableIsView(b.is, columnVisited.DBName, columnVisited.TblName) {
 		colName.Name = columnVisited.ColName
 		colName.Table = columnVisited.TblName
+	} else if b != nil && b.is != nil {
+		// When a view is accessed (possibly with an alias like SELECT * FROM view t1),
+		// buildProjUponView sets DBName to the view's database and OrigTblName to the
+		// underlying table's name. If the view and underlying table are in different
+		// databases, this creates an invalid (DBName, OrigTblName) combination.
+		// Verify the table actually exists in DBName; if not, skip the privilege check
+		// since it was already handled during the inner view plan building.
+		if _, err := b.is.TableByName(context.Background(), columnVisited.DBName, columnVisited.OrigTblName); err != nil {
+			return
+		}
 	}
 
 	// When checking a derived table, its colName.Schema.L would be empty, we can just skip it.
