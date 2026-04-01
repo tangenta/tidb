@@ -101,6 +101,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"exp",
 		"export_set",
 		"extract",
+		"extractvalue",
 		"field",
 		"find_in_set",
 		"floor",
@@ -295,7 +296,6 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"weekofyear",
 		"weight_string",
 		"xor",
-		"xpath",
 		"year",
 		"yearweek",
 	}
