@@ -72,6 +72,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"coalesce",
 		"coercibility",
 		"collation",
+		"column_decryption",
 		"compress",
 		"concat",
 		"concat_ws",

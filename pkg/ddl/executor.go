@@ -100,7 +100,10 @@ const (
 	tiflashCheckPendingTablesRetry = 7
 )
 
-var errCheckConstraintIsOff = errors.NewNoStackError(vardef.TiDBEnableCheckConstraint + " is off")
+var (
+	errCheckConstraintIsOff = errors.NewNoStackError(vardef.TiDBEnableCheckConstraint + " is off")
+	errEALIsOff             = errors.NewNoStackError(vardef.PKDBEnableEAL + " is off")
+)
 
 // Executor is the interface for executing DDL statements.
 // it's mostly called by SQL executor.

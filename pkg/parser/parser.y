@@ -4171,6 +4171,10 @@ ColumnOption:
 			StrValue: $3,
 		}
 	}
+|	"ENCRYPTION" EqOpt EncryptionOpt
+	{
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionEncryption, StrValue: $3}
+	}
 
 AutoRandomOpt:
 	{

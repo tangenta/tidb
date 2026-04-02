@@ -1231,6 +1231,9 @@ func constructResultOfShowCreateTable(ctx sessionctx.Context, dbName *ast.CIStr,
 		if tableInfo.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag()) {
 			pkCol = col
 		}
+		if col.Encryption && vardef.EnableEAL.Load() {
+			fmt.Fprintf(buf, " ENCRYPTION='Y'")
+		}
 	}
 
 	if pkCol != nil {
@@ -1460,6 +1463,10 @@ func constructResultOfShowCreateTable(ctx sessionctx.Context, dbName *ast.CIStr,
 		// This is not meant to be understand by other components, so it's not written as /*T![cached] */
 		// For all external components, cached table is just a normal table.
 		fmt.Fprintf(buf, " /* CACHED ON */")
+	}
+	// Show ENCRYPTION option only if it's true.
+	if tableInfo.Encryption && vardef.EnableEAL.Load() {
+		fmt.Fprintf(buf, " ENCRYPTION='Y'")
 	}
 
 	if tableInfo.TTLInfo != nil {

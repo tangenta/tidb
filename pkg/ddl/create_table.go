@@ -1001,6 +1001,12 @@ func handleTableOptions(options []*ast.TableOption, tbInfo *model.TableInfo) err
 			tbInfo.Affinity = affinity
 		case ast.TableOptionEngineAttribute:
 			return errors.Trace(dbterror.ErrUnsupportedEngineAttribute)
+		case ast.TableOptionEncryption:
+			enableEncryption := strings.ToUpper(op.StrValue) == "Y"
+			if enableEncryption && !vardef.EnableEAL.Load() {
+				return errEALIsOff
+			}
+			tbInfo.Encryption = enableEncryption
 		}
 	}
 	shardingBits := shardingBits(tbInfo)

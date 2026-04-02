@@ -264,7 +264,8 @@ type TableInfo struct {
 
 	DBID int64 `json:"-"`
 
-	Mode TableMode `json:"mode,omitempty"`
+	Mode       TableMode `json:"mode,omitempty"`
+	Encryption bool      `json:"encryption,omitempty"`
 }
 
 // Hash64 implement HashEquals interface.

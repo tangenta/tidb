@@ -709,6 +709,12 @@ func (e *memtableRetriever) setDataFromOneTable(
 		} else if table.TableCacheStatusType == model.TableCacheStatusEnable {
 			createOptions = "cached=on"
 		}
+		if table.Encryption && vardef.EnableEAL.Load() {
+			if createOptions != "" {
+				createOptions += " "
+			}
+			createOptions += "ENCRYPTION='Y'"
+		}
 		var autoIncID any
 		hasAutoIncID, _ := infoschema.HasAutoIncrementColumn(table)
 		if hasAutoIncID {

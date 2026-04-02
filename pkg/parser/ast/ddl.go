@@ -526,6 +526,7 @@ const (
 	ColumnOptionStorage
 	ColumnOptionAutoRandom
 	ColumnOptionSecondaryEngineAttribute
+	ColumnOptionEncryption
 )
 
 var (
