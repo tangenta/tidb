@@ -19,6 +19,7 @@ require (
 	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.2.3
 	github.com/aliyun/credentials-go v1.4.7
 	github.com/antchfx/xmlquery v1.5.0
+	github.com/antchfx/xpath v1.3.5
 	github.com/apache/arrow-go/v18 v18.0.0
 	github.com/apache/skywalking-eyes v0.4.0
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
@@ -183,7 +184,6 @@ require (
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
 	github.com/alibabacloud-go/tea-xml v1.1.3 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/antchfx/xpath v1.3.5 // indirect
 	github.com/aws/aws-sdk-go v1.55.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.4 // indirect
