@@ -823,7 +823,17 @@ func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.D
 			// allocating values below the new AUTO_INCREMENT base.
 			if tblInfo.GetAutoIncrementColInfo() != nil {
 				idCacheOpt := autoid.CustomAutoIncCacheOption(tblInfo.AutoIDCache)
-				if (tblInfo.GetAutoIncrementColInfo() != nil || (!tblInfo.PKIsHandle && !tblInfo.IsCommonHandle)) && allocs.Get(autoid.RowIDAllocType) == nil {
+
+				// If AUTO_INCREMENT routes to RowIDAllocType (AUTO_ID_CACHE != 1), the RowID allocator's unsignedness
+				// must match the AUTO_INCREMENT column. We might be reusing a signed RowID allocator created before
+				// AUTO_INCREMENT was enabled (when IsAutoIncColUnsigned() was false).
+				if !tblInfo.SepAutoInc() && tblInfo.IsAutoIncColUnsigned() {
+					allocs = allocs.Filter(func(a autoid.Allocator) bool {
+						return a.GetType() != autoid.RowIDAllocType
+					})
+				}
+
+				if allocs.Get(autoid.RowIDAllocType) == nil {
 					// Ensure rowid allocator exists for Get(AUTO_INCREMENT) mapping and for _tidb_rowid allocation.
 					newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoIncColUnsigned(), autoid.RowIDAllocType, tblVer, idCacheOpt)
 					allocs = allocs.Append(newAlloc)
@@ -833,7 +843,14 @@ func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.D
 					newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoIncColUnsigned(), autoid.AutoIncrementType, tblVer, idCacheOpt)
 					allocs = allocs.Append(newAlloc)
 				}
-				if tblInfo.AutoIncID > 1 {
+
+				var needRebase bool
+				if tblInfo.IsAutoIncColUnsigned() {
+					needRebase = uint64(tblInfo.AutoIncID) > 1
+				} else {
+					needRebase = tblInfo.AutoIncID > 1
+				}
+				if needRebase {
 					if alloc := allocs.Get(autoid.AutoIncrementType); alloc != nil {
 						// Best-effort: Rebase() won't touch KV if the new base is already within the cached range.
 						_ = alloc.Rebase(context.Background(), tblInfo.AutoIncID-1, false)

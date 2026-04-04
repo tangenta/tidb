@@ -49,7 +49,13 @@ func maybeRebaseAutoIncrementIDForModifyColumn(jobCtx *jobContext, job *model.Jo
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if desiredNext <= 0 {
+	if mysql.HasUnsignedFlag(newCol.GetFlag()) {
+		// For unsigned AUTO_INCREMENT columns, desiredNext might be represented as a negative int64 when the
+		// unsigned value is larger than math.MaxInt64. Only 0 is invalid (AUTO_INCREMENT starts from 1).
+		if uint64(desiredNext) == 0 {
+			return errors.Trace(autoid.ErrAutoincReadFailed)
+		}
+	} else if desiredNext <= 0 {
 		return errors.Trace(autoid.ErrAutoincReadFailed)
 	}
 

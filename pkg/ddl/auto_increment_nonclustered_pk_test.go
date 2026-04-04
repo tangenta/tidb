@@ -229,6 +229,26 @@ func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyUnsignedOverMaxInt64(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint unsigned not null, v int)")
+	tk.MustExec("insert into t values (9223372036854775808, 1)")
+
+	tk.MustExec("alter table t " +
+		"modify column id bigint unsigned not null auto_increment, " +
+		"add primary key (id) nonclustered")
+
+	tk.MustExec("insert into t(v) values (2)")
+	tk.MustQuery("select id > 9223372036854775808 from t where v=2").Check(testkit.Rows("1"))
+
+	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
+	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+}
+
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyWithExistingAutoIncrementUnsupported(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
