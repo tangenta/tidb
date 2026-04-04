@@ -868,9 +868,44 @@ func (t *TableCommon) addRecord(sctx table.MutateContext, txn kv.Transaction, r 
 			} else {
 				// If `AddRecord` is called by an insert and the col is in write only or write reorganization state, we must
 				// add it with its default value.
-				value, err = table.GetColOriginDefaultValue(sctx.GetExprCtx(), col.ToInfo())
-				if err != nil {
-					return nil, err
+				//
+				// For online DDL, a newly-added AUTO_INCREMENT column is not public yet, so the executor won't fill the
+				// value. We need to allocate a value here to avoid writing duplicated `0`s, otherwise adding a unique
+				// key/PK on this column in the same multi-schema change might fail.
+				if mysql.HasAutoIncrementFlag(col.GetFlag()) {
+					increment, offset := int64(1), int64(1)
+					if sessCtx, ok := sctx.(sessionctx.Context); ok {
+						vars := sessCtx.GetSessionVars()
+						inc := vars.AutoIncrementIncrement
+						off := vars.AutoIncrementOffset
+						if off > inc {
+							off = 1
+						}
+						increment, offset = int64(inc), int64(off)
+					}
+					alloc := t.Allocators(sctx).Get(autoid.AutoIncrementType)
+					if alloc == nil {
+						return nil, errors.New("auto_increment allocator not found")
+					}
+					// Alloc() returns a range (min, max], the allocated value is max for n=1.
+					_, newID, err := alloc.Alloc(ctx, 1, increment, offset)
+					if err != nil {
+						return nil, err
+					}
+					value.SetAutoID(newID, col.GetFlag())
+					value, err = table.CastColumnValue(sctx.GetExprCtx(), value, col.ToInfo(), false, false)
+					if err == nil && value.GetInt64() < newID {
+						// Auto ID is out of range, avoid truncation causing duplicates.
+						return nil, autoid.ErrAutoincReadFailed
+					}
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					value, err = table.GetColOriginDefaultValue(sctx.GetExprCtx(), col.ToInfo())
+					if err != nil {
+						return nil, err
+					}
 				}
 				// add value to `r` for dirty db in transaction.
 				// Otherwise when update will panic cause by get value of column in write only state from dirty db.
