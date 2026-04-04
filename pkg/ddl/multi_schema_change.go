@@ -554,7 +554,7 @@ func checkAddColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInf
 	tblInfo := t.Meta()
 
 	// Only validate the new support: adding AUTO_INCREMENT via ADD COLUMN.
-	var targetColName string
+	var targetCol *model.ColumnInfo
 	for _, sub := range info.SubJobs {
 		if sub.Type != model.ActionAddColumn {
 			continue
@@ -563,17 +563,24 @@ func checkAddColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInf
 		if !mysql.HasAutoIncrementFlag(args.Col.GetFlag()) {
 			continue
 		}
-		// Keep it simple for now; TiDB supports at most one auto_increment column anyway.
-		if targetColName != "" && targetColName != args.Col.Name.L {
+		// AUTO_INCREMENT must be on an integer, and it is treated as NOT NULL.
+		if !mysql.IsIntegerType(args.Col.GetType()) || !mysql.HasNotNullFlag(args.Col.GetFlag()) {
 			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
 				"unsupported add column '%s' constraint AUTO_INCREMENT", args.Col.Name.L,
 			)
 		}
-		targetColName = args.Col.Name.L
+		// Keep it simple for now; TiDB supports at most one auto_increment column anyway.
+		if targetCol != nil && targetCol.Name.L != args.Col.Name.L {
+			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+				"unsupported add column '%s' constraint AUTO_INCREMENT", args.Col.Name.L,
+			)
+		}
+		targetCol = args.Col
 	}
-	if targetColName == "" {
+	if targetCol == nil {
 		return nil
 	}
+	targetColName := targetCol.Name.L
 
 	if tblInfo.GetAutoIncrementColInfo() != nil {
 		return dbterror.ErrUnsupportedAddColumn.GenWithStack(
