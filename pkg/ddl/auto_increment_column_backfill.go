@@ -134,8 +134,20 @@ type addAutoIncrementColumnWorker struct {
 	rowRecords []*rowRecord
 	rowDecoder *decoder.RowDecoder
 	rowMap     map[int64]types.Datum
+	colTps     map[int64]*types.FieldType
+
+	// rawRowRecords buffers rows that need backfill so we can allocate AUTO_INCREMENT values in batches.
+	// This is especially important when `AUTO_ID_CACHE=1`, where the allocator is single-point and each
+	// Alloc() call is an RPC.
+	rawRowRecords []rawRowRecord
 
 	checksumNeeded bool
+}
+
+type rawRowRecord struct {
+	handle    kv.Handle
+	recordKey kv.Key
+	rawRow    []byte
 }
 
 func newAddAutoIncrementColumnWorker(id int, t table.PhysicalTable, decodeColMap map[int64]decoder.Column, reorgInfo *reorgInfo, jc *ReorgContext) (*addAutoIncrementColumnWorker, error) {
@@ -168,8 +180,10 @@ func newAddAutoIncrementColumnWorker(id int, t table.PhysicalTable, decodeColMap
 		alloc:          alloc,
 		rowDecoder:     rowDecoder,
 		rowMap:         make(map[int64]types.Datum, len(decodeColMap)),
+		colTps:         map[int64]*types.FieldType{colInfo.ID: &colInfo.FieldType},
 		checksumNeeded: variable.EnableRowLevelChecksum.Load(),
 		rowRecords:     make([]*rowRecord, 0, bCtx.batchCnt),
+		rawRowRecords:  make([]rawRowRecord, 0, bCtx.batchCnt),
 	}, nil
 }
 
@@ -193,6 +207,7 @@ func (w *addAutoIncrementColumnWorker) cleanRowMap() {
 
 func (w *addAutoIncrementColumnWorker) fetchRowColVals(ctx context.Context, txn kv.Transaction, taskRange reorgBackfillTask) ([]*rowRecord, kv.Key, bool, int, error) {
 	w.rowRecords = w.rowRecords[:0]
+	w.rawRowRecords = w.rawRowRecords[:0]
 	startTime := time.Now()
 
 	taskDone := false
@@ -206,8 +221,22 @@ func (w *addAutoIncrementColumnWorker) fetchRowColVals(ctx context.Context, txn 
 				return false, nil
 			}
 			scannedCnt++
-			if err1 := w.getRowRecord(ctx, handle, recordKey, rawRow); err1 != nil {
+			need, err1 := w.shouldBackfillRow(rawRow)
+			if err1 != nil {
 				return false, errors.Trace(err1)
+			}
+			if need {
+				// The iterator may reuse the underlying buffers across Next() calls.
+				// Keep our own copies since we build the rewritten row values after the scan finishes.
+				keyCopy := make([]byte, len(recordKey))
+				copy(keyCopy, recordKey)
+				rowCopy := make([]byte, len(rawRow))
+				copy(rowCopy, rawRow)
+				w.rawRowRecords = append(w.rawRowRecords, rawRowRecord{
+					handle:    handle,
+					recordKey: kv.Key(keyCopy),
+					rawRow:    rowCopy,
+				})
 			}
 			lastAccessedHandle = recordKey
 			if recordKey.Cmp(taskRange.endKey) == 0 {
@@ -221,6 +250,10 @@ func (w *addAutoIncrementColumnWorker) fetchRowColVals(ctx context.Context, txn 
 		// No records in range.
 		taskDone = true
 	}
+	if err == nil {
+		// Allocate AUTO_INCREMENT IDs in a single batch and build the row rewrites.
+		err = w.buildRowRecords(ctx)
+	}
 
 	logutil.DDLLogger().Debug("txn fetches handle info",
 		zap.Uint64("txnStartTS", txn.StartTS()),
@@ -230,12 +263,58 @@ func (w *addAutoIncrementColumnWorker) fetchRowColVals(ctx context.Context, txn 
 	return w.rowRecords, getNextHandleKey(taskRange, taskDone, lastAccessedHandle), taskDone, scannedCnt, errors.Trace(err)
 }
 
-func (w *addAutoIncrementColumnWorker) getRowRecord(ctx context.Context, handle kv.Handle, recordKey []byte, rawRow []byte) error {
+func (w *addAutoIncrementColumnWorker) shouldBackfillRow(rawRow []byte) (bool, error) {
+	sysTZ := w.loc
+
+	rowMap, err := tablecodec.DecodeRowToDatumMap(rawRow, w.colTps, sysTZ)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	curVal, ok := rowMap[w.colInfo.ID]
+	if !ok || curVal.IsNull() {
+		return true, nil
+	}
+	if mysql.HasUnsignedFlag(w.colInfo.GetFlag()) {
+		return curVal.GetUint64() == 0, nil
+	}
+	return curVal.GetInt64() == 0, nil
+}
+
+// buildRowRecords allocates AUTO_INCREMENT values in a batch and generates encoded row rewrites.
+// This avoids per-row Alloc() calls (which are especially slow when AUTO_ID_CACHE=1 uses a single-point allocator).
+func (w *addAutoIncrementColumnWorker) buildRowRecords(ctx context.Context) error {
+	if len(w.rawRowRecords) == 0 {
+		return nil
+	}
+
+	minID, maxID, err := w.alloc.Alloc(ctx, uint64(len(w.rawRowRecords)), 1, 1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	nextID := minID + 1
+	for _, rr := range w.rawRowRecords {
+		if nextID > maxID {
+			return errors.Errorf("allocated auto_increment range exhausted: next=%d end=%d", nextID, maxID)
+		}
+		used, err := w.buildRowRecord(ctx, rr.handle, rr.recordKey, rr.rawRow, nextID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if used {
+			nextID++
+		}
+	}
+	return nil
+}
+
+func (w *addAutoIncrementColumnWorker) buildRowRecord(ctx context.Context, handle kv.Handle, recordKey kv.Key, rawRow []byte, newID int64) (bool, error) {
 	sysTZ := w.loc
 
 	_, err := w.rowDecoder.DecodeTheExistedColumnMap(w.exprCtx, handle, rawRow, sysTZ, w.rowMap)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	curVal, ok := w.rowMap[w.colInfo.ID]
@@ -243,19 +322,14 @@ func (w *addAutoIncrementColumnWorker) getRowRecord(ctx context.Context, handle 
 		if mysql.HasUnsignedFlag(w.colInfo.GetFlag()) {
 			if curVal.GetUint64() != 0 {
 				w.cleanRowMap()
-				return nil
+				return false, nil
 			}
 		} else {
 			if curVal.GetInt64() != 0 {
 				w.cleanRowMap()
-				return nil
+				return false, nil
 			}
 		}
-	}
-
-	_, newID, err := w.alloc.Alloc(ctx, 1, 1, 1)
-	if err != nil {
-		return errors.Trace(err)
 	}
 
 	var d types.Datum
@@ -266,25 +340,25 @@ func (w *addAutoIncrementColumnWorker) getRowRecord(ctx context.Context, handle 
 	}
 	castedVal, err := table.CastColumnValue(w.exprCtx, d, w.colInfo, false, false)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 	// Prevent truncation from silently creating duplicate AUTO_INCREMENT values.
 	// This matches the insert/update path behavior that returns ErrAutoincReadFailed on out-of-range.
 	if mysql.HasUnsignedFlag(w.colInfo.GetFlag()) {
 		// For unsigned columns, newID may carry an unsigned value in int64 form.
 		if castedVal.GetUint64() < uint64(newID) {
-			return errors.Trace(autoid.ErrAutoincReadFailed)
+			return false, errors.Trace(autoid.ErrAutoincReadFailed)
 		}
 	} else {
 		if castedVal.GetInt64() < newID {
-			return errors.Trace(autoid.ErrAutoincReadFailed)
+			return false, errors.Trace(autoid.ErrAutoincReadFailed)
 		}
 	}
 	w.rowMap[w.colInfo.ID] = castedVal
 
 	_, err = w.rowDecoder.EvalRemainedExprColumnMap(w.exprCtx, w.rowMap)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	newColumnIDs := make([]int64, 0, len(w.rowMap))
@@ -303,12 +377,12 @@ func (w *addAutoIncrementColumnWorker) getRowRecord(ctx context.Context, handle 
 	newRowVal, err := tablecodec.EncodeRow(sysTZ, newRow, newColumnIDs, nil, nil, checksum, rd)
 	err = ec.HandleError(err)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	w.rowRecords = append(w.rowRecords, &rowRecord{key: recordKey, vals: newRowVal})
 	w.cleanRowMap()
-	return nil
+	return true, nil
 }
 
 func (w *addAutoIncrementColumnWorker) BackfillData(_ context.Context, handleRange reorgBackfillTask) (taskCtx backfillTaskContext, errInTxn error) {
