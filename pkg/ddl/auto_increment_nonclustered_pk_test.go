@@ -93,6 +93,22 @@ func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyDMLDuringReorg(t *testi
 		Check(testkit.Rows("2 0 0"))
 }
 
+func TestAlterTableAddAutoIncrementColumnWithoutNonclusteredPKUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int)")
+
+	// Adding an AUTO_INCREMENT column is only supported by this feature when paired with
+	// ADD PRIMARY KEY(col) NONCLUSTERED in the same statement.
+	tk.MustGetErrCode(
+		"alter table t add column id bigint not null auto_increment, add column v2 int",
+		errno.ErrUnsupportedDDLOperation,
+	)
+}
+
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

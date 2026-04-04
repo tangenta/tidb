@@ -544,6 +544,72 @@ func checkModifyColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchema
 	return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
 }
 
+func checkAddColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInfo, t table.Table) error {
+	tblInfo := t.Meta()
+
+	// Only validate the new support: adding AUTO_INCREMENT via ADD COLUMN.
+	var targetColName string
+	for _, sub := range info.SubJobs {
+		if sub.Type != model.ActionAddColumn {
+			continue
+		}
+		args := sub.JobArgs.(*model.TableColumnArgs)
+		if !mysql.HasAutoIncrementFlag(args.Col.GetFlag()) {
+			continue
+		}
+		// Keep it simple for now; TiDB supports at most one auto_increment column anyway.
+		if targetColName != "" && targetColName != args.Col.Name.L {
+			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+				"unsupported add column '%s' constraint AUTO_INCREMENT", args.Col.Name.L,
+			)
+		}
+		targetColName = args.Col.Name.L
+	}
+	if targetColName == "" {
+		return nil
+	}
+
+	if tblInfo.GetAutoIncrementColInfo() != nil {
+		return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+			"unsupported add column '%s' constraint AUTO_INCREMENT when table already has an auto_increment column",
+			targetColName,
+		)
+	}
+
+	// Require: ADD PRIMARY KEY(targetColName) NONCLUSTERED in the same multi-schema change.
+	for _, sub := range info.SubJobs {
+		if sub.Type != model.ActionAddPrimaryKey {
+			continue
+		}
+		args := sub.JobArgs.(*model.ModifyIndexArgs)
+		if len(args.IndexArgs) != 1 {
+			continue
+		}
+		idxArg := args.IndexArgs[0]
+		if len(idxArg.IndexPartSpecifications) != 1 {
+			continue
+		}
+		idxPart := idxArg.IndexPartSpecifications[0]
+		if idxPart.Column == nil || idxPart.Column.Name.L != targetColName {
+			continue
+		}
+		if idxArg.IndexOption == nil || idxArg.IndexOption.PrimaryKeyTp != pmodel.PrimaryKeyTypeNonClustered {
+			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+				"unsupported add column '%s' constraint AUTO_INCREMENT without ADD PRIMARY KEY(%s) NONCLUSTERED in the same statement",
+				targetColName, targetColName,
+			)
+		}
+		return nil
+	}
+
+	// If we get here, it means there is an AUTO_INCREMENT column being added but no NONCLUSTERED PK on it.
+	// We don't want to expand support beyond the intended "auto_increment + nonclustered primary key" feature.
+	return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+		"unsupported add column '%s' constraint AUTO_INCREMENT without ADD PRIMARY KEY(%s) NONCLUSTERED in the same statement",
+		targetColName, targetColName,
+	)
+}
+
 func checkMultiSchemaInfo(info *model.MultiSchemaInfo, t table.Table) error {
 	err := checkOperateSameColAndIdx(info)
 	if err != nil {
@@ -551,6 +617,11 @@ func checkMultiSchemaInfo(info *model.MultiSchemaInfo, t table.Table) error {
 	}
 
 	err = checkModifyColumnAddAutoIncrementWithNonclusteredPK(info, t)
+	if err != nil {
+		return err
+	}
+
+	err = checkAddColumnAddAutoIncrementWithNonclusteredPK(info, t)
 	if err != nil {
 		return err
 	}
