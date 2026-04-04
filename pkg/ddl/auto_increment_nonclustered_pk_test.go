@@ -21,8 +21,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 )
@@ -215,49 +217,55 @@ func TestCancelAlterTableAddNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 
 	// Slow down the backfill workers so the cancel request has time to land.
 	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/ddl/mockBackfillSlow", "return")
+	// Ensure `runReorgJob` yields during backfill so the cancel hook can observe the running stage.
+	testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/ddl/updateProgressIntervalInMs", "return(50)")
 
 	var cancelled atomic.Bool
+	var lastCancelMsg atomic.Value
+	var lastJobStr atomic.Value
 	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/onJobUpdated", func(job *model.Job) {
+		lastJobStr.Store(job.String())
 		if cancelled.Load() {
 			return
 		}
 		if job.Type != model.ActionMultiSchemaChange || job.MultiSchemaInfo == nil {
 			return
 		}
-		if !strings.Contains(job.Query, "add column id") {
-			return
-		}
-		// Cancel the job while the AddColumn backfill is running.
-		foundRunningBackfill := false
-		for _, sub := range job.MultiSchemaInfo.SubJobs {
-			if sub == nil {
-				continue
-			}
-			if sub.Type != model.ActionAddColumn {
-				continue
-			}
-			if sub.SchemaState != model.StateWriteReorganization {
-				continue
-			}
-			if sub.ReorgStage != model.ReorgStageAddAutoIncrementColumnBackfill {
-				continue
-			}
-			foundRunningBackfill = true
-			break
-		}
-		if !foundRunningBackfill {
+		q := strings.ToLower(job.Query)
+		if !strings.Contains(q, "alter table") || !strings.Contains(q, "add column") || !strings.Contains(q, "auto_increment") {
 			return
 		}
 
 		rs := tkCancel.MustQuery(fmt.Sprintf("admin cancel ddl jobs %d", job.ID))
-		if len(rs.Rows()) > 0 && strings.Contains(rs.Rows()[0][1].(string), "success") {
-			cancelled.Store(true)
+		if len(rs.Rows()) > 0 {
+			msg := rs.Rows()[0][1].(string)
+			lastCancelMsg.Store(msg)
+			if strings.Contains(msg, "success") {
+				cancelled.Store(true)
+			}
 		}
 	})
 
-	tk.MustGetErrCode("alter table t "+
-		"add column id bigint not null auto_increment, "+
-		"add primary key (id) nonclustered", errno.ErrCancelledDDLJob)
+	sql := "alter table t " +
+		"add column id bigint not null auto_increment, " +
+		"add primary key (id) nonclustered"
+	err := tk.ExecToErr(sql)
+	if err == nil {
+		t.Fatalf("expected ErrCancelledDDLJob, got nil; lastJob=%v lastCancelMsg=%v", lastJobStr.Load(), lastCancelMsg.Load())
+	}
+	originErr := errors.Cause(err)
+	switch v := originErr.(type) {
+	case *terror.Error:
+		if int(v.Code()) != errno.ErrCancelledDDLJob {
+			t.Fatalf("unexpected error code, want=%d got=%d, err=%v, lastJob=%v lastCancelMsg=%v", errno.ErrCancelledDDLJob, v.Code(), err, lastJobStr.Load(), lastCancelMsg.Load())
+		}
+	case *terror.TiDBError:
+		if int(v.MYSQLERRNO) != errno.ErrCancelledDDLJob {
+			t.Fatalf("unexpected error code, want=%d got=%d, err=%v, lastJob=%v lastCancelMsg=%v", errno.ErrCancelledDDLJob, v.MYSQLERRNO, err, lastJobStr.Load(), lastCancelMsg.Load())
+		}
+	default:
+		t.Fatalf("unexpected error type %T: %v; lastJob=%v lastCancelMsg=%v", originErr, err, lastJobStr.Load(), lastCancelMsg.Load())
+	}
 
 	// DDL should rollback cleanly: the new column and PK should not be visible.
 	tk.MustQuery("show create table t").CheckNotContain("`id`")

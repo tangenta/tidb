@@ -45,6 +45,15 @@ func TestMain(m *testing.M) {
 	ddl.RunInGoTest = true
 	ddl.SetBatchInsertDeleteRangeSize(2)
 
+	// Avoid using the default `/tmp/tidb` temp dir in tests:
+	// - it can be non-writable in some environments (e.g. owned by root)
+	// - multiple packages can run tests concurrently, so keep it process-scoped
+	tmpDir, err := os.MkdirTemp("", "tidb-ddl-test-")
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ddl: os.MkdirTemp: %v\n", err)
+		os.Exit(1)
+	}
+
 	config.UpdateGlobal(func(conf *config.Config) {
 		// Test for table lock.
 		conf.EnableTableLock = true
@@ -52,9 +61,10 @@ func TestMain(m *testing.M) {
 		conf.TiKVClient.AsyncCommit.SafeWindow = 0
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
 		conf.Experimental.AllowsExpressionIndex = true
+		conf.TempDir = tmpDir
 	})
 
-	_, err := infosync.GlobalInfoSyncerInit(context.Background(), "t", func() uint64 { return 1 }, nil, nil, nil, nil, keyspace.CodecV1, true, nil)
+	_, err = infosync.GlobalInfoSyncerInit(context.Background(), "t", func() uint64 { return 1 }, nil, nil, nil, nil, keyspace.CodecV1, true, nil)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "ddl: infosync.GlobalInfoSyncerInit: %v\n", err)
 		os.Exit(1)
@@ -69,7 +79,10 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
-		goleak.Cleanup(testutil.CheckIngestLeakageForTest),
+		goleak.Cleanup(func(exitCode int) {
+			_ = os.RemoveAll(tmpDir)
+			testutil.CheckIngestLeakageForTest(exitCode)
+		}),
 	}
 
 	goleak.VerifyTestMain(m, opts...)
