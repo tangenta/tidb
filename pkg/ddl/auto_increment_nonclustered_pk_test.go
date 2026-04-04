@@ -56,6 +56,33 @@ func TestAlterTableAddNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyDefaultPKType(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int)")
+	tk.MustExec("insert into t values (10), (20), (30)")
+
+	// `ADD PRIMARY KEY(id)` should be treated as nonclustered (adding clustered PK is not supported).
+	tk.MustExec("alter table t " +
+		"add column id bigint not null auto_increment, " +
+		"add primary key (id)")
+
+	// Existing rows should be backfilled with distinct, non-null ids.
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null) from t").
+		Check(testkit.Rows("3 3 0"))
+
+	// AUTO_INCREMENT should keep working after the DDL.
+	tk.MustExec("insert into t(v) values (40)")
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null) from t").
+		Check(testkit.Rows("4 4 0"))
+
+	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
+	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+}
+
 func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyDMLDuringReorg(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
@@ -136,6 +163,33 @@ func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyDefaultPKType(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint not null, v int)")
+	tk.MustExec("insert into t values (10, 10), (20, 20), (30, 30)")
+
+	// `ADD PRIMARY KEY(id)` should be treated as nonclustered (adding clustered PK is not supported).
+	tk.MustExec("alter table t " +
+		"modify column id bigint not null auto_increment, " +
+		"add primary key (id)")
+
+	// Existing rows keep their ids.
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null) from t").
+		Check(testkit.Rows("3 3 0"))
+	tk.MustQuery("select sum(id in (10, 20, 30)) from t").Check(testkit.Rows("3"))
+
+	// AUTO_INCREMENT should start after max(id).
+	tk.MustExec("insert into t(v) values (40)")
+	tk.MustQuery("select id > 30 from t where v=40").Check(testkit.Rows("1"))
+
+	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
+	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+}
+
 func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyPartitionedGlobal(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
@@ -149,6 +203,34 @@ func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyPartitionedGlobal(t *te
 	tk.MustExec("alter table t " +
 		"add column id bigint not null auto_increment, " +
 		"add primary key (id) nonclustered global")
+
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null), sum(id=0) from t").
+		Check(testkit.Rows("6 6 0 0"))
+
+	// AUTO_INCREMENT should keep working after the DDL across partitions.
+	tk.MustExec("insert into t(v) values (70), (80), (90)")
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null), sum(id=0) from t").
+		Check(testkit.Rows("9 9 0 0"))
+
+	tk.MustQuery("show create table t").CheckContain("GLOBAL")
+	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
+}
+
+func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyPartitionedGlobalDefaultPKType(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("set tidb_enable_global_index=true")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int) partition by hash(v) partitions 4")
+	tk.MustExec("insert into t values (10), (20), (30), (40), (50), (60)")
+
+	// `GLOBAL` yields a non-nil IndexOption, so this also covers the "default PK type" path for validation.
+	tk.MustExec("alter table t " +
+		"add column id bigint not null auto_increment, " +
+		"add primary key (id) global")
 
 	tk.MustQuery("select count(*), count(distinct id), sum(id is null), sum(id=0) from t").
 		Check(testkit.Rows("6 6 0 0"))
