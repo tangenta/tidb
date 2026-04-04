@@ -118,8 +118,51 @@ func (w *worker) onAddColumn(jobCtx *jobContext, job *model.Job) (ver int64, err
 		}
 		// Update the job state when all affairs done.
 		job.SchemaState = model.StateWriteReorganization
-		job.MarkNonRevertible()
+		if mysql.HasAutoIncrementFlag(columnInfo.GetFlag()) {
+			// AUTO_INCREMENT is not compatible with instant add column. We need to backfill values
+			// for existing rows in reorganization state.
+			job.SnapshotVer = 0
+			if job.ReorgMeta != nil && job.ReorgMeta.Stage == model.ReorgStageNone {
+				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnBackfill
+			}
+		} else {
+			// Instant add column: mark it non-revertible in multi-schema change so that we can make all
+			// sub-jobs public using a single schema version.
+			job.MarkNonRevertible()
+		}
 	case model.StateWriteReorganization:
+		// AUTO_INCREMENT needs backfill before we can create a unique key/PK on it.
+		if mysql.HasAutoIncrementFlag(columnInfo.GetFlag()) {
+			if job.ReorgMeta == nil {
+				job.ReorgMeta = &model.DDLReorgMeta{}
+			}
+			if job.ReorgMeta.Stage == model.ReorgStageNone {
+				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnBackfill
+			}
+			switch job.ReorgMeta.Stage {
+			case model.ReorgStageAddAutoIncrementColumnBackfill:
+				tbl, err1 := getTable(jobCtx.getAutoIDRequirement(), job.SchemaID, tblInfo)
+				if err1 != nil {
+					return ver, errors.Trace(err1)
+				}
+				done, ver1, err1 := doReorgWorkForAddAutoIncrementColumn(jobCtx, w, job, tbl, columnInfo)
+				if !done {
+					return ver1, err1
+				}
+				ver = ver1
+				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnCompleted
+			case model.ReorgStageAddAutoIncrementColumnCompleted:
+				// ready to publish
+			}
+
+			// In multi-schema change revertible phase, stop here so other sub-jobs can catch up, and
+			// then publish all schema changes using a single schema version.
+			if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
+				checkAndMarkNonRevertible(job)
+				return ver, nil
+			}
+		}
+
 		// reorganization -> public
 		// Adjust table column offset.
 		failpoint.InjectCall("onAddColumnStateWriteReorg")
@@ -150,7 +193,7 @@ func (w *worker) onAddColumn(jobCtx *jobContext, job *model.Job) (ver int64, err
 }
 
 func checkAndCreateNewColumn(ctx sessionctx.Context, ti ast.Ident, schema *model.DBInfo, spec *ast.AlterTableSpec, t table.Table, specNewColumn *ast.ColumnDef) (*table.Column, error) {
-	err := checkUnsupportedColumnConstraint(specNewColumn, ti)
+	err := checkUnsupportedColumnConstraint(ctx, specNewColumn, ti)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -191,11 +234,16 @@ func checkUnsupportedCharsetForTiFlash(tbl *model.TableInfo, colName ast.CIStr, 
 	return nil
 }
 
-func checkUnsupportedColumnConstraint(col *ast.ColumnDef, ti ast.Ident) error {
+func checkUnsupportedColumnConstraint(ctx sessionctx.Context, col *ast.ColumnDef, ti ast.Ident) error {
 	for _, constraint := range col.Options {
 		switch constraint.Tp {
 		case ast.ColumnOptionAutoIncrement:
-			return dbterror.ErrUnsupportedAddColumn.GenWithStack("unsupported add column '%s' constraint AUTO_INCREMENT when altering '%s.%s'", col.Name, ti.Schema, ti.Name)
+			// Adding an AUTO_INCREMENT column is only allowed as part of a multi-schema change
+			// where the column will be made a key in the same statement (e.g. ADD PRIMARY KEY).
+			// Otherwise existing rows would remain 0/NULL and violate AUTO_INCREMENT expectations.
+			if ctx.GetSessionVars().StmtCtx.MultiSchemaInfo == nil {
+				return dbterror.ErrUnsupportedAddColumn.GenWithStack("unsupported add column '%s' constraint AUTO_INCREMENT when altering '%s.%s'", col.Name, ti.Schema, ti.Name)
+			}
 		case ast.ColumnOptionPrimaryKey:
 			return dbterror.ErrUnsupportedAddColumn.GenWithStack("unsupported add column '%s' constraint PRIMARY KEY when altering '%s.%s'", col.Name, ti.Schema, ti.Name)
 		case ast.ColumnOptionUniqKey:

@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
@@ -286,10 +287,51 @@ func checkOperateSameColAndIdx(info *model.MultiSchemaInfo) error {
 	modifyCols := make(map[string]struct{})
 	modifyIdx := make(map[string]struct{})
 
+	// Allow ADD COLUMN (AUTO_INCREMENT) ... then ADD PRIMARY KEY(...) on that same newly-added column
+	// in a single multi-schema change statement.
+	allowedRelativeDupCols := make(map[string]struct{})
+	for _, sub := range info.SubJobs {
+		if sub.Type != model.ActionAddColumn {
+			continue
+		}
+		args := sub.JobArgs.(*model.TableColumnArgs)
+		if mysql.HasAutoIncrementFlag(args.Col.GetFlag()) {
+			allowedRelativeDupCols[args.Col.Name.L] = struct{}{}
+		}
+	}
+	if len(allowedRelativeDupCols) > 0 {
+		keep := allowedRelativeDupCols
+		allowedRelativeDupCols = make(map[string]struct{}, len(keep))
+		for _, sub := range info.SubJobs {
+			if sub.Type != model.ActionAddPrimaryKey {
+				continue
+			}
+			args := sub.JobArgs.(*model.ModifyIndexArgs)
+			if len(args.IndexArgs) != 1 {
+				continue
+			}
+			for _, idxPart := range args.IndexArgs[0].IndexPartSpecifications {
+				if idxPart.Column == nil {
+					continue
+				}
+				if _, ok := keep[idxPart.Column.Name.L]; ok {
+					allowedRelativeDupCols[idxPart.Column.Name.L] = struct{}{}
+				}
+			}
+		}
+	}
+
 	checkColumns := func(colNames []ast.CIStr, addToModifyCols bool) error {
 		for _, colName := range colNames {
 			name := colName.L
 			if _, ok := modifyCols[name]; ok {
+				// If this column is referenced by an index/PK in RelativeColumns, allow it only for
+				// the supported "add AUTO_INCREMENT column then add PK on it" pattern.
+				if !addToModifyCols {
+					if _, ok := allowedRelativeDupCols[name]; ok {
+						continue
+					}
+				}
 				return dbterror.ErrOperateSameColumn.GenWithStackByArgs(name)
 			}
 			if addToModifyCols {
