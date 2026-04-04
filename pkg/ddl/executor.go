@@ -2129,15 +2129,28 @@ func (e *executor) AlterTable(ctx context.Context, sctx sessionctx.Context, stmt
 			mci := sctx.GetSessionVars().StmtCtx.MultiSchemaInfo
 			if mci != nil && len(mci.SubJobs) > prevSubJobCnt {
 				for _, sub := range mci.SubJobs[prevSubJobCnt:] {
-					if sub.Type != model.ActionAddColumn {
-						continue
+					switch sub.Type {
+					case model.ActionAddColumn:
+						args := sub.JobArgs.(*model.TableColumnArgs)
+						colInfo := args.Col.Clone()
+						// Allocate a temporary offset so later specs (index/PK build) can resolve it.
+						colInfo.Offset = len(multiSchemaTmpTbl.Columns)
+						colInfo.State = model.StatePublic
+						multiSchemaTmpTbl.Columns = append(multiSchemaTmpTbl.Columns, colInfo)
+					case model.ActionModifyColumn:
+						args := sub.JobArgs.(*model.ModifyColumnArgs)
+						// Update the in-memory definition so later specs can validate against it (e.g. NOT NULL).
+						for i, c := range multiSchemaTmpTbl.Columns {
+							if c.Name.L != args.OldColumnName.L {
+								continue
+							}
+							colInfo := args.Column.Clone()
+							colInfo.Offset = c.Offset
+							colInfo.State = model.StatePublic
+							multiSchemaTmpTbl.Columns[i] = colInfo
+							break
+						}
 					}
-					args := sub.JobArgs.(*model.TableColumnArgs)
-					colInfo := args.Col.Clone()
-					// Allocate a temporary offset so later specs (index/PK build) can resolve it.
-					colInfo.Offset = len(multiSchemaTmpTbl.Columns)
-					colInfo.State = model.StatePublic
-					multiSchemaTmpTbl.Columns = append(multiSchemaTmpTbl.Columns, colInfo)
 				}
 			}
 		}

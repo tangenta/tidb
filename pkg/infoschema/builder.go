@@ -792,6 +792,8 @@ func (b *Builder) copySortedTablesBucket(bucketIdx int) {
 func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.DBInfo, tblInfo *model.TableInfo, allocs autoid.Allocators) autoid.Allocators {
 	if len(allocs.Allocs) != 0 {
 		tblVer := autoid.AllocOptionTableInfoVersion(tblInfo.Version)
+		// Keep the allocator routing logic in sync with the current TableInfo.
+		allocs.SepAutoInc = tblInfo.SepAutoInc()
 		switch tp {
 		case model.ActionRebaseAutoID, model.ActionModifyTableAutoIDCache:
 			idCacheOpt := autoid.CustomAutoIncCacheOption(tblInfo.AutoIDCache)
@@ -814,6 +816,29 @@ func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.D
 				})
 				newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoRandomBitColUnsigned(), autoid.AutoRandomType, tblVer)
 				allocs = allocs.Append(newAlloc)
+			}
+		case model.ActionMultiSchemaChange:
+			// Multi-schema change can add/enable AUTO_INCREMENT via ADD/MODIFY COLUMN.
+			// If we keep allocators across schema versions, their cached ranges must be rebased to avoid
+			// allocating values below the new AUTO_INCREMENT base.
+			if tblInfo.GetAutoIncrementColInfo() != nil {
+				idCacheOpt := autoid.CustomAutoIncCacheOption(tblInfo.AutoIDCache)
+				if (tblInfo.GetAutoIncrementColInfo() != nil || (!tblInfo.PKIsHandle && !tblInfo.IsCommonHandle)) && allocs.Get(autoid.RowIDAllocType) == nil {
+					// Ensure rowid allocator exists for Get(AUTO_INCREMENT) mapping and for _tidb_rowid allocation.
+					newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoIncColUnsigned(), autoid.RowIDAllocType, tblVer, idCacheOpt)
+					allocs = allocs.Append(newAlloc)
+				}
+				if tblInfo.SepAutoInc() && allocs.Get(autoid.AutoIncrementType) == nil {
+					// AUTO_ID_CACHE=1 uses a dedicated AUTO_INCREMENT allocator.
+					newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoIncColUnsigned(), autoid.AutoIncrementType, tblVer, idCacheOpt)
+					allocs = allocs.Append(newAlloc)
+				}
+				if tblInfo.AutoIncID > 1 {
+					if alloc := allocs.Get(autoid.AutoIncrementType); alloc != nil {
+						// Best-effort: Rebase() won't touch KV if the new base is already within the cached range.
+						_ = alloc.Rebase(context.Background(), tblInfo.AutoIncID-1, false)
+					}
+				}
 			}
 		}
 		return allocs

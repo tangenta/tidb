@@ -158,6 +158,9 @@ func (w *worker) onAddColumn(jobCtx *jobContext, job *model.Job) (ver int64, err
 			// In multi-schema change revertible phase, stop here so other sub-jobs can catch up, and
 			// then publish all schema changes using a single schema version.
 			if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
+				// Keep a stable hook for tests to run DML while the column is still in WriteReorg state.
+				// In multi-schema change we may return early here, so the later InjectCall might not be reached.
+				failpoint.InjectCall("onAddColumnStateWriteReorg")
 				checkAndMarkNonRevertible(job)
 				return ver, nil
 			}

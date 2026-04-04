@@ -287,16 +287,21 @@ func checkOperateSameColAndIdx(info *model.MultiSchemaInfo) error {
 	modifyCols := make(map[string]struct{})
 	modifyIdx := make(map[string]struct{})
 
-	// Allow ADD COLUMN (AUTO_INCREMENT) ... then ADD PRIMARY KEY(...) on that same newly-added column
+	// Allow ADD COLUMN/MODIFY COLUMN (AUTO_INCREMENT) ... then ADD PRIMARY KEY(...) on that same column
 	// in a single multi-schema change statement.
 	allowedRelativeDupCols := make(map[string]struct{})
 	for _, sub := range info.SubJobs {
-		if sub.Type != model.ActionAddColumn {
-			continue
-		}
-		args := sub.JobArgs.(*model.TableColumnArgs)
-		if mysql.HasAutoIncrementFlag(args.Col.GetFlag()) {
-			allowedRelativeDupCols[args.Col.Name.L] = struct{}{}
+		switch sub.Type {
+		case model.ActionAddColumn:
+			args := sub.JobArgs.(*model.TableColumnArgs)
+			if mysql.HasAutoIncrementFlag(args.Col.GetFlag()) {
+				allowedRelativeDupCols[args.Col.Name.L] = struct{}{}
+			}
+		case model.ActionModifyColumn:
+			args := sub.JobArgs.(*model.ModifyColumnArgs)
+			if mysql.HasAutoIncrementFlag(args.Column.GetFlag()) {
+				allowedRelativeDupCols[args.Column.Name.L] = struct{}{}
+			}
 		}
 	}
 	if len(allowedRelativeDupCols) > 0 {
@@ -326,7 +331,7 @@ func checkOperateSameColAndIdx(info *model.MultiSchemaInfo) error {
 			name := colName.L
 			if _, ok := modifyCols[name]; ok {
 				// If this column is referenced by an index/PK in RelativeColumns, allow it only for
-				// the supported "add AUTO_INCREMENT column then add PK on it" pattern.
+				// the supported "add/modify AUTO_INCREMENT column then add PK on it" pattern.
 				if !addToModifyCols {
 					if _, ok := allowedRelativeDupCols[name]; ok {
 						continue
@@ -475,8 +480,77 @@ func checkOperateDropIndexUseByForeignKey(info *model.MultiSchemaInfo, t table.T
 	return nil
 }
 
+func checkModifyColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInfo, t table.Table) error {
+	tblInfo := t.Meta()
+
+	// Only validate the new support: enabling AUTO_INCREMENT via MODIFY COLUMN.
+	// (ADD COLUMN + AUTO_INCREMENT is handled separately.)
+	var targetColName string
+	for _, sub := range info.SubJobs {
+		if sub.Type != model.ActionModifyColumn {
+			continue
+		}
+		args := sub.JobArgs.(*model.ModifyColumnArgs)
+
+		oldCol := model.FindColumnInfo(tblInfo.Columns, args.OldColumnName.L)
+		if oldCol == nil {
+			continue
+		}
+		if mysql.HasAutoIncrementFlag(oldCol.GetFlag()) || !mysql.HasAutoIncrementFlag(args.Column.GetFlag()) {
+			continue
+		}
+
+		// Only support modifying the same column; don't allow renaming here.
+		if args.Column.Name.L != args.OldColumnName.L {
+			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+		}
+		// AUTO_INCREMENT must be on an integer, and it is treated as NOT NULL.
+		if !mysql.IsIntegerType(args.Column.GetType()) || !mysql.HasNotNullFlag(args.Column.GetFlag()) {
+			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+		}
+
+		if targetColName != "" && targetColName != args.Column.Name.L {
+			// Keep it simple for now; TiDB supports at most one auto_increment column anyway.
+			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+		}
+		targetColName = args.Column.Name.L
+	}
+	if targetColName == "" {
+		return nil
+	}
+
+	// Require: ADD PRIMARY KEY(targetColName) NONCLUSTERED in the same multi-schema change.
+	for _, sub := range info.SubJobs {
+		if sub.Type != model.ActionAddPrimaryKey {
+			continue
+		}
+		args := sub.JobArgs.(*model.ModifyIndexArgs)
+		if len(args.IndexArgs) != 1 {
+			continue
+		}
+		idxArg := args.IndexArgs[0]
+		if len(idxArg.IndexPartSpecifications) != 1 {
+			continue
+		}
+		idxPart := idxArg.IndexPartSpecifications[0]
+		if idxPart.Column == nil || idxPart.Column.Name.L != targetColName {
+			continue
+		}
+		if idxArg.IndexOption == nil || idxArg.IndexOption.PrimaryKeyTp != pmodel.PrimaryKeyTypeNonClustered {
+			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+		}
+		return nil
+	}
+	return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+}
+
 func checkMultiSchemaInfo(info *model.MultiSchemaInfo, t table.Table) error {
 	err := checkOperateSameColAndIdx(info)
+	if err != nil {
+		return err
+	}
+
+	err = checkModifyColumnAddAutoIncrementWithNonclusteredPK(info, t)
 	if err != nil {
 		return err
 	}
