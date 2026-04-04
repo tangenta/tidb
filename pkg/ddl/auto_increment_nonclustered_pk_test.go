@@ -254,6 +254,22 @@ func TestAlterTableModifyNonclusteredPrimaryKeyEnableAutoIncrement(t *testing.T)
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableModifyNonclusteredPrimaryKeyEnableAutoIncrementMultiSchema(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint not null, v int, primary key (id) nonclustered)")
+	tk.MustExec("insert into t values (10, 10), (20, 20), (30, 30)")
+
+	// Enabling AUTO_INCREMENT on an existing NONCLUSTERED PRIMARY KEY should work even in a multi-schema change.
+	tk.MustExec("alter table t modify column id bigint not null auto_increment, add column c int")
+
+	tk.MustExec("insert into t(v) values (40)")
+	tk.MustQuery("select id > 30 from t where v=40").Check(testkit.Rows("1"))
+}
+
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyUnsignedOverMaxInt64(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

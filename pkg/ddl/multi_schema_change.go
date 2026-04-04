@@ -523,6 +523,15 @@ func checkModifyColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchema
 		return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
 	}
 
+	// If the table already has a NONCLUSTERED PRIMARY KEY on this column, no need to add it in the same statement.
+	// (This is the MODIFY COLUMN + existing PK pattern.)
+	if !tblInfo.PKIsHandle && !tblInfo.IsCommonHandle {
+		if pk := tblInfo.FindIndexByName(pmodel.NewCIStr(mysql.PrimaryKeyName).L); pk != nil &&
+			len(pk.Columns) == 1 && pk.Columns[0].Name.L == targetColName {
+			return nil
+		}
+	}
+
 	// Require: ADD PRIMARY KEY(targetColName) NONCLUSTERED in the same multi-schema change.
 	for _, sub := range info.SubJobs {
 		if sub.Type != model.ActionAddPrimaryKey {
