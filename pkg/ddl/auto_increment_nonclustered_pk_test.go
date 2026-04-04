@@ -151,6 +151,41 @@ func TestAlterTableAddAutoIncrementNonIntegerUnsupported(t *testing.T) {
 	)
 }
 
+func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyOutOfRange(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int)")
+	for i := 0; i < 200; i++ {
+		tk.MustExec(fmt.Sprintf("insert into t values (%d)", i))
+	}
+
+	// Backfilling an AUTO_INCREMENT column should fail if the generated IDs are out of range
+	// (instead of silently truncating and later failing with duplicate keys).
+	sql := "alter table t add column id tinyint not null auto_increment, add primary key (id) nonclustered"
+	err := tk.ExecToErr(sql)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	originErr := errors.Cause(err)
+	var code int
+	switch v := originErr.(type) {
+	case *terror.Error:
+		code = int(v.Code())
+	case *terror.TiDBError:
+		code = int(v.MYSQLERRNO)
+	default:
+		t.Fatalf("unexpected error type %T: %v", originErr, err)
+	}
+	// Depending on statement flags/SQL mode, TiDB may report either an out-of-range cast error
+	// or ErrAutoincReadFailed (our explicit guard against truncation duplicates).
+	if code != errno.ErrAutoincReadFailed && code != errno.ErrWarnDataOutOfRange && code != errno.ErrDataOutOfRange {
+		t.Fatalf("unexpected error code, got=%d err=%v", code, err)
+	}
+}
+
 func TestAlterTableModifyAutoIncrementColumnWithoutNonclusteredPKUnsupported(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

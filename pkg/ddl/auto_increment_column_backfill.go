@@ -268,6 +268,18 @@ func (w *addAutoIncrementColumnWorker) getRowRecord(ctx context.Context, handle 
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// Prevent truncation from silently creating duplicate AUTO_INCREMENT values.
+	// This matches the insert/update path behavior that returns ErrAutoincReadFailed on out-of-range.
+	if mysql.HasUnsignedFlag(w.colInfo.GetFlag()) {
+		// For unsigned columns, newID may carry an unsigned value in int64 form.
+		if castedVal.GetUint64() < uint64(newID) {
+			return errors.Trace(autoid.ErrAutoincReadFailed)
+		}
+	} else {
+		if castedVal.GetInt64() < newID {
+			return errors.Trace(autoid.ErrAutoincReadFailed)
+		}
+	}
 	w.rowMap[w.colInfo.ID] = castedVal
 
 	_, err = w.rowDecoder.EvalRemainedExprColumnMap(w.exprCtx, w.rowMap)
