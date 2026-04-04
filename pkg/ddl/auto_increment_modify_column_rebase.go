@@ -25,8 +25,11 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/codec"
+	kvutil "github.com/tikv/client-go/v2/util"
 )
 
 func maybeRebaseAutoIncrementIDForModifyColumn(jobCtx *jobContext, job *model.Job, tblInfo *model.TableInfo, newCol, oldCol *model.ColumnInfo) error {
@@ -76,6 +79,42 @@ func getDesiredAutoIncrementNextFromMaxColumnValue(jobCtx *jobContext, job *mode
 	jobCtxForScan := jobCtx.oldDDLCtx.jobContext(job.ID, job.ReorgMeta)
 	colID := colInfo.ID
 	colTps := map[int64]*types.FieldType{colID: &colInfo.FieldType}
+
+	// When AUTO_INCREMENT is enabled on a NONCLUSTERED PRIMARY KEY column, the column value might not be stored
+	// in the row value. Scan the PK index instead (O(1) per physical table via reverse seek).
+	if pk := tables.FindPrimaryIndex(tbl.Meta()); pk != nil &&
+		!tbl.Meta().PKIsHandle && !tbl.Meta().IsCommonHandle &&
+		len(pk.Columns) == 1 && pk.Columns[0].Offset < len(tbl.Meta().Columns) &&
+		tbl.Meta().Columns[pk.Columns[0].Offset].ID == colID {
+		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
+			maxVal, found, err := scanMaxOneColumnUint64FromIndex(jobCtxForScan, jobCtx.store, job.Priority, tbl, pk)
+			if err != nil {
+				return 0, errors.Trace(err)
+			}
+			if !found {
+				return 1, nil
+			}
+			if maxVal == math.MaxUint64 {
+				return 0, errors.Trace(autoid.ErrAutoincReadFailed)
+			}
+			return int64(maxVal + 1), nil
+		}
+
+		maxVal, found, err := scanMaxOneColumnInt64FromIndex(jobCtxForScan, jobCtx.store, job.Priority, tbl, pk)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		if !found {
+			return 1, nil
+		}
+		if maxVal < 0 {
+			maxVal = 0
+		}
+		if maxVal == math.MaxInt64 {
+			return 0, errors.Trace(autoid.ErrAutoincReadFailed)
+		}
+		return maxVal + 1, nil
+	}
 
 	if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 		maxVal, err := scanMaxColumnUint64(jobCtxForScan, jobCtx.store, job.Priority, tbl, colID, colTps)
@@ -180,4 +219,133 @@ func forEachPhysicalTable(t table.Table, fn func(table.PhysicalTable) error) err
 		return errors.New("internal error: table is not physical")
 	}
 	return fn(physTbl)
+}
+
+func newScanSnapshot(ctx *ReorgContext, store kv.Storage, priority int) kv.Snapshot {
+	ver := kv.Version{Ver: kv.MaxVersion.Ver}
+	snap := store.GetSnapshot(ver)
+	snap.SetOption(kv.Priority, priority)
+	snap.SetOption(kv.RequestSourceInternal, true)
+	snap.SetOption(kv.RequestSourceType, ctx.ddlJobSourceType())
+	snap.SetOption(kv.ExplicitRequestSourceType, kvutil.ExplicitTypeDDL)
+	if tagger := ctx.getResourceGroupTaggerForTopSQL(); tagger != nil {
+		snap.SetOption(kv.ResourceGroupTagger, tagger)
+	}
+	snap.SetOption(kv.ResourceGroupName, ctx.resourceGroupName)
+	return snap
+}
+
+func scanMaxOneColumnInt64FromIndex(ctx *ReorgContext, store kv.Storage, priority int, tbl table.Table, idxInfo *model.IndexInfo) (int64, bool, error) {
+	var maxVal int64
+	var found bool
+	scanOne := func(physicalID int64) error {
+		v, ok, err := scanMaxOneColumnInt64FromIndexForPhysicalTable(ctx, store, priority, physicalID, idxInfo.ID)
+		if err != nil {
+			return err
+		}
+		if ok && (!found || v > maxVal) {
+			maxVal = v
+			found = true
+		}
+		return nil
+	}
+
+	if pi := tbl.Meta().GetPartitionInfo(); pi != nil {
+		if idxInfo.Global {
+			if err := scanOne(tbl.Meta().ID); err != nil {
+				return 0, false, err
+			}
+		} else {
+			for _, def := range pi.Definitions {
+				if err := scanOne(def.ID); err != nil {
+					return 0, false, err
+				}
+			}
+		}
+		return maxVal, found, nil
+	}
+
+	if err := scanOne(tbl.Meta().ID); err != nil {
+		return 0, false, err
+	}
+	return maxVal, found, nil
+}
+
+func scanMaxOneColumnUint64FromIndex(ctx *ReorgContext, store kv.Storage, priority int, tbl table.Table, idxInfo *model.IndexInfo) (uint64, bool, error) {
+	var maxVal uint64
+	var found bool
+	scanOne := func(physicalID int64) error {
+		v, ok, err := scanMaxOneColumnUint64FromIndexForPhysicalTable(ctx, store, priority, physicalID, idxInfo.ID)
+		if err != nil {
+			return err
+		}
+		if ok && (!found || v > maxVal) {
+			maxVal = v
+			found = true
+		}
+		return nil
+	}
+
+	if pi := tbl.Meta().GetPartitionInfo(); pi != nil {
+		if idxInfo.Global {
+			if err := scanOne(tbl.Meta().ID); err != nil {
+				return 0, false, err
+			}
+		} else {
+			for _, def := range pi.Definitions {
+				if err := scanOne(def.ID); err != nil {
+					return 0, false, err
+				}
+			}
+		}
+		return maxVal, found, nil
+	}
+
+	if err := scanOne(tbl.Meta().ID); err != nil {
+		return 0, false, err
+	}
+	return maxVal, found, nil
+}
+
+func scanMaxOneColumnInt64FromIndexForPhysicalTable(ctx *ReorgContext, store kv.Storage, priority int, physicalTableID, indexID int64) (int64, bool, error) {
+	idxPrefix := tablecodec.EncodeTableIndexPrefix(physicalTableID, indexID)
+	snap := newScanSnapshot(ctx, store, priority)
+	it, err := snap.IterReverse(idxPrefix.PrefixNext(), idxPrefix)
+	if err != nil {
+		return 0, false, errors.Trace(err)
+	}
+	defer it.Close()
+	if !it.Valid() || !it.Key().HasPrefix(idxPrefix) {
+		return 0, false, nil
+	}
+	_, d, err := codec.DecodeOne(it.Key()[len(idxPrefix):])
+	if err != nil {
+		return 0, false, errors.Trace(err)
+	}
+	return d.GetInt64(), true, nil
+}
+
+func scanMaxOneColumnUint64FromIndexForPhysicalTable(ctx *ReorgContext, store kv.Storage, priority int, physicalTableID, indexID int64) (uint64, bool, error) {
+	idxPrefix := tablecodec.EncodeTableIndexPrefix(physicalTableID, indexID)
+	snap := newScanSnapshot(ctx, store, priority)
+	it, err := snap.IterReverse(idxPrefix.PrefixNext(), idxPrefix)
+	if err != nil {
+		return 0, false, errors.Trace(err)
+	}
+	defer it.Close()
+	if !it.Valid() || !it.Key().HasPrefix(idxPrefix) {
+		return 0, false, nil
+	}
+	_, d, err := codec.DecodeOne(it.Key()[len(idxPrefix):])
+	if err != nil {
+		return 0, false, errors.Trace(err)
+	}
+	switch d.Kind() {
+	case types.KindUint64:
+		return d.GetUint64(), true, nil
+	case types.KindInt64:
+		return uint64(d.GetInt64()), true, nil
+	default:
+		return uint64(d.GetInt64()), true, nil
+	}
 }

@@ -229,6 +229,31 @@ func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableModifyNonclusteredPrimaryKeyEnableAutoIncrement(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint not null, v int, primary key (id) nonclustered)")
+	tk.MustExec("insert into t values (10, 10), (20, 20), (30, 30)")
+
+	// Enabling AUTO_INCREMENT on an existing NONCLUSTERED PRIMARY KEY column should be supported.
+	tk.MustExec("alter table t modify column id bigint not null auto_increment")
+
+	// Existing rows keep their ids.
+	tk.MustQuery("select count(*), count(distinct id), sum(id is null) from t").
+		Check(testkit.Rows("3 3 0"))
+	tk.MustQuery("select sum(id in (10, 20, 30)) from t").Check(testkit.Rows("3"))
+
+	// AUTO_INCREMENT should start after max(id).
+	tk.MustExec("insert into t(v) values (40)")
+	tk.MustQuery("select id > 30 from t where v=40").Check(testkit.Rows("1"))
+
+	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
+	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+}
+
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyUnsignedOverMaxInt64(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

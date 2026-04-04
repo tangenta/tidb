@@ -1705,11 +1705,30 @@ func GetModifiableColumnJob(
 
 	// We don't support modifying column from not_auto_increment to auto_increment.
 	if !mysql.HasAutoIncrementFlag(col.GetFlag()) && mysql.HasAutoIncrementFlag(newCol.GetFlag()) {
-		// Adding AUTO_INCREMENT via MODIFY COLUMN is only supported as part of a multi-schema change:
-		// `ALTER TABLE ... MODIFY COLUMN ... AUTO_INCREMENT, ADD PRIMARY KEY(...) NONCLUSTERED`.
-		// The full pattern is validated later in `checkMultiSchemaInfo`.
 		if sctx.GetSessionVars().StmtCtx.MultiSchemaInfo == nil {
-			return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			// Single-spec ALTER TABLE: only allow enabling AUTO_INCREMENT on an existing NONCLUSTERED PRIMARY KEY column.
+			// Other patterns (e.g. making the column a key) are validated via multi-schema change.
+			tbInfo := t.Meta()
+			if tbInfo.GetAutoIncrementColInfo() != nil {
+				// TiDB supports at most one AUTO_INCREMENT column.
+				return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			}
+			// Keep it simple: don't allow renaming while enabling AUTO_INCREMENT.
+			if newCol.Name.L != originalColName.L {
+				return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			}
+			// AUTO_INCREMENT must be on an integer, and it is treated as NOT NULL.
+			if !mysql.IsIntegerType(newCol.GetType()) || !mysql.HasNotNullFlag(newCol.GetFlag()) {
+				return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			}
+			// Only allow nonclustered primary key tables (clustered PK / common handle is out of scope here).
+			if tbInfo.PKIsHandle || tbInfo.IsCommonHandle {
+				return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			}
+			pk := tables.FindPrimaryIndex(tbInfo)
+			if pk == nil || len(pk.Columns) != 1 || pk.Columns[0].Name.L != originalColName.L {
+				return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			}
 		}
 	}
 	// Not support auto id with default value.
