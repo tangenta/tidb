@@ -518,6 +518,10 @@ func checkModifyColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchema
 	if targetColName == "" {
 		return nil
 	}
+	// TiDB supports at most one AUTO_INCREMENT column.
+	if tblInfo.GetAutoIncrementColInfo() != nil {
+		return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+	}
 
 	// Require: ADD PRIMARY KEY(targetColName) NONCLUSTERED in the same multi-schema change.
 	for _, sub := range info.SubJobs {

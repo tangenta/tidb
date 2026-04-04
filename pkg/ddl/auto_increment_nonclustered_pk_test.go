@@ -136,6 +136,22 @@ func TestAlterTableAddAutoIncrementColumnWithoutNonclusteredPKUnsupported(t *tes
 	)
 }
 
+func TestAlterTableModifyAutoIncrementColumnWithoutNonclusteredPKUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint not null, v int)")
+
+	// Enabling AUTO_INCREMENT via MODIFY COLUMN is only supported by this feature when paired with
+	// ADD PRIMARY KEY(col) NONCLUSTERED in the same statement.
+	tk.MustGetErrCode(
+		"alter table t modify column id bigint not null auto_increment, add column v2 int",
+		errno.ErrUnsupportedDDLOperation,
+	)
+}
+
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
@@ -161,6 +177,21 @@ func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	// PK should be nonclustered and the column should be AUTO_INCREMENT.
 	tk.MustQuery("show create table t").CheckContain("AUTO_INCREMENT")
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
+}
+
+func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyWithExistingAutoIncrementUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a bigint not null auto_increment, b bigint not null, unique key(a), v int)")
+
+	// TiDB supports at most one AUTO_INCREMENT column.
+	tk.MustGetErrCode(
+		"alter table t modify column b bigint not null auto_increment, add primary key (b) nonclustered",
+		errno.ErrUnsupportedDDLOperation,
+	)
 }
 
 func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyDefaultPKType(t *testing.T) {
