@@ -15,8 +15,11 @@
 package domain_test
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/server"
 	"github.com/pingcap/tidb/pkg/testkit/testsetup"
 	"go.uber.org/goleak"
@@ -26,6 +29,19 @@ func TestMain(m *testing.M) {
 	server.RunInGoTest = true
 	server.RunInGoTestChan = make(chan struct{})
 	testsetup.SetupForCommonTest()
+
+	// Avoid using the default `/tmp/tidb` temp dir in tests:
+	// - it can be non-writable in some environments (e.g. owned by root)
+	// - multiple packages can run tests concurrently, so keep it process-scoped
+	tmpDir, err := os.MkdirTemp("", "tidb-domain-test-")
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "domain: os.MkdirTemp: %v\n", err)
+		os.Exit(1)
+	}
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.TempDir = tmpDir
+	})
+
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("github.com/golang/glog.(*fileSink).flushDaemon"),
 		goleak.IgnoreTopFunction("github.com/bazelbuild/rules_go/go/tools/bzltestutil.RegisterTimeoutHandler.func1"),
@@ -33,6 +49,9 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("go.etcd.io/etcd/client/pkg/v3/logutil.(*MergeLogger).outputLoop"),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		goleak.Cleanup(func(exitCode int) {
+			_ = os.RemoveAll(tmpDir)
+		}),
 	}
 	goleak.VerifyTestMain(m, opts...)
 }
