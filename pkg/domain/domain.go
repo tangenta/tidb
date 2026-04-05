@@ -1106,7 +1106,6 @@ func (do *Domain) Start(startMode ddl.StartMode) error {
 	do.wg.Run(do.runawayManager.RunawayRecordFlushLoop, "runawayRecordFlushLoop")
 	do.wg.Run(do.runawayManager.RunawayWatchSyncLoop, "runawayWatchSyncLoop")
 	do.wg.Run(do.auditComponentsLoop, "auditComponentsLoop")
-	do.wg.Run(do.requestUnitsWriterLoop, "requestUnitsWriterLoop")
 	do.wg.Run(func() {
 		pkdbrepl.WatchStandby(do.ctx, do.etcdClient, do)
 	}, "WatchStandby")
@@ -1116,7 +1115,13 @@ func (do *Domain) Start(startMode ddl.StartMode) error {
 			do.info.ServerInfoSyncer().TopologySyncLoop(do.exit)
 		}, "topologySyncerKeeper")
 	}
+
 	pdCli := do.GetPDClient()
+	// RU stats writer requires PD (resource group metadata is stored in PD).
+	// In unit tests / local store (no PD), starting it would panic on nil client.
+	if pdCli != nil {
+		do.wg.Run(do.requestUnitsWriterLoop, "requestUnitsWriterLoop")
+	}
 	if pdCli != nil {
 		do.wg.Run(func() {
 			do.closestReplicaReadCheckLoop(do.ctx, pdCli)
