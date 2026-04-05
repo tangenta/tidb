@@ -151,6 +151,21 @@ func TestAlterTableAddAutoIncrementNonIntegerUnsupported(t *testing.T) {
 	)
 }
 
+func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyWithDefaultUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int)")
+
+	// AUTO_INCREMENT column can't have a DEFAULT value.
+	tk.MustGetErrCode(
+		"alter table t add column id bigint not null auto_increment default 1, add primary key (id) nonclustered",
+		errno.ErrUnsupportedDDLOperation,
+	)
+}
+
 func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyOutOfRange(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)

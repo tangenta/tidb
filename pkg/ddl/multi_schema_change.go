@@ -578,6 +578,13 @@ func checkAddColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInf
 				"unsupported add column '%s' constraint AUTO_INCREMENT", args.Col.Name.L,
 			)
 		}
+		// Keep consistent with CREATE TABLE semantics: AUTO_INCREMENT column can't have a non-NULL DEFAULT value.
+		// (A DEFAULT value would cause existing rows to be filled with that constant and later fail on PK build.)
+		if args.Col.GetDefaultValue() != nil {
+			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
+				"unsupported add column '%s' constraint AUTO_INCREMENT", args.Col.Name.L,
+			)
+		}
 		// Keep it simple for now; TiDB supports at most one auto_increment column anyway.
 		if targetCol != nil && targetCol.Name.L != args.Col.Name.L {
 			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
