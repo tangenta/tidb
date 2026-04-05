@@ -552,7 +552,9 @@ func checkModifyColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchema
 		// Adding clustered primary key via ALTER TABLE is not supported, so any primary key
 		// here is effectively nonclustered. Still, reject an explicit `CLUSTERED` option.
 		if idxArg.IndexOption != nil && idxArg.IndexOption.PrimaryKeyTp == pmodel.PrimaryKeyTypeClustered {
-			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs(
+				"can't set auto_increment with ADD PRIMARY KEY(" + targetColName + ") CLUSTERED",
+			)
 		}
 		return nil
 	}
@@ -625,7 +627,7 @@ func checkAddColumnAddAutoIncrementWithNonclusteredPK(info *model.MultiSchemaInf
 		// here is effectively nonclustered. Still, reject an explicit `CLUSTERED` option.
 		if idxArg.IndexOption != nil && idxArg.IndexOption.PrimaryKeyTp == pmodel.PrimaryKeyTypeClustered {
 			return dbterror.ErrUnsupportedAddColumn.GenWithStack(
-				"unsupported add column '%s' constraint AUTO_INCREMENT without ADD PRIMARY KEY(%s) NONCLUSTERED in the same statement",
+				"unsupported add column '%s' constraint AUTO_INCREMENT with ADD PRIMARY KEY(%s) CLUSTERED",
 				targetColName, targetColName,
 			)
 		}
