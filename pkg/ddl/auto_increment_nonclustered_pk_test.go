@@ -83,6 +83,21 @@ func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyDefaultPKType(t *testin
 	tk.MustQuery("show create table t").CheckContain("NONCLUSTERED")
 }
 
+func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyClusteredUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (v int)")
+
+	// Adding clustered primary key via ALTER TABLE is not supported.
+	tk.MustGetErrCode(
+		"alter table t add column id bigint not null auto_increment, add primary key (id) clustered",
+		errno.ErrUnsupportedDDLOperation,
+	)
+}
+
 func TestAlterTableAddNonclusteredAutoIncrementPrimaryKeyDMLDuringReorg(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
@@ -213,6 +228,21 @@ func TestAlterTableModifyAutoIncrementColumnWithoutNonclusteredPKUnsupported(t *
 	// ADD PRIMARY KEY(col) NONCLUSTERED in the same statement.
 	tk.MustGetErrCode(
 		"alter table t modify column id bigint not null auto_increment, add column v2 int",
+		errno.ErrUnsupportedDDLOperation,
+	)
+}
+
+func TestAlterTableModifyNonclusteredAutoIncrementPrimaryKeyClusteredUnsupported(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id bigint not null, v int)")
+
+	// Adding clustered primary key via ALTER TABLE is not supported.
+	tk.MustGetErrCode(
+		"alter table t modify column id bigint not null auto_increment, add primary key (id) clustered",
 		errno.ErrUnsupportedDDLOperation,
 	)
 }
