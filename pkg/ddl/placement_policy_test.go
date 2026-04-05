@@ -2434,6 +2434,13 @@ NewLoop:
 }
 
 func TestAlterPartitioningWithPlacementPolicy(t *testing.T) {
+	defer func(originGC bool) {
+		if originGC {
+			util.EmulatorGCEnable()
+		} else {
+			util.EmulatorGCDisable()
+		}
+	}(util.IsEmulatorGCEnable())
 	util.EmulatorGCDisable()
 	store, do := testkit.CreateMockStoreAndDomain(t)
 	gcWorker, err := gcworker.NewMockGCWorker(store)
