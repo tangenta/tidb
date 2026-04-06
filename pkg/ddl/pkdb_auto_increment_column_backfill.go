@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/types"
@@ -151,7 +151,7 @@ type rawRowRecord struct {
 }
 
 func newAddAutoIncrementColumnWorker(id int, t table.PhysicalTable, decodeColMap map[int64]decoder.Column, reorgInfo *reorgInfo, jc *ReorgContext) (*addAutoIncrementColumnWorker, error) {
-	bCtx, err := newBackfillCtx(id, reorgInfo, reorgInfo.SchemaName, t, jc, metrics.LblUpdateColRate, false, false)
+	bCtx, err := newBackfillCtx(id, reorgInfo, reorgInfo.SchemaName, t, jc, metrics.LblUpdateColRate, false)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func newAddAutoIncrementColumnWorker(id int, t table.PhysicalTable, decodeColMap
 		rowDecoder:     rowDecoder,
 		rowMap:         make(map[int64]types.Datum, len(decodeColMap)),
 		colTps:         map[int64]*types.FieldType{colInfo.ID: &colInfo.FieldType},
-		checksumNeeded: variable.EnableRowLevelChecksum.Load(),
+		checksumNeeded: vardef.EnableRowLevelChecksum.Load(),
 		rowRecords:     make([]*rowRecord, 0, bCtx.batchCnt),
 		rawRowRecords:  make([]rawRowRecord, 0, bCtx.batchCnt),
 	}, nil
