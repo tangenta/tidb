@@ -126,9 +126,12 @@ func TestCancelAlterTableAddNonclusteredAutoIncrementPrimaryKey(t *testing.T) {
 	var cancelled atomic.Bool
 	var lastCancelMsg atomic.Value
 	var lastJobStr atomic.Value
-	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/onJobUpdated", func(job *model.Job) {
+	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/beforeRunOneJobStep", func(job *model.Job) {
 		lastJobStr.Store(job.String())
 		if cancelled.Load() {
+			return
+		}
+		if job.State != model.JobStateRunning {
 			return
 		}
 		if job.Type != model.ActionMultiSchemaChange || job.MultiSchemaInfo == nil {
