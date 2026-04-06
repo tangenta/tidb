@@ -2125,35 +2125,7 @@ func (e *executor) AlterTable(ctx context.Context, sctx sessionctx.Context, stmt
 		}
 
 		// If a sub-job is appended, update the temporary schema so that following specs can reference it.
-		if multiSchemaTmpTbl != nil {
-			mci := sctx.GetSessionVars().StmtCtx.MultiSchemaInfo
-			if mci != nil && len(mci.SubJobs) > prevSubJobCnt {
-				for _, sub := range mci.SubJobs[prevSubJobCnt:] {
-					switch sub.Type {
-					case model.ActionAddColumn:
-						args := sub.JobArgs.(*model.TableColumnArgs)
-						colInfo := args.Col.Clone()
-						// Allocate a temporary offset so later specs (index/PK build) can resolve it.
-						colInfo.Offset = len(multiSchemaTmpTbl.Columns)
-						colInfo.State = model.StatePublic
-						multiSchemaTmpTbl.Columns = append(multiSchemaTmpTbl.Columns, colInfo)
-					case model.ActionModifyColumn:
-						args := sub.JobArgs.(*model.ModifyColumnArgs)
-						// Update the in-memory definition so later specs can validate against it (e.g. NOT NULL).
-						for i, c := range multiSchemaTmpTbl.Columns {
-							if c.Name.L != args.OldColumnName.L {
-								continue
-							}
-							colInfo := args.Column.Clone()
-							colInfo.Offset = c.Offset
-							colInfo.State = model.StatePublic
-							multiSchemaTmpTbl.Columns[i] = colInfo
-							break
-						}
-					}
-				}
-			}
-		}
+		pkdbUpdateMultiSchemaTmpTableInfo(sctx, multiSchemaTmpTbl, prevSubJobCnt)
 	}
 
 	if sctx.GetSessionVars().StmtCtx.MultiSchemaInfo != nil {
@@ -4891,106 +4863,6 @@ func checkCreateGlobalIndex(ec errctx.Context, tblInfo *model.TableInfo, indexNa
 		validateGlobalIndexWithGeneratedColumns(ec, tblInfo, indexName, indexColumns)
 	}
 	return nil
-}
-
-// createPrimaryKeyWithTableInfo is used by multi-schema change to build the primary key job when later
-// specs depend on earlier specs (e.g. ADD COLUMN then ADD PRIMARY KEY on the new column).
-//
-// It runs the same prechecks as CreatePrimaryKey, but uses the supplied TableInfo instead of the
-// current infoschema table.
-func (e *executor) createPrimaryKeyWithTableInfo(
-	ctx sessionctx.Context,
-	schema *model.DBInfo,
-	tblInfo *model.TableInfo,
-	indexName ast.CIStr,
-	indexPartSpecifications []*ast.IndexPartSpecification,
-	indexOption *ast.IndexOption,
-) error {
-	if indexOption != nil && indexOption.PrimaryKeyTp == ast.PrimaryKeyTypeClustered {
-		return dbterror.ErrUnsupportedModifyPrimaryKey.GenWithStack("Adding clustered primary key is not supported. " +
-			"Please consider adding NONCLUSTERED primary key instead")
-	}
-
-	if err := checkTooLongIndex(indexName); err != nil {
-		return dbterror.ErrTooLongIdent.GenWithStackByArgs(mysql.PrimaryKeyName)
-	}
-
-	indexName = ast.NewCIStr(mysql.PrimaryKeyName)
-	if indexInfo := tblInfo.FindIndexByName(indexName.L); indexInfo != nil ||
-		// If the table's PKIsHandle is true, it also means that this table has a primary key.
-		tblInfo.PKIsHandle {
-		return infoschema.ErrMultiplePriKey
-	}
-
-	// Primary keys cannot include expression index parts. A primary key requires the generated column to be stored,
-	// but expression index parts are implemented as virtual generated columns, not stored generated columns.
-	for _, idxPart := range indexPartSpecifications {
-		if idxPart.Expr != nil {
-			return dbterror.ErrFunctionalIndexPrimaryKey
-		}
-	}
-
-	// Do the same prechecks as CreatePrimaryKey. The worker will re-check again at execution time.
-	indexColumns, _, err := buildIndexColumns(NewMetaBuildContextWithSctx(ctx), tblInfo.Columns, indexPartSpecifications, model.ColumnarIndexTypeNA)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if _, err = CheckPKOnGeneratedColumn(tblInfo, indexPartSpecifications); err != nil {
-		return err
-	}
-	if err = checkCreateGlobalIndex(ctx.GetSessionVars().StmtCtx.ErrCtx(), tblInfo, "PRIMARY", indexColumns, true, indexOption != nil && indexOption.Global); err != nil {
-		return err
-	}
-
-	// May be truncate comment here, when index comment too long and sql_mode is't strict.
-	if indexOption != nil {
-		sessionVars := ctx.GetSessionVars()
-		if _, err = validateCommentLength(sessionVars.StmtCtx.ErrCtx(), sessionVars.SQLMode, indexName.String(), &indexOption.Comment, dbterror.ErrTooLongIndexComment); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	splitOpt, err := buildIndexPresplitOpt(indexOption)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	sqlMode := ctx.GetSessionVars().SQLMode
-	job := &model.Job{
-		Version:        model.GetJobVerInUse(),
-		SchemaID:       schema.ID,
-		TableID:        tblInfo.ID,
-		SchemaName:     schema.Name.L,
-		FullSchemaName: schema.Name,
-		TableName:      tblInfo.Name.L,
-		FullTableName:  tblInfo.Name,
-		Type:           model.ActionAddPrimaryKey,
-		BinlogInfo:     &model.HistoryInfo{},
-		ReorgMeta:      nil,
-		Priority:       ctx.GetSessionVars().DDLReorgPriority,
-		CDCWriteSource: ctx.GetSessionVars().CDCWriteSource,
-		SQLMode:        ctx.GetSessionVars().SQLMode,
-	}
-
-	args := &model.ModifyIndexArgs{
-		IndexArgs: []*model.IndexArg{{
-			Unique:                  true,
-			IndexName:               indexName,
-			IndexPartSpecifications: indexPartSpecifications,
-			IndexOption:             indexOption,
-			SQLMode:                 sqlMode,
-			Global:                  false,
-			IsPK:                    true,
-			SplitOpt:                splitOpt,
-		}},
-		OpType: model.OpAddIndex,
-	}
-
-	mockTbl := tables.MockTableFromMeta(tblInfo)
-	if err = initJobReorgMetaFromVariables(e.ctx, job, mockTbl, ctx); err != nil {
-		return err
-	}
-	err = e.doDDLJob2(ctx, job, args)
-	return errors.Trace(err)
 }
 
 func (e *executor) CreatePrimaryKey(ctx sessionctx.Context, ti ast.Ident, indexName ast.CIStr,

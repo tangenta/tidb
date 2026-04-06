@@ -205,27 +205,6 @@ func CheckPKOnGeneratedColumn(tblInfo *model.TableInfo, indexPartSpecifications 
 	return lastCol, nil
 }
 
-// checkPKOnGeneratedColumnAllowNonPublic is similar to CheckPKOnGeneratedColumn, but it allows
-// referencing non-public columns. This is needed for multi-schema change where later sub-jobs can
-// depend on earlier ones (e.g. ADD COLUMN then ADD PRIMARY KEY on it) before the column is public.
-func checkPKOnGeneratedColumnAllowNonPublic(tblInfo *model.TableInfo, indexPartSpecifications []*ast.IndexPartSpecification) (*model.ColumnInfo, error) {
-	var lastCol *model.ColumnInfo
-	for _, colName := range indexPartSpecifications {
-		lastCol = model.FindColumnInfo(tblInfo.Columns, colName.Column.Name.L)
-		if lastCol == nil {
-			return nil, dbterror.ErrKeyColumnDoesNotExits.GenWithStackByArgs(colName.Column.Name)
-		}
-		// Virtual columns cannot be used in primary key.
-		if lastCol.IsVirtualGenerated() {
-			if lastCol.Hidden {
-				return nil, dbterror.ErrFunctionalIndexPrimaryKey
-			}
-			return nil, dbterror.ErrUnsupportedOnGeneratedColumn.GenWithStackByArgs("Defining a virtual generated column as primary key")
-		}
-	}
-	return lastCol, nil
-}
-
 func checkIndexPrefixLength(columns []*model.ColumnInfo, idxColumns []*model.IndexColumn, columnarIndexType model.ColumnarIndexType) error {
 	idxLen, err := indexColumnsLen(columns, idxColumns, columnarIndexType)
 	if err != nil {

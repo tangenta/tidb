@@ -118,53 +118,14 @@ func (w *worker) onAddColumn(jobCtx *jobContext, job *model.Job) (ver int64, err
 		}
 		// Update the job state when all affairs done.
 		job.SchemaState = model.StateWriteReorganization
-		if mysql.HasAutoIncrementFlag(columnInfo.GetFlag()) {
-			// AUTO_INCREMENT is not compatible with instant add column. We need to backfill values
-			// for existing rows in reorganization state.
-			job.SnapshotVer = 0
-			if job.ReorgMeta != nil && job.ReorgMeta.Stage == model.ReorgStageNone {
-				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnBackfill
-			}
-		} else {
-			// Instant add column: mark it non-revertible in multi-schema change so that we can make all
-			// sub-jobs public using a single schema version.
-			job.MarkNonRevertible()
-		}
+		pkdbOnAddColumnEnterWriteReorg(job, columnInfo)
 	case model.StateWriteReorganization:
 		// AUTO_INCREMENT needs backfill before we can create a unique key/PK on it.
-		if mysql.HasAutoIncrementFlag(columnInfo.GetFlag()) {
-			if job.ReorgMeta == nil {
-				job.ReorgMeta = &model.DDLReorgMeta{}
-			}
-			if job.ReorgMeta.Stage == model.ReorgStageNone {
-				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnBackfill
-			}
-			switch job.ReorgMeta.Stage {
-			case model.ReorgStageAddAutoIncrementColumnBackfill:
-				tbl, err1 := getTable(jobCtx.getAutoIDRequirement(), job.SchemaID, tblInfo)
-				if err1 != nil {
-					return ver, errors.Trace(err1)
-				}
-				done, ver1, err1 := doReorgWorkForAddAutoIncrementColumn(jobCtx, w, job, tbl, columnInfo)
-				if !done {
-					return ver1, err1
-				}
-				ver = ver1
-				job.ReorgMeta.Stage = model.ReorgStageAddAutoIncrementColumnCompleted
-			case model.ReorgStageAddAutoIncrementColumnCompleted:
-				// ready to publish
-			}
-
-			// In multi-schema change revertible phase, stop here so other sub-jobs can catch up, and
-			// then publish all schema changes using a single schema version.
-			if job.MultiSchemaInfo != nil && job.MultiSchemaInfo.Revertible {
-				// Keep a stable hook for tests to run DML while the column is still in WriteReorg state.
-				// In multi-schema change we may return early here, so the later InjectCall might not be reached.
-				failpoint.InjectCall("onAddColumnStateWriteReorg")
-				checkAndMarkNonRevertible(job)
-				return ver, nil
-			}
+		shouldReturn, ver1, err1 := pkdbMaybeHandleAddAutoIncrementColumnWriteReorg(jobCtx, w, job, tblInfo, columnInfo)
+		if shouldReturn {
+			return ver1, err1
 		}
+		ver = ver1
 
 		// reorganization -> public
 		// Adjust table column offset.
