@@ -181,7 +181,12 @@ func InitMemoryHook() error {
 	}
 	cgroupValue, err := cgroup.GetMemoryLimit()
 	if err != nil {
-		return err
+		// When running on a host with cgroup v2 but without the memory controller,
+		// reading the cgroup memory limit can fail (e.g. missing /sys/fs/cgroup/memory.max).
+		// The memory hook is an optimization for systemd environments; TiDB should still
+		// be able to start by falling back to physical memory.
+		logutil.BgLogger().Warn("failed to get cgroup memory limit, fallback to physical memory hook", zap.Error(err))
+		cgroupValue = 0
 	}
 	physicalValue, err := memTotalNormal()
 	if err != nil {
