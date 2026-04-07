@@ -33,6 +33,12 @@ var MemTotal func() (uint64, error)
 // MemUsed returns the total used amount of RAM on this system
 var MemUsed func() (uint64, error)
 
+// Indirections for unit tests.
+var (
+	isInContainer        = cgroup.InContainer
+	getCgroupMemoryLimit = cgroup.GetMemoryLimit
+)
+
 // GetMemTotalIgnoreErr returns the total amount of RAM on this system/container. If error occurs, return 0.
 func GetMemTotalIgnoreErr() uint64 {
 	if memTotal, err := MemTotal(); err == nil {
@@ -175,11 +181,11 @@ func init() {
 // so if we are not in the container, we compare the cgroup memory limit and the physical memory,
 // the cgroup memory limit is smaller, we use the cgroup memory hook.
 func InitMemoryHook() error {
-	if cgroup.InContainer() {
+	if isInContainer() {
 		logutil.BgLogger().Info("use cgroup memory hook because TiDB is in the container")
 		return nil
 	}
-	cgroupValue, err := cgroup.GetMemoryLimit()
+	cgroupValue, err := getCgroupMemoryLimit()
 	if err != nil {
 		// When running on a host with cgroup v2 but without the memory controller,
 		// reading the cgroup memory limit can fail (e.g. missing /sys/fs/cgroup/memory.max).
