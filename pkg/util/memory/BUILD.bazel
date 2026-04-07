@@ -40,6 +40,7 @@ go_test(
         "arbitrator_test.go",
         "bench_test.go",
         "main_test.go",
+        "meminfo_test.go",
         "pool_test.go",
         "tracker_test.go",
     ],
