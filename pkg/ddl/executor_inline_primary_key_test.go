@@ -121,9 +121,6 @@ func TestResolveAlterTableInlinePrimaryKey_MultiplePrimaryKeyError(t *testing.T)
 	require.NoError(t, err)
 
 	sctx := mock.NewContext()
-	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
-	require.NoError(t, err)
-
-	_, err = resolveAlterTableInlinePrimaryKey(specs)
+	_, err = ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
 	require.ErrorIs(t, err, infoschema.ErrMultiplePriKey)
 }

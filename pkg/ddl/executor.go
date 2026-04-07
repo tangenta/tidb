@@ -1815,6 +1815,12 @@ func ResolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) 
 		// TODO: Only allow REMOVE PARTITIONING as a single ALTER TABLE statement?
 	}
 
+	var err error
+	validSpecs, err = resolveAlterTableInlinePrimaryKey(validSpecs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	// Verify whether the algorithm is supported.
 	for _, spec := range validSpecs {
 		resolvedAlgorithm, err := ResolveAlterAlgorithm(spec, algorithm)
@@ -1965,10 +1971,6 @@ func isMultiSchemaChanges(specs []*ast.AlterTableSpec) bool {
 func (e *executor) AlterTable(ctx context.Context, sctx sessionctx.Context, stmt *ast.AlterTableStmt) (err error) {
 	ident := ast.Ident{Schema: stmt.Table.Schema, Name: stmt.Table.Name}
 	validSpecs, err := ResolveAlterTableSpec(sctx, stmt.Specs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	validSpecs, err = resolveAlterTableInlinePrimaryKey(validSpecs)
 	if err != nil {
 		return errors.Trace(err)
 	}
