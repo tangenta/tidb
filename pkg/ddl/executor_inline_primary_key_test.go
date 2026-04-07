@@ -72,6 +72,29 @@ func TestResolveAlterTableInlinePrimaryKey_RewriteModifyColumn(t *testing.T) {
 	require.Equal(t, "c", specs[1].Constraint.Keys[0].Column.Name.O)
 }
 
+func TestResolveAlterTableInlinePrimaryKey_RewriteChangeColumn(t *testing.T) {
+	stmt, err := parser.New().ParseOneStmt("alter table t change column c c int auto_increment primary key", "", "")
+	require.NoError(t, err)
+
+	sctx := mock.NewContext()
+	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
+	require.NoError(t, err)
+	require.Len(t, specs, 2)
+
+	require.Equal(t, ast.AlterTableChangeColumn, specs[0].Tp)
+	require.Len(t, specs[0].NewColumns, 1)
+	colDef := specs[0].NewColumns[0]
+	require.True(t, containsColumnOption(colDef, ast.ColumnOptionAutoIncrement))
+	require.True(t, containsColumnOption(colDef, ast.ColumnOptionNotNull))
+	require.False(t, containsColumnOption(colDef, ast.ColumnOptionPrimaryKey))
+
+	require.Equal(t, ast.AlterTableAddConstraint, specs[1].Tp)
+	require.NotNil(t, specs[1].Constraint)
+	require.Equal(t, ast.ConstraintPrimaryKey, specs[1].Constraint.Tp)
+	require.Len(t, specs[1].Constraint.Keys, 1)
+	require.Equal(t, "c", specs[1].Constraint.Keys[0].Column.Name.O)
+}
+
 func TestResolveAlterTableInlinePrimaryKey_RewriteAddColumnsOrder(t *testing.T) {
 	stmt, err := parser.New().ParseOneStmt("alter table t add (id int auto_increment primary key, c int)", "", "")
 	require.NoError(t, err)
