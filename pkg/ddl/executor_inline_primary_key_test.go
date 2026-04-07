@@ -32,9 +32,6 @@ func TestResolveAlterTableInlinePrimaryKey_RewriteAddColumn(t *testing.T) {
 	sctx := mock.NewContext()
 	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
 	require.NoError(t, err)
-
-	specs, err = resolveAlterTableInlinePrimaryKey(specs)
-	require.NoError(t, err)
 	require.Len(t, specs, 2)
 
 	require.Equal(t, ast.AlterTableAddColumns, specs[0].Tp)
@@ -59,9 +56,6 @@ func TestResolveAlterTableInlinePrimaryKey_RewriteModifyColumn(t *testing.T) {
 	sctx := mock.NewContext()
 	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
 	require.NoError(t, err)
-
-	specs, err = resolveAlterTableInlinePrimaryKey(specs)
-	require.NoError(t, err)
 	require.Len(t, specs, 2)
 
 	require.Equal(t, ast.AlterTableModifyColumn, specs[0].Tp)
@@ -85,9 +79,6 @@ func TestResolveAlterTableInlinePrimaryKey_RewriteAddColumnsOrder(t *testing.T) 
 	sctx := mock.NewContext()
 	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
 	require.NoError(t, err)
-
-	specs, err = resolveAlterTableInlinePrimaryKey(specs)
-	require.NoError(t, err)
 	require.Len(t, specs, 3)
 
 	require.Equal(t, ast.AlterTableAddColumns, specs[0].Tp)
@@ -104,9 +95,6 @@ func TestResolveAlterTableInlinePrimaryKey_NoRewriteWithoutAutoIncrement(t *test
 
 	sctx := mock.NewContext()
 	specs, err := ResolveAlterTableSpec(sctx, stmt.(*ast.AlterTableStmt).Specs)
-	require.NoError(t, err)
-
-	specs, err = resolveAlterTableInlinePrimaryKey(specs)
 	require.NoError(t, err)
 	require.Len(t, specs, 1)
 	require.Equal(t, ast.AlterTableModifyColumn, specs[0].Tp)
