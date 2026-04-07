@@ -1834,6 +1834,109 @@ func ResolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) 
 	return validSpecs, nil
 }
 
+// resolveAlterTableInlinePrimaryKey rewrites inline column-level PRIMARY KEY options into
+// separate "ADD PRIMARY KEY(...)" specs so that they can be executed as a multi-schema change.
+//
+// MySQL allows statements like:
+//   ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;
+// which is equivalent to:
+//   ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT, ADD PRIMARY KEY (id);
+//
+// TiDB's add/modify column paths don't apply index/PK constraints embedded in column definition,
+// so we expand them here to reuse the existing multi-schema implementation.
+func resolveAlterTableInlinePrimaryKey(specs []*ast.AlterTableSpec) ([]*ast.AlterTableSpec, error) {
+	hasExplicitAddPK := false
+	for _, spec := range specs {
+		if spec.Tp == ast.AlterTableAddConstraint && spec.Constraint != nil && spec.Constraint.Tp == ast.ConstraintPrimaryKey {
+			hasExplicitAddPK = true
+			break
+		}
+	}
+
+	var (
+		inlinePKFound bool
+		inlinePKCol   *ast.ColumnName
+		inlinePKOpt   *ast.ColumnOption
+		inlinePKSpec  *ast.AlterTableSpec
+	)
+
+	// Find at most one inline PRIMARY KEY definition.
+	for _, spec := range specs {
+		var colDef *ast.ColumnDef
+		switch spec.Tp {
+		case ast.AlterTableAddColumns, ast.AlterTableModifyColumn, ast.AlterTableChangeColumn:
+			if len(spec.NewColumns) == 1 {
+				colDef = spec.NewColumns[0]
+			}
+		}
+		if colDef == nil || len(colDef.Options) == 0 {
+			continue
+		}
+
+		// Extract the PRIMARY KEY option from the column definition.
+		foundInlinePKInThisCol := false
+		newOpts := colDef.Options[:0]
+		for _, opt := range colDef.Options {
+			if opt.Tp == ast.ColumnOptionPrimaryKey {
+				if inlinePKFound {
+					return nil, infoschema.ErrMultiplePriKey
+				}
+				foundInlinePKInThisCol = true
+				inlinePKFound = true
+				inlinePKCol = colDef.Name
+				inlinePKOpt = opt
+				inlinePKSpec = spec
+				continue
+			}
+			newOpts = append(newOpts, opt)
+		}
+		if foundInlinePKInThisCol {
+			colDef.Options = newOpts
+			// PRIMARY KEY implies NOT NULL. Keep the semantic after removing the option.
+			if !containsColumnOption(colDef, ast.ColumnOptionNotNull) && !containsColumnOption(colDef, ast.ColumnOptionNull) {
+				colDef.Options = append(colDef.Options, &ast.ColumnOption{Tp: ast.ColumnOptionNotNull})
+			}
+		}
+	}
+
+	if !inlinePKFound {
+		return specs, nil
+	}
+	if hasExplicitAddPK {
+		return nil, infoschema.ErrMultiplePriKey
+	}
+
+	// Insert an ADD PRIMARY KEY spec right after the column spec that defined it inline,
+	// so the target column is available for later processing.
+	newSpecs := make([]*ast.AlterTableSpec, 0, len(specs)+1)
+	for _, spec := range specs {
+		newSpecs = append(newSpecs, spec)
+		if spec != inlinePKSpec {
+			continue
+		}
+
+		keys := []*ast.IndexPartSpecification{
+			{
+				Column: inlinePKCol,
+				Length: types.UnspecifiedLength,
+			},
+		}
+		idxOpt := &ast.IndexOption{PrimaryKeyTp: inlinePKOpt.PrimaryKeyTp}
+		if inlinePKOpt.StrValue == "Global" {
+			idxOpt.Global = true
+		}
+		addPKSpec := &ast.AlterTableSpec{
+			Tp:        ast.AlterTableAddConstraint,
+			Constraint: &ast.Constraint{Tp: ast.ConstraintPrimaryKey, Name: mysql.PrimaryKeyName, Keys: keys, Option: idxOpt},
+			Algorithm: spec.Algorithm,
+			LockType:  spec.LockType,
+		}
+		newSpecs = append(newSpecs, addPKSpec)
+	}
+
+	return newSpecs, nil
+}
+
 func isMultiSchemaChanges(specs []*ast.AlterTableSpec) bool {
 	if len(specs) > 1 {
 		return true
@@ -1847,6 +1950,10 @@ func isMultiSchemaChanges(specs []*ast.AlterTableSpec) bool {
 func (e *executor) AlterTable(ctx context.Context, sctx sessionctx.Context, stmt *ast.AlterTableStmt) (err error) {
 	ident := ast.Ident{Schema: stmt.Table.Schema, Name: stmt.Table.Name}
 	validSpecs, err := ResolveAlterTableSpec(sctx, stmt.Specs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	validSpecs, err = resolveAlterTableInlinePrimaryKey(validSpecs)
 	if err != nil {
 		return errors.Trace(err)
 	}
