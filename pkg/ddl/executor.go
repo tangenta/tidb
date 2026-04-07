@@ -1873,6 +1873,21 @@ func resolveAlterTableInlinePrimaryKey(specs []*ast.AlterTableSpec) ([]*ast.Alte
 			continue
 		}
 
+		// Only rewrite the syntax variants we explicitly support today:
+		// inline PRIMARY KEY paired with AUTO_INCREMENT (e.g. "AUTO_INCREMENT PRIMARY KEY").
+		// This avoids changing the historical behavior of unsupported statements like
+		// "MODIFY COLUMN c INT PRIMARY KEY ...", which previously returned error 8200.
+		hasAutoIncrement := false
+		for _, opt := range colDef.Options {
+			if opt.Tp == ast.ColumnOptionAutoIncrement {
+				hasAutoIncrement = true
+				break
+			}
+		}
+		if !hasAutoIncrement {
+			continue
+		}
+
 		// Extract the PRIMARY KEY option from the column definition.
 		foundInlinePKInThisCol := false
 		newOpts := colDef.Options[:0]
