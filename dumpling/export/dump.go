@@ -315,7 +315,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 	baseConn := newBaseConn(metaConn, true, rebuildMetaConn)
 
 	am := newAccessMeta(conf, d.extStore)
-	err = am.getUserGrants(metaConn)
+	err = am.getUserGrants(tctx.Context, metaConn)
 	if err != nil {
 		return err
 	}

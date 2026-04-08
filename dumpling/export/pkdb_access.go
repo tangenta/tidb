@@ -47,23 +47,27 @@ type accessMeta struct {
 }
 
 func getTableList(conf *Config) *dumpTableList {
-	tableStr := ""
+	var sb strings.Builder
 	for db, tabs := range conf.Tables {
 		if len(tabs) == 0 {
-			tableStr += db + " " + "\n"
+			sb.WriteString(db)
+			sb.WriteString(" \n")
 			continue
 		}
 		for _, tab := range tabs {
-			tableStr += db + "." + tab.Name + " "
+			sb.WriteString(db)
+			sb.WriteString(".")
+			sb.WriteString(tab.Name)
+			sb.WriteString(" ")
 		}
-		tableStr += "\n"
+		sb.WriteString("\n")
 	}
-	return &dumpTableList{tableNames: tableStr}
+	return &dumpTableList{tableNames: sb.String()}
 }
 
-func getSimpleQueryResult(sql string, db *sql.Conn) ([]string, error) {
+func getSimpleQueryResult(ctx context.Context, sql string, db *sql.Conn) ([]string, error) {
 	var res []string
-	rows, err := db.QueryContext(context.Background(), sql)
+	rows, err := db.QueryContext(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -83,29 +87,21 @@ func getSimpleQueryResult(sql string, db *sql.Conn) ([]string, error) {
 	return res, rows.Err()
 }
 
-func strConcat(str []string, defaultStrng string) string {
+func strConcat(str []string, defaultString string) string {
 	if len(str) == 0 {
-		return defaultStrng
+		return defaultString
 	}
-	var res string
-	for i, s := range str {
-		if i < len(str)-1 {
-			res += s + "\n"
-		} else {
-			res += s
-		}
-	}
-	return res
+	return strings.Join(str, "\n")
 }
 
-func (am *accessMeta) getUserGrants(db *sql.Conn) error {
-	defaultRoles, err := getSimpleQueryResult("SELECT CURRENT_ROLE();", db)
+func (am *accessMeta) getUserGrants(ctx context.Context, db *sql.Conn) error {
+	defaultRoles, err := getSimpleQueryResult(ctx, "SELECT CURRENT_ROLE();", db)
 	if err != nil {
 		return err
 	}
 	defaultRoleStr := strConcat(defaultRoles, "NONE")
 
-	username, err := getSimpleQueryResult("SELECT USER();", db)
+	username, err := getSimpleQueryResult(ctx, "SELECT USER();", db)
 	if err != nil {
 		return err
 	}
@@ -118,7 +114,7 @@ func (am *accessMeta) getUserGrants(db *sql.Conn) error {
 		am.user.host = ss[1]
 	}
 
-	grants, err := getSimpleQueryResult("SHOW GRANTS;", db)
+	grants, err := getSimpleQueryResult(ctx, "SHOW GRANTS;", db)
 	if err != nil {
 		return err
 	}
@@ -151,23 +147,41 @@ func newAccessMeta(conf *Config, extStore storeapi.Storage) *accessMeta {
 }
 
 func (am *accessMeta) formatPrint() string {
-	output := "dump task start time: " + am.dumpStartTime.String() + "\n"
+	var sb strings.Builder
 
-	output += "dump task end time: " + am.dumpEndTime.String() + "\n"
+	sb.WriteString("dump task start time: ")
+	sb.WriteString(am.dumpStartTime.String())
+	sb.WriteString("\n")
 
-	output += "\nuser info: " + am.user.userName + "@" + am.user.host + "\n"
+	sb.WriteString("dump task end time: ")
+	sb.WriteString(am.dumpEndTime.String())
+	sb.WriteString("\n")
 
-	output += "role info: " + am.grants.defaultRoleName + "\n"
+	sb.WriteString("\nuser info: ")
+	sb.WriteString(am.user.userName)
+	sb.WriteString("@")
+	sb.WriteString(am.user.host)
+	sb.WriteString("\n")
 
-	output += "privileges info: \n" + am.grants.privilegesLists + "\n"
+	sb.WriteString("role info: ")
+	sb.WriteString(am.grants.defaultRoleName)
+	sb.WriteString("\n")
 
-	output += "\ndump table info: \n" + am.dumpTableList.tableNames + "\n"
+	sb.WriteString("privileges info: \n")
+	sb.WriteString(am.grants.privilegesLists)
+	sb.WriteString("\n")
+
+	sb.WriteString("\ndump table info: \n")
+	sb.WriteString(am.dumpTableList.tableNames)
+	sb.WriteString("\n")
 
 	if len(am.where) > 0 {
-		output += "dump data conditions: " + am.where + "\n"
+		sb.WriteString("dump data conditions: ")
+		sb.WriteString(am.where)
+		sb.WriteString("\n")
 	}
 
-	return output
+	return sb.String()
 }
 
 func (am *accessMeta) writeAccessMeta(ctx context.Context) error {
