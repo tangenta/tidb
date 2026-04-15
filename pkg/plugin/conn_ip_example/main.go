@@ -1,4 +1,4 @@
-// Copyright 2023 PingCAP, Inc.
+// Copyright 2026 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build go1.20 && !go1.21
-
 package main
 
-import _ "unsafe"
+// This is a plugin example package (typically built with -buildmode=plugin).
+// Provide a no-op main so `go build ./...` succeeds.
+func main() {}
 
-//go:linkname grunningnanos runtime.grunningnanos
-func grunningnanos() int64
-
-func main() {
-	grunningnanos()
-}
