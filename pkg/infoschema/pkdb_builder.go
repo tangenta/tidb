@@ -51,8 +51,8 @@ func (b *Builder) reloadRoutines() error {
 
 	exec := sctx.GetSQLExecutor()
 	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnProcedure)
-	rs, err := exec.ExecuteInternal(ctx, `select route_schema,name,type,definition_utf8,parameter_str,is_deterministic,sql_data_access,security_type,definer,sql_mode,
-	character_set_client,connection_collation,schema_collation,created,last_altered,comment,options,external_language from mysql.routines;`)
+	sql, args := BuildRoutineMetadataSQL(RoutineMetadataFilter{})
+	rs, err := exec.ExecuteInternal(ctx, sql, args...)
 	if err != nil {
 		b.infoSchema.routineMap = make(map[string]map[string]*model.ProcedureInfo)
 		return nil
@@ -71,58 +71,17 @@ func (b *Builder) reloadRoutines() error {
 		if row.Len() != 18 {
 			continue
 		}
-		routineType := row.GetEnum(2).String()
-		switch routineType {
-		case "FUNCTION", "PROCEDURE":
-		default:
-			return errors.Errorf("unsupported routine type %q", routineType)
+		procInfo, err := DecodeRoutineMetadataRow(row)
+		if err != nil {
+			return err
 		}
-
-		schemaName := row.GetString(0)
-		routineName := row.GetString(1)
-		optionsStr := ""
-		var options *string
-		if !row.IsNull(16) {
-			optionsStr = row.GetString(16)
-			options = &optionsStr
-		}
-
-		defUTF8 := row.GetString(3)
-		sqlModeStr := row.GetSet(9).String()
 
 		var retType *types.FieldType
-		if routineType == "FUNCTION" {
-			retType = getStoredFuncRetType(defUTF8, sqlModeStr)
+		if procInfo.Type == "FUNCTION" {
+			retType = getStoredFuncRetType(procInfo.DefinitionUTF8, procInfo.SQLMode)
 		}
-		procInfo := &model.ProcedureInfo{
-			Schema: ast.NewCIStr(schemaName),
-			Name:   ast.NewCIStr(routineName),
-			Type:   routineType,
-
-			Definition:     row.GetString(3),
-			DefinitionUTF8: defUTF8,
-			ParameterStr:   row.GetString(4),
-
-			IsDeterministic: row.GetInt64(5),
-			SQLDataAccess:   row.GetEnum(6).String(),
-			SecurityType:    row.GetEnum(7).String(),
-			Definer:         row.GetString(8),
-			SQLMode:         sqlModeStr,
-
-			CharacterSetClient:  row.GetString(10),
-			CollationConnection: row.GetString(11),
-			SchemaCollation:     row.GetString(12),
-
-			Created:     row.GetTime(13),
-			LastAltered: row.GetTime(14),
-
-			Comment:          row.GetString(15),
-			Options:          options,
-			ExternalLanguage: row.GetString(17),
-
-			RetType: retType,
-			State:   model.StatePublic,
-		}
+		procInfo.RetType = retType
+		procInfo.State = model.StatePublic
 		routines, ok := newRoutineMap[procInfo.Schema.L]
 		if !ok {
 			routines = make(map[string]*model.ProcedureInfo)

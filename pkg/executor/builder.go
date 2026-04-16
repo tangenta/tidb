@@ -2600,6 +2600,7 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 			strings.ToLower(infoschema.ClusterTableTiDBIndexUsage),
 			strings.ToLower(infoschema.TableKeyspaceMeta),
 			strings.ToLower(infoschema.TableRoutines),
+			strings.ToLower(infoschema.TableParameters),
 			strings.ToLower(infoschema.TableColumnPrivileges),
 			strings.ToLower(infoschema.TableTablePrivileges),
 			strings.ToLower(infoschema.TableSchemaPrivileges),
