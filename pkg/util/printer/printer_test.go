@@ -54,6 +54,7 @@ func TestPrintResult(t *testing.T) {
 
 func TestGetTiDBInfo(t *testing.T) {
 	info := GetTiDBInfo()
+	require.Contains(t, info, "\nCore Version: nightly")
 	if kerneltype.IsNextGen() {
 		require.Contains(t, info, "\nKernel Type: Next Generation")
 	} else {
