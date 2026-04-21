@@ -129,6 +129,31 @@ func TestPartitionPruningForEQ(t *testing.T) {
 	})
 }
 
+func TestPartitionTableRowIDWarning(t *testing.T) {
+	testkit.RunTestUnderCascades(t, func(t *testing.T, testKit *testkit.TestKit, cascades, caller string) {
+		testKit.MustExec("use test")
+		testKit.MustExec("drop table if exists t_partition_rowid_warn, t_plain_rowid_warn")
+		testKit.MustExec(`create table t_partition_rowid_warn(a int)
+			partition by range(a) (
+				partition p0 values less than (10),
+				partition p1 values less than (20))`)
+		testKit.MustExec("create table t_plain_rowid_warn(a int)")
+
+		testKit.MustQuery("select _tidb_rowid from t_partition_rowid_warn").Rows()
+		testKit.MustQuery("show warnings").Check(testkit.Rows(
+			"Warning 1105 `_tidb_rowid` in a partitioned table is not globally unique; use `_tidb_tid` (partition ID) together with `_tidb_rowid` to guarantee uniqueness",
+		))
+
+		testKit.MustQuery("select _tidb_rowid from t_partition_rowid_warn where _tidb_rowid >= 0").Rows()
+		testKit.MustQuery("show warnings").Check(testkit.Rows(
+			"Warning 1105 `_tidb_rowid` in a partitioned table is not globally unique; use `_tidb_tid` (partition ID) together with `_tidb_rowid` to guarantee uniqueness",
+		))
+
+		testKit.MustQuery("select _tidb_rowid from t_plain_rowid_warn").Rows()
+		testKit.MustQuery("show warnings").Check(testkit.Rows())
+	})
+}
+
 func TestNotReadOnlySQLOnTiFlash(t *testing.T) {
 	testkit.RunTestUnderCascadesWithDomain(t, func(t *testing.T, testKit *testkit.TestKit, dom *domain.Domain, cascades, caller string) {
 		testKit.MustExec("use test")
