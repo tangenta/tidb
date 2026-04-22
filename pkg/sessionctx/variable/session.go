@@ -2541,6 +2541,26 @@ func (s *SessionVars) GetCharsetInfo() (charset, collation string) {
 	return
 }
 
+// ResetPooledSystemSessionVars restores the mutable session vars that internal/system
+// callers may override before returning a pooled session to the shared pool.
+func (s *SessionVars) ResetPooledSystemSessionVars() error {
+	for _, name := range []string{
+		SQLModeVar,
+		CharacterSetClient,
+		CharacterSetConnection,
+		CollationConnection,
+	} {
+		value, err := s.GetGlobalSystemVar(context.Background(), name)
+		if err != nil {
+			return err
+		}
+		if err := s.SetSystemVar(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetParseParams gets the parse parameters from session variables.
 func (s *SessionVars) GetParseParams() []parser.ParseParam {
 	chs, coll := s.GetCharsetInfo()

@@ -1628,6 +1628,10 @@ func NewDomain(store kv.Storage, schemaLease time.Duration, statsLease time.Dura
 					txn, _ := sctx.Txn(false)
 					return txn == nil || !txn.Valid()
 				})
+				if err := sctx.GetSessionVars().ResetPooledSystemSessionVars(); err != nil {
+					intest.AssertNoError(err)
+					logutil.BgLogger().Warn("failed to reset pooled system session vars", zap.Error(err))
+				}
 				infosync.DeleteInternalSession(r)
 			},
 			func(r pools.Resource) {
