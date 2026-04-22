@@ -2580,6 +2580,7 @@ const (
 	AdminResumeLogReplication
 	AdminDropLogReplication
 	AdminSwitchOverPrimary
+	AdminSwitchOverAsPrimary
 	AdminActivateStandby
 	// adminTpCount is the total number of admin statement types.
 	adminTpCount
@@ -2716,6 +2717,7 @@ type AdminStmt struct {
 	ResumeLogReplication *ResumeLogReplication
 	DropLogReplication   *DropLogReplication
 	SwitchOverPrimary    *SwitchOverPrimary
+	SwitchOverAsPrimary  *SwitchOverAsPrimary
 	ActivateStandby      *ActivateStandby
 }
 
@@ -2921,6 +2923,10 @@ func (n *AdminStmt) Restore(ctx *format.RestoreCtx) error {
 	case AdminSwitchOverPrimary:
 		if err := n.SwitchOverPrimary.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore AdminStmt.SwitchOverPrimary")
+		}
+	case AdminSwitchOverAsPrimary:
+		if err := n.SwitchOverAsPrimary.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.SwitchOverAsPrimary")
 		}
 	case AdminActivateStandby:
 		if err := n.ActivateStandby.Restore(ctx); err != nil {

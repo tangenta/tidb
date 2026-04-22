@@ -339,6 +339,8 @@ const (
 	AdminDropLogReplicationCommand = "ADMIN DROP LOG REPLICATION"
 	// AdminSwitchOverPrimaryCommand represents ADMIN SWITCHOVER PRIMARY statement
 	AdminSwitchOverPrimaryCommand = "ADMIN SWITCHOVER PRIMARY"
+	// AdminSwitchOverAsPrimaryCommand represents ADMIN SWITCHOVER AS PRIMARY statement
+	AdminSwitchOverAsPrimaryCommand = "ADMIN SWITCHOVER AS PRIMARY"
 	// AdminActivateStandbyCommand represents ADMIN ACTIVATE STANDBY statement
 	AdminActivateStandbyCommand = "ADMIN ACTIVATE STANDBY"
 )
@@ -971,6 +973,8 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminDropLogReplicationCommand
 	case AdminSwitchOverPrimary:
 		return AdminSwitchOverPrimaryCommand
+	case AdminSwitchOverAsPrimary:
+		return AdminSwitchOverAsPrimaryCommand
 	case AdminActivateStandby:
 		return AdminActivateStandbyCommand
 	default:
