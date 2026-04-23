@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/docker/go-units"
+	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/utils"
 	"github.com/pingcap/tidb/pkg/bindinfo"
@@ -123,6 +124,13 @@ type ShowExec struct {
 	ImportJobID       *int64
 	DistributionJobID *int64
 	ImportGroupKey    string // Used for SHOW IMPORT GROUP <GROUP_KEY>
+}
+
+var systemSessionStateVarNames = []string{
+	vardef.SQLModeVar,
+	vardef.CharacterSetClient,
+	vardef.CharacterSetConnection,
+	vardef.CollationConnection,
 }
 
 type showTableRegionRowItem struct {
@@ -2938,24 +2946,29 @@ func runWithSystemSession(ctx context.Context, sctx sessionctx.Context, fn func(
 	if err != nil {
 		return err
 	}
-	defer b.ReleaseSysSession(ctx, sysCtx)
+
+	originalSysVars, err := getSystemSessionVarValues(sysCtx.GetSessionVars())
+	if err != nil {
+		b.ReleaseSysSession(ctx, sysCtx)
+		return err
+	}
+	defer func() {
+		if restoreErr := setSystemSessionVarValues(sysCtx.GetSessionVars(), originalSysVars); restoreErr != nil {
+			sysCtx.(pools.Resource).Close()
+			return
+		}
+		b.ReleaseSysSession(ctx, sysCtx)
+	}()
 
 	if err = loadSnapshotInfoSchemaIfNeeded(sysCtx, sctx.GetSessionVars().SnapshotTS); err != nil {
 		return err
 	}
-	for _, varName := range []string{
-		vardef.SQLModeVar,
-		vardef.CharacterSetClient,
-		vardef.CharacterSetConnection,
-		vardef.CollationConnection,
-	} {
-		val, ok := sctx.GetSessionVars().GetSystemVar(varName)
-		if !ok {
-			return errors.Errorf("can not find %s", varName)
-		}
-		if err = sysCtx.GetSessionVars().SetSystemVar(varName, val); err != nil {
-			return err
-		}
+	callerSysVars, err := getSystemSessionVarValues(sctx.GetSessionVars())
+	if err != nil {
+		return err
+	}
+	if err = setSystemSessionVarValues(sysCtx.GetSessionVars(), callerSysVars); err != nil {
+		return err
 	}
 	// `fn` may use KV transaction, so initialize the txn here
 	if err = sessiontxn.NewTxn(ctx, sysCtx); err != nil {
@@ -2966,4 +2979,25 @@ func runWithSystemSession(ctx context.Context, sctx sessionctx.Context, fn func(
 		return err
 	}
 	return fn(sysCtx)
+}
+
+func getSystemSessionVarValues(sessionVars *variable.SessionVars) (map[string]string, error) {
+	values := make(map[string]string, len(systemSessionStateVarNames))
+	for _, varName := range systemSessionStateVarNames {
+		value, err := sessionVars.GetSessionOrGlobalSystemVar(context.Background(), varName)
+		if err != nil {
+			return nil, errors.Errorf("can not find %s", varName)
+		}
+		values[varName] = value
+	}
+	return values, nil
+}
+
+func setSystemSessionVarValues(sessionVars *variable.SessionVars, values map[string]string) error {
+	for _, varName := range systemSessionStateVarNames {
+		if err := sessionVars.SetSystemVar(varName, values[varName]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
