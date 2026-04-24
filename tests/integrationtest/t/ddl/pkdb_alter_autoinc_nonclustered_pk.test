@@ -145,3 +145,47 @@ create table t (id bigint not null, v int) AUTO_ID_CACHE=1;
 insert into t values (10, 10), (20, 20), (30, 30);
 alter table t modify column id bigint not null auto_increment, add primary key (id) nonclustered;
 show table t next_row_id;
+
+# NO_AUTO_VALUE_ON_ZERO should keep explicit 0 after enabling AUTO_INCREMENT
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (10, 10), (20, 20), (30, 30);
+alter table t modify column id bigint not null auto_increment;
+set @@sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
+insert into t values (0, 40);
+insert into t(v) values (50);
+select id, v from t where v in (40, 50) order by v;
+set @@sql_mode = default;
+
+# Existing negative values should still allow new AUTO_INCREMENT ids to be allocated
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (-10, 10), (-5, 20), (-1, 30);
+alter table t modify column id bigint not null auto_increment;
+insert into t(v) values (40), (50);
+select id, v from t where v in (40, 50) order by v;
+
+# Existing MaxInt64 value should reject enabling AUTO_INCREMENT on signed column
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (9223372036854775807, 10);
+-- error 1467
+alter table t modify column id bigint not null auto_increment;
+
+# CHANGE COLUMN rename + enable AUTO_INCREMENT is rejected
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+-- error 8200
+alter table t change column id new_id bigint not null auto_increment;
+
+# Composite NONCLUSTERED primary key reject enabling AUTO_INCREMENT
+drop table if exists t;
+create table t (id bigint not null, k bigint not null, v int, primary key (id, k) nonclustered);
+-- error 8200
+alter table t modify column id bigint not null auto_increment;
+
+# Common-handle primary key reject enabling AUTO_INCREMENT
+drop table if exists t;
+create table t (id bigint not null, k bigint not null, v int, primary key (id, k) clustered);
+-- error 8200
+alter table t modify column id bigint not null auto_increment;

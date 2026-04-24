@@ -173,3 +173,41 @@ show table t next_row_id;
 DB_NAME	TABLE_NAME	COLUMN_NAME	NEXT_GLOBAL_ROW_ID	ID_TYPE
 ddl__pkdb_alter_autoinc_nonclustered_pk	t	_tidb_rowid	30001	_TIDB_ROWID
 ddl__pkdb_alter_autoinc_nonclustered_pk	t	_tidb_rowid	31	AUTO_INCREMENT
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (10, 10), (20, 20), (30, 30);
+alter table t modify column id bigint not null auto_increment;
+set @@sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
+insert into t values (0, 40);
+insert into t(v) values (50);
+select id, v from t where v in (40, 50) order by v;
+id	v
+0	40
+30002	50
+set @@sql_mode = default;
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (-10, 10), (-5, 20), (-1, 30);
+alter table t modify column id bigint not null auto_increment;
+insert into t(v) values (40), (50);
+select id, v from t where v in (40, 50) order by v;
+id	v
+30001	40
+30002	50
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+insert into t values (9223372036854775807, 10);
+alter table t modify column id bigint not null auto_increment;
+Error 1467 (HY000): Failed to read auto-increment value from storage engine
+drop table if exists t;
+create table t (id bigint not null, v int, primary key (id) nonclustered);
+alter table t change column id new_id bigint not null auto_increment;
+Error 8200 (HY000): Unsupported modify column: can't set auto_increment
+drop table if exists t;
+create table t (id bigint not null, k bigint not null, v int, primary key (id, k) nonclustered);
+alter table t modify column id bigint not null auto_increment;
+Error 8200 (HY000): Unsupported modify column: can't set auto_increment
+drop table if exists t;
+create table t (id bigint not null, k bigint not null, v int, primary key (id, k) clustered);
+alter table t modify column id bigint not null auto_increment;
+Error 8200 (HY000): Unsupported modify column: can't set auto_increment
