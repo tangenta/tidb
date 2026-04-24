@@ -151,7 +151,7 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 	golang.org/x/oauth2 v0.33.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
@@ -373,11 +373,11 @@ require (
 	stathat.com/c/consistent v1.0.0 // indirect
 )
 
-replace github.com/pingcap/kvproto => git.pingcap.net/pingkai/kvproto v0.0.0-20260317071034-b4fb99b1d1ff
+replace github.com/pingcap/kvproto => git.pingcap.net/pingkai/kvproto v0.0.0-20260422070144-78fa58de47a7
 
-replace github.com/tikv/client-go/v2 => git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260317082020-c40f1dec4106
+replace github.com/tikv/client-go/v2 => git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260422124021-a17fad509c3f
 
-replace github.com/tikv/pd/client => git.pingcap.net/pingkai/pd/client v0.0.0-20260317032446-96508f0cdbe0
+replace github.com/tikv/pd/client => git.pingcap.net/pingkai/pd/client v0.0.0-20260422112300-9745e622cc34
 
 replace (
 	// Downgrade grpc to v1.63.2, as well as other related modules.

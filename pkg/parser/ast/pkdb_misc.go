@@ -152,6 +152,7 @@ const (
 	LogReplicationOptSourcePassword
 	LogReplicationOptProtectionMode
 	LogReplicationOptDegradeTimeout
+	LogReplicationOptDetached
 )
 
 func (t LogReplicationOptType) String() string {
@@ -168,6 +169,8 @@ func (t LogReplicationOptType) String() string {
 		return "PROTECTION_MODE"
 	case LogReplicationOptDegradeTimeout:
 		return "DEGRADE_TIMEOUT"
+	case LogReplicationOptDetached:
+		return "DETACHED"
 	default:
 		return "UNKNOWN"
 	}
@@ -182,13 +185,17 @@ type LogReplicationOpt struct {
 func (o *LogReplicationOpt) Restore(ctx *format.RestoreCtx) error {
 	switch o.Tp {
 	case LogReplicationOptSourceHost, LogReplicationOptSourcePort, LogReplicationOptSourceUser,
-		LogReplicationOptSourcePassword, LogReplicationOptProtectionMode, LogReplicationOptDegradeTimeout:
+		LogReplicationOptSourcePassword, LogReplicationOptProtectionMode, LogReplicationOptDegradeTimeout,
+		LogReplicationOptDetached:
 		// ok
 	default:
 		return errors.Errorf("unknown LogReplicationOptType: %d", o.Tp)
 	}
 
 	ctx.WriteKeyWord(o.Tp.String())
+	if o.Tp == LogReplicationOptDetached {
+		return nil
+	}
 	ctx.WritePlain(" = ")
 	switch o.Tp {
 	case LogReplicationOptSourcePort:
