@@ -2103,6 +2103,10 @@ func (e *SimpleExec) executeGrantRole(ctx context.Context, s *ast.GrantRoleStmt)
 		}
 	}
 
+	if err := checkSpecialRoleGrantingByRoot(e.Ctx(), s.Roles); err != nil {
+		return err
+	}
+
 	restrictedCtx, err := e.GetSysSession()
 	if err != nil {
 		return err

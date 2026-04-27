@@ -13,7 +13,9 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/intest"
 	"github.com/pingcap/tidb/pkg/util/sqlescape"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
 )
@@ -22,20 +24,20 @@ import (
 var DutyRoles = map[string][]string{
 	"system_admin": {
 		`create role IF NOT EXISTS system_admin`,
-		`GRANT CREATE, DROP, REFERENCES, ALTER, INDEX, CREATE TABLESPACE, CREATE VIEW, CREATE TEMPORARY TABLES, CREATE ROUTINE, ALTER ROUTINE, RELOAD, SYSTEM_USER ON *.* TO 'system_admin'@'%' WITH GRANT OPTION`,
+		`GRANT CREATE, DROP, REFERENCES, ALTER, INDEX, CREATE TABLESPACE, CREATE VIEW, CREATE TEMPORARY TABLES, CREATE ROUTINE, ALTER ROUTINE, RELOAD, RESOURCE_GROUP_ADMIN, TRAFFIC_CAPTURE_ADMIN, TRAFFIC_REPLAY_ADMIN ON *.* TO 'system_admin'@'%' WITH GRANT OPTION`,
 	},
 	"security_admin": {
 		`create role IF NOT EXISTS security_admin`,
-		`GRANT CREATE USER, CREATE ROLE, DROP ROLE, SHUTDOWN, RELOAD, CONFIG, CONNECTION_ADMIN, PLACEMENT_ADMIN, RESTRICTED_CONNECTION_ADMIN, RESTRICTED_REPLICA_WRITER_ADMIN, RESTRICTED_STATUS_ADMIN, RESTRICTED_TABLES_ADMIN, RESTRICTED_USER_ADMIN, RESTRICTED_VARIABLES_ADMIN, ROLE_ADMIN, SYSTEM_USER, SYSTEM_VARIABLES_ADMIN ON *.* TO 'security_admin'@'%' WITH GRANT OPTION`,
+		`GRANT CREATE USER, CREATE ROLE, DROP ROLE, SHUTDOWN, RELOAD, CONFIG, CONNECTION_ADMIN, PLACEMENT_ADMIN, RESTRICTED_CONNECTION_ADMIN, RESTRICTED_PRIV_ADMIN, RESTRICTED_REPLICA_WRITER_ADMIN, RESTRICTED_STATUS_ADMIN, RESTRICTED_TABLES_ADMIN, RESTRICTED_SQL_ADMIN, RESTRICTED_USER_ADMIN, RESTRICTED_VARIABLES_ADMIN, ROLE_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'security_admin'@'%' WITH GRANT OPTION`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON mysql.* TO 'security_admin'@'%'`,
 	},
 	"database_admin": {
 		`create role IF NOT EXISTS database_admin`,
-		`GRANT SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, PROCESS, SHOW DATABASES, EXECUTE, TRIGGER, SHOW VIEW, EVENT, FILE, REPLICATION CLIENT, REPLICATION SLAVE, RELOAD, BACKUP_ADMIN, RESTORE_ADMIN, DASHBOARD_CLIENT, SYSTEM_USER ON *.* TO 'database_admin'@'%'  WITH GRANT OPTION`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, PROCESS, SHOW DATABASES, EXECUTE, TRIGGER, SHOW VIEW, EVENT, FILE, REPLICATION CLIENT, REPLICATION SLAVE, RELOAD, BACKUP_ADMIN, RESTORE_ADMIN, DASHBOARD_CLIENT, RESOURCE_GROUP_USER ON *.* TO 'database_admin'@'%'  WITH GRANT OPTION`,
 	},
 	"audit_admin": {
 		`create role IF NOT EXISTS audit_admin`,
-		`GRANT RELOAD, SYSTEM_VARIABLES_ADMIN, RESTRICTED_VARIABLES_ADMIN, SYSTEM_USER, AUDIT_ADMIN, RESTRICTED_AUDIT_ADMIN ON *.* TO 'audit_admin'@'%' WITH GRANT OPTION`,
+		`GRANT RELOAD, SYSTEM_VARIABLES_ADMIN, RESTRICTED_VARIABLES_ADMIN, AUDIT_ADMIN, RESTRICTED_AUDIT_ADMIN ON *.* TO 'audit_admin'@'%' WITH GRANT OPTION`,
 	},
 }
 
@@ -158,6 +160,45 @@ func checkExclusiveRoleGranting(
 		}
 	}
 
+	return nil
+}
+
+func checkSpecialRoleGrantingByRoot(sctx sessionctx.Context, grantingRoles []*auth.RoleIdentity) error {
+	if !vardef.EnableDutySeparationMode.Load() {
+		return nil
+	}
+
+	var specialRoles []string
+	for _, role := range grantingRoles {
+		if _, ok := DutyRoles[role.Username]; ok {
+			specialRoles = append(specialRoles, role.Username)
+		}
+	}
+	if len(specialRoles) == 0 {
+		return nil
+	}
+
+	user := sctx.GetSessionVars().User
+	if user == nil {
+		if intest.InTest {
+			return nil
+		}
+		return errors.New("violation of separation of duty: only root user can grant special roles")
+	}
+
+	currentUser := user.AuthUsername
+	if currentUser == "" {
+		currentUser = user.Username
+	}
+	if currentUser != "root" {
+		if intest.InTest && currentUser == "" {
+			return nil
+		}
+		if len(specialRoles) == 1 {
+			return errors.Errorf("violation of separation of duty: only root user can grant role %s", specialRoles[0])
+		}
+		return errors.Errorf("violation of separation of duty: only root user can grant roles %s", strings.Join(specialRoles, ", "))
+	}
 	return nil
 }
 

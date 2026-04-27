@@ -4,12 +4,14 @@ package executor_test
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/executor"
 	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
 	"github.com/pingcap/tidb/pkg/parser/auth"
+	"github.com/pingcap/tidb/pkg/privilege/privileges"
 	"github.com/pingcap/tidb/pkg/server"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/stretchr/testify/require"
@@ -59,6 +61,61 @@ func TestAdminRolesCount(t *testing.T) {
 	require.Equal(t, 4, len(executor.DutyRoles))
 }
 
+func TestDynamicPrivilegesAssignedToSingleDutyRole(t *testing.T) {
+	audit.Register4Test()
+
+	dynamicPrivs := privileges.GetDynamicPrivileges()
+	dynamicPrivSet := make(map[string]struct{}, len(dynamicPrivs))
+	for _, priv := range dynamicPrivs {
+		dynamicPrivSet[strings.ToUpper(priv)] = struct{}{}
+	}
+
+	assigned := make(map[string]map[string]struct{}, len(dynamicPrivs))
+	for role, grants := range executor.DutyRoles {
+		for _, stmt := range grants {
+			privs, ok := extractGrantPrivileges(stmt)
+			if !ok {
+				continue
+			}
+			for _, priv := range privs {
+				privUpper := strings.ToUpper(priv)
+				if _, ok := dynamicPrivSet[privUpper]; !ok {
+					continue
+				}
+				if assigned[privUpper] == nil {
+					assigned[privUpper] = make(map[string]struct{})
+				}
+				assigned[privUpper][role] = struct{}{}
+			}
+		}
+	}
+
+	var missing []string
+	duplicate := make(map[string][]string)
+	for privUpper := range dynamicPrivSet {
+		roles := assigned[privUpper]
+		if len(roles) == 0 && privUpper != "SYSTEM_USER" {
+			missing = append(missing, privUpper)
+			continue
+		}
+		if len(roles) > 1 {
+			roleList := make([]string, 0, len(roles))
+			for role := range roles {
+				roleList = append(roleList, role)
+			}
+			sort.Strings(roleList)
+			duplicate[privUpper] = roleList
+		}
+	}
+	sort.Strings(missing)
+
+	delete(duplicate, "SYSTEM_VARIABLES_ADMIN")     // audit admin and security admin
+	delete(duplicate, "RESTRICTED_VARIABLES_ADMIN") // audit admin and security admin
+	if len(missing) > 0 || len(duplicate) > 0 {
+		t.Fatalf("dynamic privileges must map to exactly one duty role; missing=%v duplicate=%v", missing, duplicate)
+	}
+}
+
 func TestGrantAdminRoles(t *testing.T) {
 	restoreFunc := executor.MockSetDutySeparationModeEnable()
 	defer restoreFunc()
@@ -77,6 +134,39 @@ func TestGrantAdminRoles(t *testing.T) {
 		"security_admin Y",
 		"system_admin Y",
 	))
+}
+
+func TestDutySeparationBlockUserTableDML(t *testing.T) {
+	restoreFunc := executor.MockSetDutySeparationModeEnable()
+	defer restoreFunc()
+
+	// register extensions
+	audit.Register4Test()
+
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+
+	tk.MustExec("CREATE USER 'dbadmin'@'%'")
+	tk.MustExec("GRANT database_admin TO 'dbadmin'@'%'")
+	tk.MustExec("CREATE USER 'secadmin'@'%'")
+	tk.MustExec("GRANT security_admin TO 'secadmin'@'%'")
+
+	require.NoError(t, tk.Session().Auth(&auth.UserIdentity{Username: "dbadmin", Hostname: "%"}, nil, nil, nil))
+	tk.MustExec("SET ROLE ALL")
+	err := tk.ExecToErr("UPDATE mysql.user SET Account_locked=Account_locked WHERE User='root'")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "UPDATE command denied")
+	err = tk.ExecToErr("UPDATE mysql.db SET Select_priv=Select_priv WHERE User='root'")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "UPDATE command denied")
+	err = tk.ExecToErr("UPDATE mysql.role_edges SET TO_USER=TO_USER WHERE TO_USER='root'")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "UPDATE command denied")
+
+	require.NoError(t, tk.Session().Auth(&auth.UserIdentity{Username: "secadmin", Hostname: "%"}, nil, nil, nil))
+	tk.MustExec("SET ROLE ALL")
+	tk.MustExec("UPDATE mysql.user SET Account_locked=Account_locked WHERE User='root'")
+	tk.MustExec("UPDATE mysql.db SET Select_priv=Select_priv WHERE User='root'")
 }
 
 func TestForbiddingDropAdminRoles(t *testing.T) {
@@ -191,6 +281,34 @@ func TestExclusiveRoleGranting(t *testing.T) {
 	tk.MustExec("DROP USER 'user3'@'localhost';")
 	tk.MustExec("DROP USER 'user4'@'localhost';")
 	tk.MustExec("DROP USER 'user5'@'localhost';")
+}
+
+func TestGrantDutyRolesOnlyByRoot(t *testing.T) {
+	restoreFunc := executor.MockSetDutySeparationModeEnable()
+	defer restoreFunc()
+
+	audit.Register4Test()
+
+	store := testkit.CreateMockStore(t)
+	rootTk := testkit.NewTestKit(t, store)
+
+	rootTk.MustExec("CREATE USER 'grantor'@'%'")
+	rootTk.MustExec("CREATE USER 'target'@'%'")
+	rootTk.MustExec("GRANT ROLE_ADMIN ON *.* TO 'grantor'@'%'")
+
+	grantorTk := testkit.NewTestKit(t, store)
+	require.NoError(t, grantorTk.Session().Auth(&auth.UserIdentity{Username: "grantor", Hostname: "%"}, nil, nil, nil))
+
+	roles := []string{"system_admin", "security_admin", "database_admin", "audit_admin"}
+	for _, role := range roles {
+		err := grantorTk.ExecToErr(fmt.Sprintf("GRANT %s TO 'target'@'%%';", role))
+		require.Error(t, err)
+		require.True(t, strings.Contains(err.Error(), "violation of separation of duty"))
+		require.True(t, strings.Contains(err.Error(), "only root user"))
+	}
+
+	rootTk.MustExec("DROP USER 'grantor'@'%'")
+	rootTk.MustExec("DROP USER 'target'@'%'")
 }
 
 func TestWritePrivilegeConflictWithSpecialRoles(t *testing.T) {
@@ -416,4 +534,26 @@ func TestRolePrivilegeConflictWithSpecialRoles(t *testing.T) {
 	rootTk.MustExec("DROP USER 'u_special'@'%';")
 	rootTk.MustExec("DROP USER 'u_audit2'@'%';")
 	rootTk.MustExec("DROP USER 'u_data_reader'@'%';")
+}
+
+func extractGrantPrivileges(stmt string) ([]string, bool) {
+	stmt = strings.TrimSpace(stmt)
+	stmtUpper := strings.ToUpper(stmt)
+	if !strings.HasPrefix(stmtUpper, "GRANT ") {
+		return nil, false
+	}
+	onIndex := strings.Index(stmtUpper, " ON ")
+	if onIndex == -1 {
+		return nil, false
+	}
+	privPart := strings.TrimSpace(stmt[len("GRANT "):onIndex])
+	if privPart == "" {
+		return nil, false
+	}
+
+	parts := strings.Split(privPart, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts, true
 }
