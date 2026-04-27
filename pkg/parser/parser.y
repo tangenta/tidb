@@ -18914,4 +18914,8 @@ ProtectionMode:
 	{
 		$$ = ast.ProtectionModeMaximumProtection
 	}
+|	LengthNum
+	{
+		$$ = ast.ProtectionMode($1.(uint64))
+	}
 %%
