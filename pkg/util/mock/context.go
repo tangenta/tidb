@@ -141,6 +141,9 @@ func (*Context) GetTraceCtx() context.Context {
 	return context.Background()
 }
 
+// SetTraceCtx implements sessionctx.Context SetTraceCtx interface.
+func (*Context) SetTraceCtx(context.Context) {}
+
 // Execute implements sqlexec.SQLExecutor Execute interface.
 func (*Context) Execute(_ context.Context, _ string) ([]sqlexec.RecordSet, error) {
 	return nil, errors.Errorf("Not Supported")
