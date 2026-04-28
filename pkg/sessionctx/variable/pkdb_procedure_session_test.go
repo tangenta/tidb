@@ -412,7 +412,7 @@ func TestFindHandle(t *testing.T) {
 	}
 	con.Handles = append(con.Handles, code)
 	state := &variable.ProcedureHandleState{
-		State:               ast.PROCEDUR_SQLWARNING,
+		State:               ast.ProcedureSQLWarning,
 		ProcedureHandleBase: handlebase,
 	}
 	con.Handles = append(con.Handles, state)
@@ -433,7 +433,7 @@ func TestFindHandle(t *testing.T) {
 	con.Handles = append(con.Handles, status)
 	require.Nil(t, con.TryFindHandle(0, "1111", true))
 	state2 := &variable.ProcedureHandleState{
-		State:               ast.PROCEDUR_NOT_FOUND,
+		State:               ast.ProcedureNotFound,
 		ProcedureHandleBase: handlebase,
 	}
 	con.Handles = append(con.Handles, state2)
@@ -443,7 +443,7 @@ func TestFindHandle(t *testing.T) {
 	con.Handles = append(con.Handles, code)
 	con.Handles = append(con.Handles, status)
 	state3 := &variable.ProcedureHandleState{
-		State:               ast.PROCEDUR_SQLEXCEPTION,
+		State:               ast.ProcedureSQLException,
 		ProcedureHandleBase: handlebase,
 	}
 	con.Handles = append(con.Handles, state3)

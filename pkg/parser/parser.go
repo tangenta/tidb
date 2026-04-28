@@ -27691,7 +27691,7 @@ yynewstate:
 	case 3034:
 		{
 			x := &ast.StoreParameter{
-				Paramstatus:     ast.MODE_IN,
+				Paramstatus:     ast.ModeIn,
 				ParamType:       yyS[yypt-1].item.(*types.FieldType),
 				ParamName:       yyS[yypt-2].ident,
 				OmitParamStatus: true,
@@ -27711,15 +27711,15 @@ yynewstate:
 		}
 	case 3036:
 		{
-			parser.yyVAL.item = ast.MODE_IN
+			parser.yyVAL.item = ast.ModeIn
 		}
 	case 3037:
 		{
-			parser.yyVAL.item = ast.MODE_OUT
+			parser.yyVAL.item = ast.ModeOut
 		}
 	case 3038:
 		{
-			parser.yyVAL.item = ast.MODE_INOUT
+			parser.yyVAL.item = ast.ModeInOut
 		}
 	case 3045:
 		{
@@ -27813,11 +27813,11 @@ yynewstate:
 		}
 	case 3080:
 		{
-			parser.yyVAL.item = ast.PROCEDUR_CONTINUE
+			parser.yyVAL.item = ast.ProcedureContinue
 		}
 	case 3081:
 		{
-			parser.yyVAL.item = ast.PROCEDUR_EXIT
+			parser.yyVAL.item = ast.ProcedureExit
 		}
 	case 3082:
 		{
@@ -27836,19 +27836,19 @@ yynewstate:
 	case 3085:
 		{
 			parser.yyVAL.statement = &ast.ProcedureErrorCon{
-				ErrorCon: ast.PROCEDUR_SQLWARNING,
+				ErrorCon: ast.ProcedureSQLWarning,
 			}
 		}
 	case 3086:
 		{
 			parser.yyVAL.statement = &ast.ProcedureErrorCon{
-				ErrorCon: ast.PROCEDUR_NOT_FOUND,
+				ErrorCon: ast.ProcedureNotFound,
 			}
 		}
 	case 3087:
 		{
 			parser.yyVAL.statement = &ast.ProcedureErrorCon{
-				ErrorCon: ast.PROCEDUR_SQLEXCEPTION,
+				ErrorCon: ast.ProcedureSQLException,
 			}
 		}
 	case 3088:
@@ -28165,53 +28165,65 @@ yynewstate:
 	case 3152:
 		{
 			parser.yyVAL.item = &ast.ProcedureComment{
-				Type:    ast.PROCEDURCOMMENT,
+				Type:    ast.ProcedureCommentType,
 				Comment: yyS[yypt-0].ident,
 			}
 		}
 	case 3153:
 		{
 			parser.yyVAL.item = &ast.ProcedureSecurity{
-				Type:     ast.PROCEDURSECURITY,
+				Type:     ast.ProcedureSecurityType,
 				Security: ast.SecurityDefiner,
 			}
 		}
 	case 3154:
 		{
 			parser.yyVAL.item = &ast.ProcedureSecurity{
-				Type:     ast.PROCEDURSECURITY,
+				Type:     ast.ProcedureSecurityType,
 				Security: ast.SecurityInvoker,
 			}
 		}
 	case 3155:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureDeterministic{
+				Type:          ast.ProcedureDeterministicType,
+				Deterministic: true,
+			}
 		}
 	case 3156:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureDeterministic{
+				Type:          ast.ProcedureDeterministicType,
+				Deterministic: false,
+			}
 		}
 	case 3157:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureSQLDataAccess{
+				Type:          ast.ProcedureSQLDataAccessType,
+				SQLDataAccess: ast.RoutineNoSQL,
+			}
 		}
 	case 3158:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureSQLDataAccess{
+				Type:          ast.ProcedureSQLDataAccessType,
+				SQLDataAccess: ast.RoutineReadsSQLData,
+			}
 		}
 	case 3159:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureSQLDataAccess{
+				Type:          ast.ProcedureSQLDataAccessType,
+				SQLDataAccess: ast.RoutineModifiesSQLData,
+			}
 		}
 	case 3160:
 		{
-			// Parse and ignore it. Just for compatibility.
-			parser.yyVAL.item = nil
+			parser.yyVAL.item = &ast.ProcedureSQLDataAccess{
+				Type:          ast.ProcedureSQLDataAccessType,
+				SQLDataAccess: ast.RoutineContainsSQL,
+			}
 		}
 	case 3161:
 		{
@@ -28290,7 +28302,7 @@ yynewstate:
 	case 3172:
 		{
 			x := &ast.StoreParameter{
-				Paramstatus:     ast.MODE_IN,
+				Paramstatus:     ast.ModeIn,
 				ParamType:       yyS[yypt-1].item.(*types.FieldType),
 				ParamName:       yyS[yypt-2].ident,
 				OmitParamStatus: true,
