@@ -700,6 +700,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	statsSamplePages           "STATS_SAMPLE_PAGES"
 	statsSampleRate            "STATS_SAMPLE_RATE"
 	status                     "STATUS"
+	stmt                       "STMT"
 	storage                    "STORAGE"
 	strictFormat               "STRICT_FORMAT"
 	stringType                 "STRING"
@@ -6000,6 +6001,14 @@ ExplainStmt:
 			Analyze:   true,
 		}
 	}
+|	ExplainSym "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", false, ast.ExplainRoutineTypeFunction, $4)
+	}
+|	ExplainSym "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", false, ast.ExplainRoutineTypeProcedure, $4)
+	}
 |	ExplainSym TableName
 	{
 		$$ = &ast.ExplainStmt{
@@ -6054,6 +6063,14 @@ ExplainStmt:
 			Format: $4,
 		}
 	}
+|	ExplainSym "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeFunction, $7)
+	}
+|	ExplainSym "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeProcedure, $7)
+	}
 |	ExplainSym "FORMAT" "=" ExplainFormatType "FOR" "CONNECTION" NUM
 	{
 		$$ = &ast.ExplainForStmt{
@@ -6067,6 +6084,14 @@ ExplainStmt:
 			Stmt:   $5,
 			Format: $4,
 		}
+	}
+|	ExplainSym "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeFunction, $7)
+	}
+|	ExplainSym "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeProcedure, $7)
 	}
 |	ExplainSym "FORMAT" "=" ExplainFormatType stringLit
 	{
@@ -6090,6 +6115,22 @@ ExplainStmt:
 			Analyze: true,
 		}
 	}
+|	ExplainSym "ANALYZE" "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", true, ast.ExplainRoutineTypeFunction, $5)
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget("row", true, ast.ExplainRoutineTypeFunction, $5, true, getUint64FromNUM($8))
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", true, ast.ExplainRoutineTypeProcedure, $5)
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget("row", true, ast.ExplainRoutineTypeProcedure, $5, true, getUint64FromNUM($8))
+	}
 |	ExplainSym "ANALYZE" stringLit
 	{
 		$$ = &ast.ExplainStmt{
@@ -6105,6 +6146,22 @@ ExplainStmt:
 			Format:  $5,
 			Analyze: true,
 		}
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeFunction, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeFunction, $8, true, getUint64FromNUM($11))
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeProcedure, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeProcedure, $8, true, getUint64FromNUM($11))
 	}
 |	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType stringLit
 	{
@@ -6129,6 +6186,22 @@ ExplainStmt:
 			Format:  $5,
 			Analyze: true,
 		}
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeFunction, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeFunction, $8, true, getUint64FromNUM($11))
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeProcedure, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeProcedure, $8, true, getUint64FromNUM($11))
 	}
 
 ExplainFormatType:
@@ -7475,6 +7548,7 @@ UnReservedKeyword:
 |	"SONAME"
 |	"START"
 |	"STATUS"
+|	"STMT"
 |	"STRING"
 |	"OPEN"
 |	"POINT"
@@ -7544,7 +7618,7 @@ UnReservedKeyword:
 |	"PRIVILEGES"
 |	"NO"
 |	"BINLOG"
-|	"FUNCTION"
+|	"FUNCTION" %prec lowerThanFunction
 |	"VIEW"
 |	"BINDING"
 |	"BINDINGS"
@@ -7586,7 +7660,7 @@ UnReservedKeyword:
 |	"SLAVE"
 |	"RELOAD"
 |	"TEMPORARY"
-|	"ROUTINE"
+|	"ROUTINE" %prec lowerThanFunction
 |	"EVENT"
 |	"ALGORITHM"
 |	"DEFINER"

@@ -1107,6 +1107,14 @@ func (n *ExplainStmt) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
+func (n *ExplainRoutineStmt) SEMCommand() string {
+	if n.Analyze {
+		return ExplainAnalyzeCommand
+	}
+	return ExplainCommand
+}
+
+// SEMCommand returns the command string for the statement.
 func (n *FlushStmt) SEMCommand() string {
 	return FlushCommand
 }

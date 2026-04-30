@@ -5820,6 +5820,14 @@ func TestExplain(t *testing.T) {
 		{"EXPLAIN ANALYZE 'sqldigest'", true, "EXPLAIN ANALYZE 'sqldigest'"},
 		{"EXPLAIN format='json' 'sqldigest'", true, "EXPLAIN FORMAT = 'json' 'sqldigest'"},
 		{"EXPLAIN ANALYZE format='json' 'sqldigest'", true, "EXPLAIN ANALYZE FORMAT = 'json' 'sqldigest'"},
+		{"EXPLAIN ROUTINE FUNCTION db.f", true, "EXPLAIN ROUTINE FUNCTION `db`.`f`()"},
+		{"EXPLAIN ROUTINE FUNCTION db.f(1, 'x')", true, "EXPLAIN ROUTINE FUNCTION `db`.`f`(1, _UTF8MB4'x')"},
+		{"EXPLAIN ROUTINE PROCEDURE db.p(1, @x)", true, "EXPLAIN ROUTINE PROCEDURE `db`.`p`(1, @`x`)"},
+		{"EXPLAIN ROUTINE FUNCTION db.f(1) FOR STMT 7", false, ""},
+		{"EXPLAIN FORMAT = 'brief' ROUTINE FUNCTION db.f(1)", true, "EXPLAIN FORMAT = 'brief' ROUTINE FUNCTION `db`.`f`(1)"},
+		{"EXPLAIN ANALYZE ROUTINE FUNCTION db.f(1)", true, "EXPLAIN ANALYZE ROUTINE FUNCTION `db`.`f`(1)"},
+		{"EXPLAIN ANALYZE ROUTINE FUNCTION db.f(1) FOR STMT 7", true, "EXPLAIN ANALYZE ROUTINE FUNCTION `db`.`f`(1) FOR STMT 7"},
+		{"EXPLAIN ANALYZE FORMAT = 'tidb_json' ROUTINE PROCEDURE db.p(1, @x) FOR STMT 3", true, "EXPLAIN ANALYZE FORMAT = 'tidb_json' ROUTINE PROCEDURE `db`.`p`(1, @`x`) FOR STMT 3"},
 	}
 	RunTest(t, table, false)
 }
