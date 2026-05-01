@@ -22,6 +22,9 @@ const (
 
 	// TiDBCreateFromSelectUsingImport indicates whether to use import into to create table as select.
 	TiDBCreateFromSelectUsingImport = "tidb_create_from_select_using_import"
+	// TiDBAlterSyncMaxLagSeconds controls the maximum checkpoint lag (in seconds) allowed when switching to sync
+	// replication in ALTER LOG REPLICATION.
+	TiDBAlterSyncMaxLagSeconds = "tidb_alter_sync_max_lag_seconds"
 
 	// fusion mode related variables
 
@@ -49,6 +52,7 @@ const (
 	DefTiDBEnableUDVSubstitute         = false
 	DefTiDBEnableSPParamSubstitute     = false
 	DefTiDBCreateFromSelectUsingImport = false
+	DefTiDBAlterSyncMaxLagSeconds      = 10
 
 	// fusion mode related variables
 

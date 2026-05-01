@@ -76,7 +76,7 @@ func TestBuildLogReplStatusLocalRow(t *testing.T) {
 				ProtectionMode:       pdpb.ProtectionMode_MaximumAvailability,
 				DegradeTimeoutSec:    30,
 				CheckpointTs:         checkpointTS,
-				CheckpointLag:        3,
+				CheckpointLagSec:     3,
 				InitializingProgress: 88.5,
 				SwitchoverReady:      "YES",
 				FailoverReady:        "NO",
@@ -125,7 +125,7 @@ func TestBuildLogReplStatusLocalRow(t *testing.T) {
 			Status: &pdpb.LogReplicationStatus{
 				ReplicaClusterId: 1002,
 				SourceClusterId:  1001,
-				CheckpointLag:    3,
+				CheckpointLagSec: 3,
 				ProtectionMode:   pdpb.ProtectionMode_MaximumProtection,
 			},
 		})
@@ -143,7 +143,7 @@ func TestBuildLogReplStatusLocalRow(t *testing.T) {
 				ReplicaClusterId: 1002,
 				SourceClusterId:  1001,
 				CheckpointTs:     449123456789000000,
-				CheckpointLag:    -1,
+				CheckpointLagSec: -1,
 				ProtectionMode:   pdpb.ProtectionMode_MaximumProtection,
 			},
 		})

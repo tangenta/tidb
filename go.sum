@@ -826,10 +826,10 @@ filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4
 gioui.org v0.0.0-20210308172011-57750fc8a0a6/go.mod h1:RSH6KIUZ0p2xy5zHDxgAM4zumjgTw83q2ge/PI+yyw8=
 git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260422124021-a17fad509c3f h1:owyvtTbEATjzuyXE0kBUrctGYbqr5H4e6ZeuglQVqxg=
 git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260422124021-a17fad509c3f/go.mod h1:hID7+x7RWpWDk6+fADHUxWzG3I9CrBR28wykzyg9kIQ=
-git.pingcap.net/pingkai/kvproto v0.0.0-20260422070144-78fa58de47a7 h1:56vlS92EDUYTARJ03CJxstPhz1Mxoh0XLAr3m6Z5awY=
-git.pingcap.net/pingkai/kvproto v0.0.0-20260422070144-78fa58de47a7/go.mod h1:z6+aAHB7dBkA+LyinEX+48/ImRJ3jag0Hg0c7wkhEvE=
-git.pingcap.net/pingkai/pd/client v0.0.0-20260422112300-9745e622cc34 h1:iSmfbNnYSWQDryWMNs7Q72X2yc/fJoA1NEoK/28muGE=
-git.pingcap.net/pingkai/pd/client v0.0.0-20260422112300-9745e622cc34/go.mod h1:TVkoKVybeW+tNA5SjCjBV3vdBsUvQ9/Ca1liKpkdvcI=
+git.pingcap.net/pingkai/kvproto v0.0.0-20260429123007-3068a90709d9 h1:r+td9e5Z4ecBESOjeFIokt4hVLnVdgTYezjkxQShnNY=
+git.pingcap.net/pingkai/kvproto v0.0.0-20260429123007-3068a90709d9/go.mod h1:z6+aAHB7dBkA+LyinEX+48/ImRJ3jag0Hg0c7wkhEvE=
+git.pingcap.net/pingkai/pd/client v0.0.0-20260430020546-534ae626de31 h1:HZO0GX0xIMV27D67auY3QG61u3fku4glXWu8S/U8ya8=
+git.pingcap.net/pingkai/pd/client v0.0.0-20260430020546-534ae626de31/go.mod h1:f6qp4TTIqVqpU6M9GaHOZPOXBh6i4q+phGPcD2gJMns=
 git.pingcap.net/pingkai/tigateway v0.0.0-20250827135949-571b07ebeac7 h1:yQqoacTaig/cQYTGY/IgxVq5PNWBP1mztXBwIeSmwrM=
 git.pingcap.net/pingkai/tigateway v0.0.0-20250827135949-571b07ebeac7/go.mod h1:EiGQ8bXrrBxWZKsYmez1+kCwlHIBViTBtgQyE76YvIc=
 git.sr.ht/~sbinet/gg v0.3.1/go.mod h1:KGYtlADtqsqANL9ueOFkWymvzUvLMQllU5Ixo+8v3pc=

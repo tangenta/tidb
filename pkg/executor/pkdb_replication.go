@@ -19,9 +19,11 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/metadef"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/logutil"
+	"github.com/pingcap/tidb/pkg/util/sqlkiller"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -112,7 +114,7 @@ func (e *CreateLogReplicationExec) Open(ctx context.Context) error {
 		return nil
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // Next implements the Executor Next interface.
@@ -361,7 +363,12 @@ func newWorkflowNotCancelableErr(workflowID uint64) error {
 	return errors.Errorf("workflow %d cannot be cancelled at the moment", workflowID)
 }
 
-func pollWorkflowComplete(ctx context.Context, workflowLister logReplWorkflowLister, workflowID uint64) error {
+func pollWorkflowComplete(
+	ctx context.Context,
+	workflowLister logReplWorkflowLister,
+	workflowID uint64,
+	sqlKiller *sqlkiller.SQLKiller,
+) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 100 * time.Millisecond
 	bo.RandomizationFactor = 0
@@ -371,6 +378,10 @@ func pollWorkflowComplete(ctx context.Context, workflowLister logReplWorkflowLis
 	bo.Reset()
 
 	err := backoff.RetryNotify(func() error {
+		if err := sqlKiller.HandleSignal(); err != nil {
+			return backoff.Permanent(err)
+		}
+
 		// TODO: optimize by adding a PD API to query workflow status by ID,
 		// instead of listing all workflows and find the target one.
 		workflows, err := workflowLister.ListLogReplWorkflows(ctx)
@@ -423,6 +434,70 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 	do := domain.GetDomain(e.Ctx())
 	pdCli := do.GetPDClient()
 
+	// wait until lag is low before switching to sync replication
+	if e.ProtectionMode != ast.ProtectionModeMaximumPerformance {
+		maxLagSec := int64(vardef.DefTiDBAlterSyncMaxLagSeconds)
+		if s, err := e.Ctx().GetSessionVars().GetSessionOrGlobalSystemVar(ctx, vardef.TiDBAlterSyncMaxLagSeconds); err == nil {
+			if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
+				maxLagSec = v
+			}
+		}
+
+	waitLagRetryLoop:
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := e.Ctx().GetSessionVars().SQLKiller.HandleSignal(); err != nil {
+				return err
+			}
+
+			statuses, err := pdCli.ListLogReplStatuses(ctx)
+			if err != nil {
+				return err
+			}
+
+			var targetStatus *pdpb.LogReplicationStatus
+			for _, status := range statuses {
+				if status.GetName() == e.Name.L {
+					targetStatus = status
+				}
+			}
+			if targetStatus == nil {
+				return errors.Errorf("no replication status found for %s", e.Name)
+			}
+
+			// TODO(lance6716): let PD export these strings, like LogReplicationStateSyncReplicating
+			lagSec := int64(-1)
+			state := targetStatus.GetState()
+			switch state {
+			case "SYNC_REPLICATING":
+				break waitLagRetryLoop
+			case "ASYNC_REPLICATING":
+				lagSec = targetStatus.GetCheckpointLagSec()
+			case "UNKNOWN", "INITIALIZING":
+				// leave lagSec = -1 to retry
+			case "PAUSED", "MAYBE_BLOCKING_SUSPENDED", "NON_BLOCKING_SUSPENDED":
+				return errors.Errorf("replication status for %s is %s, can't ALTER", e.Name.L, state)
+			}
+
+			if lagSec < 0 || lagSec > maxLagSec {
+				logutil.Logger(ctx).Warn("lag is too large or unavailable, will wait lag decreased",
+					zap.String("state", state),
+					zap.Int64("currentLagSec", lagSec),
+					zap.Int64("maxLagSec", maxLagSec))
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Second):
+					continue
+				}
+			}
+
+			break
+		}
+	}
+
 	opts := pd.LogReplicationOptions{
 		ProtectionMode:     astProtectionModeToPB(e.ProtectionMode),
 		DegradeTimeoutSec:  e.DegradeTimeoutSec,
@@ -437,7 +512,7 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // PauseLogReplicationExec executes PAUSE LOG REPLICATION statement.
@@ -457,7 +532,7 @@ func (e *PauseLogReplicationExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // ResumeLogReplicationExec executes RESUME LOG REPLICATION statement.
@@ -477,7 +552,7 @@ func (e *ResumeLogReplicationExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // DropLogReplicationExec executes DROP LOG REPLICATION statement.
@@ -497,7 +572,7 @@ func (e *DropLogReplicationExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // SwitchOverPrimaryExec executes ADMIN SWITCHOVER PRIMARY statement.
@@ -520,7 +595,7 @@ func (e *SwitchOverPrimaryExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // SwitchOverAsPrimaryExec executes ADMIN SWITCHOVER AS PRIMARY statement.
@@ -554,7 +629,7 @@ func (e *SwitchOverAsPrimaryExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }
 
 // ActivateStandbyExec executes ADMIN ACTIVATE STANDBY statement.
@@ -589,5 +664,5 @@ func (e *ActivateStandbyExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	return pollWorkflowComplete(ctx, pdCli, workflowID)
+	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
 }

@@ -57,8 +57,8 @@ func (e *memtableRetriever) setDataForLogReplStatusGlobal(ctx context.Context, s
 			row[6].SetUint64(status.CheckpointTs) // CHECKPOINT_TS
 			goTime := oracle.GetTimeFromTS(status.CheckpointTs)
 			checkpointTime := types.NewTime(types.FromGoTime(goTime), mysql.TypeTimestamp, types.DefaultFsp)
-			row[7].SetMysqlTime(checkpointTime)            // CHECKPOINT_TIME
-			row[8].SetUint64(uint64(status.CheckpointLag)) // CHECKPOINT_LAG
+			row[7].SetMysqlTime(checkpointTime)               // CHECKPOINT_TIME
+			row[8].SetUint64(uint64(status.CheckpointLagSec)) // CHECKPOINT_LAG
 		}
 
 		row[9].SetFloat32(status.InitializingProgress) // INITIALIZING_PROGRESS
@@ -254,8 +254,8 @@ func buildLogReplStatusLocalRow(localStatus *pdpb.LogReplicationLocalStatus) ([]
 	if status.GetCheckpointTs() > 0 {
 		row[10].SetUint64(status.GetCheckpointTs()) // CHECKPOINT_TS
 		checkpointTime := types.NewTime(types.FromGoTime(oracle.GetTimeFromTS(status.GetCheckpointTs())), mysql.TypeTimestamp, types.DefaultFsp)
-		row[11].SetMysqlTime(checkpointTime)                 // CHECKPOINT_TIME
-		row[12].SetUint64(uint64(status.GetCheckpointLag())) // CHECKPOINT_LAG
+		row[11].SetMysqlTime(checkpointTime)                    // CHECKPOINT_TIME
+		row[12].SetUint64(uint64(status.GetCheckpointLagSec())) // CHECKPOINT_LAG
 	}
 
 	switchoverReady := "UNKNOWN"
