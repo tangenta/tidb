@@ -1,156 +1,78 @@
-# AGENTS.md
+# Repository Guidelines
 
-This file provides guidance to agents working in this repository.
+## Code Organization
 
-## Purpose and Precedence
+See `docs/agents/architecture-index.md`.
 
-- MUST means required.
-- SHOULD means recommended unless there is a concrete reason to deviate.
-- MAY means optional.
-- Root `AGENTS.md` defines repository-wide defaults. If a deeper path later adds a more specific `AGENTS.md`, the deeper file SHOULD be treated as higher precedence for that subtree.
+## Building
 
-## Non-negotiables
+```
+make build
+```
 
-1. Correctness first. TiDB is a distributed SQL database; seemingly small changes can alter SQL semantics, consistency, or cluster behavior.
-2. No speculative behavior. Do not invent APIs, defaults, protocol behavior, or test workflows.
-3. Keep diffs minimal. Avoid unrelated refactors, broad renames, or formatting-only churn unless explicitly requested.
-4. Leave verifiable evidence. Run targeted checks and report exact commands.
-5. Respect generated code artifacts. Do not hand-edit generated code outputs; regenerate from source inputs.
+## Testing
 
-## Quick Decision Matrix
+See `docs/agents/test-guide.md`.
 
-| Task | Required action |
-| --- | --- |
-| Running package unit tests | SHOULD run targeted tests (`go test -run <TestName> -tags=intest,deadlock`) and avoid full-package runs unless needed. |
-| Unit tests in a package that uses failpoints | MUST enable failpoints before tests and disable afterward (see `docs/agents/testing-flow.md`). |
-| Recording integration tests | MUST use `pushd tests/integrationtest && ./run-tests.sh -r <TestName> && popd` (not `-record`; `-record` is for unit-test suites that explicitly support it). |
-| RealTiKV tests | MUST start playground in background, run tests, then clean up playground/data (see `docs/agents/testing-flow.md`). |
-| Bug fix | MUST add a regression test and verify it fails before fix and passes after fix. |
-| Fmt-only PR | MUST NOT run costly `realtikvtest`; local compilation is enough. |
-| Before finishing | SHOULD self-review diff quality before finishing. |
+## Workflow Principles
 
-### Skills
+- When working with each components, lookup and fully read `MAINTAINER_GUIDE.md` inside (if exists) first, e.g. `pkg/ddl/MAINTAINER_GUIDE.md`.
+  It helps you understand the whole codebase architecture.
+  It is critical to learn design decisions and invariants of each component before you plan or start changes to ensure you are on the right track.
+- Update the MAINTAINER_GUIDE.md after your changes if necessary.
+- Don't run all tests in the workspace as it is extremely slow. Run targeted tests.
+- Always ensure format is ok (`make fmt`) before you finish your work.
+- Run `make check` before you finish your work when the change touches Go-related files such as `*.go`. If there are no Go-related file changes, skip `make check`.
+- **NEVER** use git to discard or revert any changes not made by you - they are proposely changed by user and you should live with that.
 
-- Repository-level Codex skills are maintained under `.agents/skills` (relative to the repository root / current working directory).
-- Keep skill content and references together under each skill folder (for example: `.agents/skills/<skill>/SKILL.md` and `.agents/skills/<skill>/references/`).
-- `.github/skills` is kept only as a migration note path and should not be used as the primary location for new skill updates.
+## Engineering Rules
 
-## Pre-flight Checklist
+This project requires extremely high code quality and maintainability. Best engineering practices must be followed at all times.
 
-1. Restate the task goal and acceptance criteria.
-2. Locate the owning subsystem and the closest existing tests (`Repository Map`, `Task -> Validation Matrix`).
-3. Decide prerequisites before running tests/build (`docs/agents/testing-flow.md` -> `Failpoint decision for unit tests`).
-4. Pick the smallest valid validation set and prepare final reporting items (`Agent Output Contract`).
-5. If `AGENTS.md` or docs under `docs/agents/` changed, follow the checklist in `docs/agents/agents-review-guide.md` before finishing.
+The rules below are some typical principles. They are not exhaustive, and you must always use your best judgment to **write the cleanest code possible**.
 
-## Repository Map (Entry Points)
+### Core Principles: Simplicity & Readability
 
-- Detailed subsystem path mapping and test surfaces live in `docs/agents/architecture-index.md` (source of truth).
-- Update policy: when module/path mapping changes, update `docs/agents/architecture-index.md` first; update this section only when top-level entry points change.
-- `/pkg/planner/`: planner and optimization entrypoint.
-- `/pkg/executor/`, `/pkg/expression/`: SQL execution and expression evaluation.
-- `/pkg/session/`, `/pkg/sessionctx/`: session lifecycle and runtime statement context.
-- `/pkg/ddl/`, `/pkg/infoschema/`, `/pkg/meta/`: schema and metadata management.
-- `/pkg/store/`, `/pkg/kv/`: storage and distributed query interfaces.
-- `/pkg/statistics/`: statistics and estimation behavior entrypoint.
-- `/pkg/parser/`: SQL grammar and AST.
-- `/tests/integrationtest/`, `/tests/realtikvtest/`: SQL integration and real TiKV test surfaces.
-- `/cmd/tidb-server/`: TiDB server entrypoint.
+- Boring Code - Obvious, self-explanatory > clever, minimize cognitive load
+- Single Responsibility - One function, one job
+- Explicit over Implicit - Clear is better than concise
+- Meaningful Abstractions - Only when they reduce cognitive load
+- Keep DRY - Only if it does not conflict with the above principles
 
-## Notes
+### Better Maintainability
 
-- Follow `docs/agents/notes-guide.md`.
-- DDL module-only rules (applies to changes under `pkg/ddl/` and `docs/agents/ddl/`):
-  - MUST: Before making/reviewing any DDL changes in the DDL module, read `docs/agents/ddl/README.md` first and use it as the default map of the execution framework.
-  - Debugging: You MAY reference `docs/agents/ddl/*`, but you MUST NOT treat it as authoritative. Treat it as hypotheses until verified in code/tests (avoid hallucination/outdated assumptions).
-  - Doc drift: If implementation and `docs/agents/ddl/*` differ, you MUST update the docs to match reality and call it out in the PR/issue. Do not defer.
+- Keep the public API surface minimal; prefer reusing existing methods
+- Don't treat "looks similar" as "equivalent"
+- Abstractions must be meaningful
+- Keep certainty, single source of truth - e.g. don't introduce "optional" unless absolutely necessary
+- Always add clear, concise and explicit doc comments for public APIs, complex logic, and non-obvious code
 
-## Task -> Validation Matrix
+For non-refactor tasks:
 
-Use the smallest set that still proves correctness.
+- Prefer minimal, necessary, localized changes
+- Follow existing code patterns, even if they are not ideal or party against our principles
+  - Do your best to trade off between "ideal code", "consistent codebase", "only change what is necessary"
+  - Point out any refactor chance you discovered after finishing your work, avoid changing them in the same work. Let human decides later.
 
-Typical package unit test command: `go test -run <TestName> -tags=intest,deadlock` (see `docs/agents/testing-flow.md`).
+### Naming Symbols
 
-| Change scope | Minimum validation |
-| --- | --- |
-| `pkg/planner/**` rules or logical/physical plans | Targeted planner unit tests (`go test -run <TestName> -tags=intest,deadlock`) and update rule testdata when needed |
-| `pkg/executor/**` SQL behavior | Targeted unit test plus relevant integration test (`tests/integrationtest`) |
-| `pkg/expression/**` builtins or type inference | Targeted expression unit tests with edge-case coverage |
-| `pkg/session/**` / variables / protocol behavior | Targeted package tests plus SQL integration tests for user-visible behavior |
-| `pkg/ddl/**` schema changes | DDL-focused unit/integration tests and compatibility impact checks |
-| `pkg/store/**` / `pkg/kv/**` storage behavior | Targeted unit tests; use realtikv tests if behavior depends on real TiKV |
-| Parser files (`pkg/parser/**`) | Parser-specific Make targets and related unit tests |
-| `tests/integrationtest/t/**` changed | `pushd tests/integrationtest && ./run-tests.sh -r <TestName> && popd` and verify regenerated result correctness |
-| `tests/realtikvtest/**` changed | Start playground, run scoped `go test -tags=intest,deadlock`, then mandatory cleanup |
+- Choosing the name that needs the least explanation, consider: verb clarity, noun specificity, context
+- Name tests by behavior and expectation.
 
-## Testing Policy
+### Conflict Management
 
-- Detailed command playbooks live in `docs/agents/testing-flow.md`.
-- Select required test surfaces first (`Task -> Validation Matrix`), then run scoped commands.
-- Prefer targeted runs (`-run <TestName>`). Avoid package-wide runs unless needed for broad refactors, CI reproduction, or shared golden/testdata updates.
-- If a package uses failpoints, MUST enable failpoints before tests and disable them afterward.
-- Failpoint decision MUST follow `docs/agents/testing-flow.md`: if failpoint search checks have no matches, run without failpoint enable/disable and state the evidence in the final report.
-- Bug fixes MUST add regression tests and verify fail-before-fix/pass-after-fix (or document why pre-fix reproduction is infeasible).
-- Integration test recording MUST use `pushd tests/integrationtest && ./run-tests.sh -r <TestName> && popd`.
-- RealTiKV tests MUST start playground in background and perform mandatory cleanup.
+To minimize conflicts that arise when merging commits that are ahead of upstream TiDB, reduce code maintenance costs, and alleviate the mental burden of resolving conflicts, the following guidelines should be followed when developing PingKaiDB-specific features:
+- Minimize intrusions into the TiDB codebase. For existing TiDB code files, make as few modifications as possible and insert only necessary entry functions.
+- The main logic should be written in separate code files and named with the prefix `pkdb_`.
+- If they exist as a separate package, the package name should begin with `pkdb`, such as `pkdblicense`.
 
-## Code Style Guide
+## Pull Request Guide
 
-### Go and backend code
-
-- Because TiDB is a complex system, code SHOULD remain maintainable for future readers with basic TiDB familiarity, including readers who are not experts in the specific subsystem/feature.
-- Follow existing package-local conventions first and keep style consistent with nearby files.
-- Code SHOULD be self-documenting through clear naming and structure.
-  - Example: when implementing a well-known algorithm, naming SHOULD be clear enough to make the approach recognizable; if naming alone may not make intent obvious, add a brief comment.
-- Keep changes focused; avoid unrelated refactors, renames, or moves in the same PR.
-- Keep error handling actionable and contextual; avoid silently swallowing errors.
-- For new source files (for example `*.go`), include the standard TiDB license header (copyright + Apache 2.0) by copying from a nearby file and updating year if needed.
-- Comments SHOULD explain non-obvious intent, constraints, invariants, concurrency guarantees, SQL/compatibility contracts, or important performance trade-offs, and SHOULD NOT restate what the code already makes clear.
-- Keep exported-symbol doc comments, and prefer semantic constraints over name restatement.
-
-### Tests and testdata
-
-- Prefer extending existing test suites and fixtures over creating new scaffolding.
-- Keep test changes minimal and deterministic; avoid broad golden/testdata churn unless required.
-- For planner predicate pushdown cases, keep SQL-only statements in `predicate_pushdown_suite_in.json` and put DDL in setup.
-- When recording outputs, verify changed result files before reporting completion.
-
-### Docs and command snippets
-
-- Commands in docs SHOULD be copy-pasteable from repository root unless explicitly scoped.
-- Use explicit placeholders such as `<package_name>`, `<TestName>`, and `<dir>`.
-- Documentation updates SHOULD keep terminology, policy wording, and command conventions consistent across related docs.
-- Keep guidance executable and concrete; avoid ambiguous phrasing.
-- Issues and PRs MUST be written in English (title and description).
-
-## Issue and PR Rules
-
-### Issue rules
-
-- Follow templates under `.github/ISSUE_TEMPLATE/` and fill all required fields.
-- Bug reports should include minimal reproduction, expected/actual behavior, and TiDB version (for example `SELECT tidb_version()` output).
-- Search existing issues/PRs first (for example `gh search issues --repo pingcap/tidb --include-prs "<keywords>"`), then add relevant logs/configuration/SQL plans.
-- Labeling requirements:
-  - `type/*` is usually applied by the issue template (GitHub UI); if creating issues via `gh issue create`, add it explicitly via `--label` (or follow up with `gh issue edit --add-label`).
-  - Add at least one `component/*` label.
-  - For bug/regression, include `severity/*` and affected-version labels (for example `affects-8.5`, or `may-affects-*` if unsure).
-  - If label permissions are missing, include `Suggested labels: ...` in issue body.
-
-### PR requirements
-
-- PR title MUST use one of:
-  - `pkg [, pkg2, pkg3]: what is changed`
-  - `*: what is changed`
-- PR description MUST follow `.github/pull_request_template.md`.
-- PR description MUST contain one line starting with `Issue Number:` and reference related issue(s) using `close #<id>` or `ref #<id>`.
-- If you create PRs via GitHub CLI, start from the template to avoid breaking required HTML comments: `gh pr create -T .github/pull_request_template.md` (then fill in the fields; do not delete/alter the HTML comment markers).
-- Keep HTML comments unchanged, including `Tests <!-- At least one of them must be included. -->`, because CI tooling depends on them.
-- Avoid force-push when possible; prefer follow-up commits and squash merge.
-- If force-push is unavoidable, use `--force-with-lease` and coordinate with reviewers.
+- See `docs/agents/pull-request-guide.md`.
 
 ## Agent Output Contract
 
-When finishing a task, report:
+When finishing a coding task, report:
 
 1. Files changed.
 2. Risks: correctness, compatibility, performance.
