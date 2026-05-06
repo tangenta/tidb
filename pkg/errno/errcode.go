@@ -1177,9 +1177,12 @@ const (
 	ErrRowLabelUnAccessible = 8800
 	ErrInvalidValueOfType   = 8801
 
-	// 8802 ~ 8804 are reserved for LBAC errors.
-	// 8805 ~ 8809 are reserved for tablegroup errors.
+	// LBAC errors.
+	ErrLBACInvalid       = 8802
+	ErrLBACNotFound      = 8803
+	ErrLBACAlreadyExists = 8804
 
+	// 8805 ~ 8809 are reserved for tablegroup errors.
 	ErrProcedureDisabled = 8810
 
 	// TiKV/PD/TiFlash errors.

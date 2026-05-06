@@ -276,9 +276,9 @@ func makeRoutineChunkRow(schema, name, routineType string) chunk.Row {
 		types.NewStringDatum("utf8mb4_bin"),
 		types.NewTimeDatum(types.ZeroTimestamp),
 		types.NewTimeDatum(types.ZeroTimestamp),
-		types.Datum{},
-		types.Datum{},
-		types.Datum{},
+		{},
+		{},
+		{},
 	}
 	return chunk.MutRowFromDatums(datums).ToRow()
 }

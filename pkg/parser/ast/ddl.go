@@ -527,6 +527,7 @@ const (
 	ColumnOptionAutoRandom
 	ColumnOptionSecondaryEngineAttribute
 	ColumnOptionEncryption
+	ColumnOptionSecuredWith
 )
 
 var (
@@ -686,6 +687,9 @@ func (n *ColumnOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("SECONDARY_ENGINE_ATTRIBUTE")
 		ctx.WritePlain(" = ")
 		ctx.WriteString(n.StrValue)
+	case ColumnOptionSecuredWith:
+		ctx.WriteKeyWord("SECURED WITH ")
+		ctx.WriteName(n.StrValue)
 	default:
 		return errors.New("An error occurred while splicing ColumnOption")
 	}
@@ -2785,6 +2789,7 @@ const (
 	TableOptionTableCheckSum
 	TableOptionUnion
 	TableOptionEncryption
+	TableOptionSecurityPolicy
 	TableOptionTTL
 	TableOptionTTLEnable
 	TableOptionTTLJobInterval
@@ -3100,6 +3105,9 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("ENCRYPTION ")
 		ctx.WritePlain("= ")
 		ctx.WriteString(n.StrValue)
+	case TableOptionSecurityPolicy:
+		ctx.WriteKeyWord("SECURITY POLICY ")
+		ctx.WriteName(n.StrValue)
 	case TableOptionPlacementPolicy:
 		if ctx.Flags.HasSkipPlacementRuleForRestoreFlag() {
 			return nil

@@ -114,8 +114,8 @@ const (
 	// TableRoutines is the string constant of infoschema table.
 	TableRoutines = "ROUTINES"
 	// TableParameters is the string constant of infoschema table.
-	TableParameters = "PARAMETERS"
-	tableEvents     = "EVENTS"
+	TableParameters     = "PARAMETERS"
+	tableEvents         = "EVENTS"
 	tableOptimizerTrace = "OPTIMIZER_TRACE"
 	tableTableSpaces    = "TABLESPACES"
 	// TableCollationCharacterSetApplicability is the string constant of infoschema memory table.

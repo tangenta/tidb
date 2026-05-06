@@ -42,6 +42,12 @@ const (
 	CreatePlacementPolicyCommand = "CREATE PLACEMENT POLICY"
 	// CreateMaskingPolicyCommand represents CREATE MASKING POLICY statement
 	CreateMaskingPolicyCommand = "CREATE MASKING POLICY"
+	// CreateSecurityLabelComponentCommand represents CREATE SECURITY LABEL COMPONENT statement
+	CreateSecurityLabelComponentCommand = "CREATE SECURITY LABEL COMPONENT"
+	// CreateSecurityPolicyCommand represents CREATE SECURITY POLICY statement
+	CreateSecurityPolicyCommand = "CREATE SECURITY POLICY"
+	// CreateSecurityLabelCommand represents CREATE SECURITY LABEL statement
+	CreateSecurityLabelCommand = "CREATE SECURITY LABEL"
 	// CreateResourceGroupCommand represents CREATE RESOURCE GROUP statement
 	CreateResourceGroupCommand = "CREATE RESOURCE GROUP"
 	// CreateSequenceCommand represents CREATE SEQUENCE statement
@@ -58,6 +64,12 @@ const (
 	DropIndexCommand = "DROP INDEX"
 	// DropPlacementPolicyCommand represents DROP PLACEMENT POLICY statement
 	DropPlacementPolicyCommand = "DROP PLACEMENT POLICY"
+	// DropSecurityLabelComponentCommand represents DROP SECURITY LABEL COMPONENT statement
+	DropSecurityLabelComponentCommand = "DROP SECURITY LABEL COMPONENT"
+	// DropSecurityPolicyCommand represents DROP SECURITY POLICY statement
+	DropSecurityPolicyCommand = "DROP SECURITY POLICY"
+	// DropSecurityLabelCommand represents DROP SECURITY LABEL statement
+	DropSecurityLabelCommand = "DROP SECURITY LABEL"
 	// DropResourceGroupCommand represents DROP RESOURCE GROUP statement
 	DropResourceGroupCommand = "DROP RESOURCE GROUP"
 	// DropSequenceCommand represents DROP SEQUENCE statement
@@ -423,6 +435,10 @@ const (
 	FlushCommand = "FLUSH"
 	// GrantCommand represents GRANT statement
 	GrantCommand = "GRANT"
+	// GrantSecurityLabelCommand represents GRANT SECURITY LABEL statement
+	GrantSecurityLabelCommand = "GRANT SECURITY LABEL"
+	// GrantExemptionCommand represents GRANT EXEMPTION statement
+	GrantExemptionCommand = "GRANT EXEMPTION"
 	// GrantProxyCommand represents GRANT PROXY statement
 	GrantProxyCommand = "GRANT PROXY"
 	// GrantRoleCommand represents GRANT ROLE statement
@@ -443,6 +459,10 @@ const (
 	RestartCommand = "RESTART"
 	// RevokeCommand represents REVOKE statement
 	RevokeCommand = "REVOKE"
+	// RevokeSecurityLabelCommand represents REVOKE SECURITY LABEL statement
+	RevokeSecurityLabelCommand = "REVOKE SECURITY LABEL"
+	// RevokeExemptionCommand represents REVOKE EXEMPTION statement
+	RevokeExemptionCommand = "REVOKE EXEMPTION"
 	// RevokeRoleCommand represents REVOKE ROLE statement
 	RevokeRoleCommand = "REVOKE ROLE"
 	// RollbackCommand represents ROLLBACK statement
@@ -566,6 +586,21 @@ func (n *CreateMaskingPolicyStmt) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
+func (n *CreateSecurityLabelComponentStmt) SEMCommand() string {
+	return CreateSecurityLabelComponentCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateSecurityPolicyStmt) SEMCommand() string {
+	return CreateSecurityPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateSecurityLabelStmt) SEMCommand() string {
+	return CreateSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
 func (n *CreateResourceGroupStmt) SEMCommand() string {
 	return CreateResourceGroupCommand
 }
@@ -603,6 +638,21 @@ func (n *DropIndexStmt) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *DropPlacementPolicyStmt) SEMCommand() string {
 	return DropPlacementPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityLabelComponentStmt) SEMCommand() string {
+	return DropSecurityLabelComponentCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityPolicyStmt) SEMCommand() string {
+	return DropSecurityPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityLabelStmt) SEMCommand() string {
+	return DropSecurityLabelCommand
 }
 
 // SEMCommand returns the command string for the statement.
@@ -1125,6 +1175,16 @@ func (n *GrantStmt) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
+func (n *GrantSecurityLabelStmt) SEMCommand() string {
+	return GrantSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *GrantExemptionStmt) SEMCommand() string {
+	return GrantExemptionCommand
+}
+
+// SEMCommand returns the command string for the statement.
 func (n *GrantProxyStmt) SEMCommand() string {
 	return GrantProxyCommand
 }
@@ -1172,6 +1232,16 @@ func (n *RestartStmt) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *RevokeStmt) SEMCommand() string {
 	return RevokeCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *RevokeSecurityLabelStmt) SEMCommand() string {
+	return RevokeSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *RevokeExemptionStmt) SEMCommand() string {
+	return RevokeExemptionCommand
 }
 
 // SEMCommand returns the command string for the statement.

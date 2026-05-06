@@ -35,7 +35,7 @@ func TestCollectConflictsStepExecutor(t *testing.T) {
 	outSTMeta := &importinto.CollectConflictsStepMeta{}
 	require.NoError(t, json.Unmarshal(st.Meta, outSTMeta))
 	expectedSum := &importinto.Checksum{
-		Sum:  16114443508119636433,
+		Sum:  4109029212193547166,
 		KVs:  27,
 		Size: 909,
 	}
@@ -43,7 +43,7 @@ func TestCollectConflictsStepExecutor(t *testing.T) {
 	if kerneltype.IsNextGen() {
 		// table ID in next-gen is different with classic, so we cannot directly
 		// calculate the checksum from the classic one.
-		expectedSum.Sum = 14922214191116943518
+		expectedSum.Sum = 12441836427132125138
 	}
 	require.EqualValues(t, expectedSum, outSTMeta.Checksum)
 	require.EqualValues(t, 9, outSTMeta.ConflictedRowCount)

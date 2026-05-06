@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/privilege"
 	"github.com/pingcap/tidb/pkg/privilege/conn"
+	"github.com/pingcap/tidb/pkg/privilege/lbac"
 	"github.com/pingcap/tidb/pkg/privilege/privileges/ldap"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/sessionstates"
@@ -428,6 +429,26 @@ func (p *UserPrivileges) GetUserResources(user, host string) (int64, error) {
 		return record.MaxUserConnections, nil
 	}
 	return 0, errors.New("Failed to get max user connections")
+}
+
+// GetSecurityLabelCache exposes the LBAC metadata cache for access checks.
+func (p *UserPrivileges) GetSecurityLabelCache() *lbac.SecurityLabelCache {
+	return p.Handle.Get().GetSecurityLabelCache()
+}
+
+// GetEncodedPassword implements the Manager interface.
+func (p *UserPrivileges) GetEncodedPassword(user, host string) string {
+	mysqlPriv := p.Handle.Get()
+	record := mysqlPriv.connectionVerification(user, host)
+	if record == nil {
+		logutil.BgLogger().Error("get user privilege record fail",
+			zap.String("user", user), zap.String("host", host))
+		return ""
+	}
+	if p.isValidHash(record) {
+		return record.AuthenticationString
+	}
+	return ""
 }
 
 // GetAuthPluginForConnection gets the authentication plugin used in connection establishment.

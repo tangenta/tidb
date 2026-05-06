@@ -53,6 +53,8 @@ type DeleteExec struct {
 	triggerExec *TriggerExec
 
 	ignoreErr bool
+
+	lbacGuard *lbacDMLGuard
 }
 
 // Next implements the Executor Next interface.
@@ -78,6 +80,16 @@ func (e *DeleteExec) deleteOneRow(tbl table.Table, colInfo *physicalop.TblColPos
 		return err
 	}
 	return nil
+}
+
+func (e *DeleteExec) initLBACGuard() (err error) {
+	if !vardef.EnableLBAC.Load() || e.IsMultiTable || len(e.tblColPosInfos) == 0 {
+		return nil
+	}
+	colPosInfo := &e.tblColPosInfos[0]
+	tbl := e.tblID2Table[colPosInfo.TblID]
+	e.lbacGuard, err = newLBACDMLGuard(e.Ctx(), tbl.Meta())
+	return err
 }
 
 func (e *DeleteExec) deleteSingleTableByChunk(ctx context.Context) error {
@@ -142,6 +154,12 @@ func (e *DeleteExec) deleteSingleTableByChunk(ctx context.Context) error {
 				if ignored {
 					datumRow = datumRow[:0]
 					continue
+				}
+			}
+			if e.lbacGuard != nil {
+				labelDatum := datumRow[e.lbacGuard.labelColOffset]
+				if err := e.lbacGuard.CheckRowLabelAccess(labelDatum); err != nil {
+					return err
 				}
 			}
 			err = e.deleteOneRow(tbl, colPosInfo, isExtraHandle, datumRow)

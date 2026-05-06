@@ -1230,6 +1230,9 @@ func constructResultOfShowCreateTable(ctx sessionctx.Context, dbName *ast.CIStr,
 				fmt.Fprintf(buf, " /*T![auto_rand] AUTO_RANDOM(%d, %d) */", s, r)
 			}
 		}
+		if col.SecurityLabel != nil && col.SecurityLabel.O != "" {
+			fmt.Fprintf(buf, " SECURED WITH %s", stringutil.Escape(col.SecurityLabel.O, sqlMode))
+		}
 		if len(col.Comment) > 0 {
 			fmt.Fprintf(buf, " COMMENT '%s'", format.OutputFormat(col.Comment))
 		}
@@ -1453,6 +1456,10 @@ func constructResultOfShowCreateTable(ctx sessionctx.Context, dbName *ast.CIStr,
 
 	if tableInfo.AutoRandomBits > 0 && tableInfo.PreSplitRegions > 0 {
 		fmt.Fprintf(buf, " /*T! PRE_SPLIT_REGIONS=%d */", tableInfo.PreSplitRegions)
+	}
+
+	if tableInfo.SecurityPolicy != nil {
+		fmt.Fprintf(buf, " SECURITY POLICY %s", stringutil.Escape(tableInfo.SecurityPolicy.O, sqlMode))
 	}
 
 	if len(tableInfo.Comment) > 0 {

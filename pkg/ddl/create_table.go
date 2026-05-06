@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	field_types "github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/privilege/lbac"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
@@ -834,6 +835,10 @@ func BuildTableInfoWithStmt(ctx *metabuild.Context, s *ast.CreateTableStmt, dbCh
 		return nil, errors.Trace(err)
 	}
 
+	if err = validateSecurityLabelColumn(tbInfo); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	if _, err = validateCommentLength(ctx.GetExprCtx().GetEvalCtx().ErrCtx(), ctx.GetSQLMode(), tbInfo.Name.L, &tbInfo.Comment, dbterror.ErrTooLongTableComment); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -855,6 +860,23 @@ func BuildTableInfoWithStmt(ctx *metabuild.Context, s *ast.CreateTableStmt, dbCh
 	}
 
 	return tbInfo, nil
+}
+
+func validateSecurityLabelColumn(tbInfo *model.TableInfo) error {
+	if !vardef.EnableLBAC.Load() {
+		return nil
+	}
+
+	hasLabelColumn := false
+	for _, col := range tbInfo.Columns {
+		if col.FieldType.IsSecurityLabel() {
+			if hasLabelColumn {
+				return lbac.ErrMultipleSecurityLabelColumns
+			}
+			hasLabelColumn = true
+		}
+	}
+	return nil
 }
 
 func setTableAutoRandomBits(ctx *metabuild.Context, tbInfo *model.TableInfo, colDefs []*ast.ColumnDef) error {
@@ -993,6 +1015,9 @@ func handleTableOptions(options []*ast.TableOption, tbInfo *model.TableInfo) err
 
 			tbInfo.TTLInfo = ttlInfo
 			ttlOptionsHandled = true
+		case ast.TableOptionSecurityPolicy:
+			policy := ast.NewCIStr(op.StrValue)
+			tbInfo.SecurityPolicy = &policy
 		case ast.TableOptionAffinity:
 			affinity, err := model.NewTableAffinityInfoWithLevel(op.StrValue)
 			if err != nil {

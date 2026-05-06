@@ -80,6 +80,12 @@ func doPkdbDDLWorks(s sessionapi.Session) {
 	mustExecute(s, CreateLSTables)
 	mustExecute(s, CreateLSUsers)
 	mustExecute(s, CreateLSElements)
+	// Create LBAC metadata tables.
+	mustExecute(s, CreateSecurityLabelComponentsTable)
+	mustExecute(s, CreateSecurityPoliciesTable)
+	mustExecute(s, CreateSecurityLabelsTable)
+	mustExecute(s, CreateUserSecurityLabelsTable)
+	mustExecute(s, CreateUserExemptionsTable)
 	// Create login_history table
 	mustExecute(s, CreateLoginHistory)
 	// Create whitelist table
@@ -215,6 +221,45 @@ const (
 		Primary key(policy_name, element_type, element_name),
 		Unique key(policy_name, element_type, element_id)
 	);`
+
+	// CreateSecurityLabelComponentsTable stores security label component definitions.
+	CreateSecurityLabelComponentsTable = `CREATE TABLE IF NOT EXISTS mysql.security_label_components (
+		name VARCHAR(64) NOT NULL PRIMARY KEY,
+		type ENUM('ARRAY', 'SET', 'TREE') NOT NULL,
+		component_values JSON NOT NULL
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+
+	// CreateSecurityPoliciesTable stores security policies.
+	CreateSecurityPoliciesTable = `CREATE TABLE IF NOT EXISTS mysql.security_policies (
+		name VARCHAR(64) NOT NULL PRIMARY KEY,
+		component_names JSON NOT NULL COMMENT 'Array of component names used in this policy',
+		write_control ENUM('RESTRICT', 'OVERRIDE') NOT NULL DEFAULT 'RESTRICT' COMMENT 'Write control for unauthorized labels'
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+
+	// CreateSecurityLabelsTable stores security labels.
+	CreateSecurityLabelsTable = `CREATE TABLE IF NOT EXISTS mysql.security_labels (
+		name VARCHAR(64) NOT NULL PRIMARY KEY,
+		policy_name VARCHAR(64) NOT NULL,
+		components JSON NOT NULL COMMENT 'Map of component_name -> value'
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+
+	// CreateUserSecurityLabelsTable stores user security label grants.
+	CreateUserSecurityLabelsTable = `CREATE TABLE IF NOT EXISTS mysql.user_security_labels (
+		user_name VARCHAR(32) NOT NULL,
+		host VARCHAR(255) NOT NULL DEFAULT '%',
+		label_name VARCHAR(64) NOT NULL,
+		access_types ENUM('READ', 'WRITE', 'ALL') NOT NULL COMMENT 'Access type (READ, WRITE, ALL)',
+		PRIMARY KEY (user_name, host, label_name)
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+
+	// CreateUserExemptionsTable stores user exemption grants.
+	CreateUserExemptionsTable = `CREATE TABLE IF NOT EXISTS mysql.user_exemptions (
+		user_name VARCHAR(32) NOT NULL,
+		host VARCHAR(255) NOT NULL DEFAULT '%',
+		policy_name VARCHAR(64) NOT NULL,
+		rule VARCHAR(255) NOT NULL,
+		PRIMARY KEY (user_name, host, policy_name, rule)
+	) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
 )
 
 func upgradeEEToVer2(s sessionapi.Session, ver int64) {
@@ -327,7 +372,11 @@ func upgradeToEEVer14(s sessionapi.Session, ver int64) {
 	if ver >= eeversion14 {
 		return
 	}
-	// reserve for LBAC implementation.
+	doReentrantDDL(s, CreateSecurityLabelComponentsTable)
+	doReentrantDDL(s, CreateSecurityPoliciesTable)
+	doReentrantDDL(s, CreateSecurityLabelsTable)
+	doReentrantDDL(s, CreateUserSecurityLabelsTable)
+	doReentrantDDL(s, CreateUserExemptionsTable)
 }
 
 func upgradeToEEVer15(s sessionapi.Session, ver int64) {

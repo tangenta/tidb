@@ -40,6 +40,8 @@ const (
 	PKDBEnableEAL = "pkdb_eal"
 	// PKDBExtraDataType indicates whether to enable extra data types.
 	PKDBExtraDataType = "pkdb_extra_data_type"
+	// TiDBEnableLBAC is used to enable or disable LBAC enforcement on TiDB.
+	TiDBEnableLBAC = "pkdb_lbac"
 )
 
 // Default TiDB system variable values.
@@ -61,6 +63,7 @@ const (
 	DefPKDBEnableWhitelist           = false
 	DefPKDBEnableEAL                 = false
 	DefPKDBExtraDataType             = false
+	DefTiDBEnableLBAC                = false
 )
 
 // UnspecifiedServerID indicates the unspecified server id.
@@ -72,4 +75,5 @@ var (
 	EnableScheduleLeaderRuleFn func(v bool) = nil
 	EnableWhitelist                         = atomic.NewBool(DefPKDBEnableWhitelist)
 	EnableEAL                               = atomic.NewBool(DefPKDBEnableEAL)
+	EnableLBAC                              = atomic.NewBool(DefTiDBEnableLBAC)
 )

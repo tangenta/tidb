@@ -255,6 +255,9 @@ type TableInfo struct {
 	// SoftdeleteInfo is softdelete TTL. It is required if IsActiveActive == true.
 	SoftdeleteInfo *SoftdeleteInfo `json:"softdelete_info,omitempty"`
 
+	// SecurityPolicy represents the LBAC security policy for this table
+	SecurityPolicy *ast.CIStr `json:"security_policy,omitempty"`
+
 	// Affinity stores the affinity info for the table
 	// If it is nil, it means no affinity
 	Affinity *TableAffinityInfo `json:"affinity,omitempty"`
@@ -294,6 +297,16 @@ func (t *TableInfo) SepAutoInc() bool {
 	return t.Version >= TableInfoVersion5 && t.AutoIDCache == 1
 }
 
+// GetSecurityLabelColumnID returns the row-level security label column ID, or 0 if absent.
+func (t *TableInfo) GetSecurityLabelColumnID() int64 {
+	for _, col := range t.Columns {
+		if col != nil && col.FieldType.IsSecurityLabel() {
+			return col.ID
+		}
+	}
+	return 0
+}
+
 // GetPartitionInfo returns the partition information.
 func (t *TableInfo) GetPartitionInfo() *PartitionInfo {
 	if t.Partition != nil && t.Partition.Enable {
@@ -310,6 +323,10 @@ func (t *TableInfo) GetUpdateTime() time.Time {
 // Clone clones TableInfo.
 func (t *TableInfo) Clone() *TableInfo {
 	nt := *t
+	if t.SecurityPolicy != nil {
+		securityPolicy := *t.SecurityPolicy
+		nt.SecurityPolicy = &securityPolicy
+	}
 	nt.Columns = make([]*ColumnInfo, len(t.Columns))
 	nt.Indices = make([]*IndexInfo, len(t.Indices))
 	nt.ForeignKeys = nil

@@ -111,6 +111,8 @@ type ColumnInfo struct {
 	//              This will fix bug in version 0. For compatibility with version 0, we add version field in column info struct.
 	Version    uint64 `json:"version"`
 	Encryption bool   `json:"encryption,omitempty"`
+	// SecurityLabel stores the LBAC security label name for the column.
+	SecurityLabel *ast.CIStr `json:"security_label,omitempty"`
 }
 
 // Clone clones ColumnInfo.
@@ -119,6 +121,10 @@ func (c *ColumnInfo) Clone() *ColumnInfo {
 		return nil
 	}
 	nc := *c
+	if c.SecurityLabel != nil {
+		securityLabel := *c.SecurityLabel
+		nc.SecurityLabel = &securityLabel
+	}
 	return &nc
 }
 

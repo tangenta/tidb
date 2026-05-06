@@ -68,6 +68,8 @@ var unFoldableFunctions = map[string]struct{}{
 	ast.AnyValue:        {},
 	ast.SetProcedureVar: {},
 	ast.GetProcedureVar: {},
+	ast.Seclabel:        {},
+	ast.SeclabelToChar:  {},
 }
 
 // DisableFoldFunctions stores functions which prevent child scope functions from being constant folded.
@@ -113,6 +115,7 @@ var IllegalFunctions4GeneratedColumns = map[string]struct{}{
 	ast.IsUsedLock:           {},
 	ast.JSONMerge:            {},
 	ast.LabelAceesible:       {},
+	ast.LBACDominates:        {},
 	ast.LastInsertId:         {},
 	ast.LoadFile:             {},
 	ast.LocalTime:            {},
@@ -126,6 +129,8 @@ var IllegalFunctions4GeneratedColumns = map[string]struct{}{
 	ast.RowCount:             {},
 	ast.RowFunc:              {},
 	ast.Schema:               {},
+	ast.Seclabel:             {},
+	ast.SeclabelToChar:       {},
 	ast.SessionUser:          {},
 	ast.SetProcedureVar:      {},
 	ast.SetVar:               {},

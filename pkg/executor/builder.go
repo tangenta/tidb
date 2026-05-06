@@ -1086,6 +1086,10 @@ func (b *executorBuilder) buildInsert(v *physicalop.Insert) exec.Executor {
 	if b.err != nil {
 		return nil
 	}
+	b.err = ivs.initLBACGuard()
+	if b.err != nil {
+		return nil
+	}
 
 	if v.IsReplace {
 		replace := b.buildReplace(ivs)
@@ -3063,6 +3067,10 @@ func (b *executorBuilder) buildUpdate(v *physicalop.Update) exec.Executor {
 	if b.triggerExec != nil {
 		updateExec.triggerExec = b.triggerExec.initTriggerExec(updateExec, tblID2table, ast.TriggerEventUpdate)
 	}
+	b.err = updateExec.initLBACGuard()
+	if b.err != nil {
+		return nil
+	}
 	return updateExec
 }
 
@@ -3118,6 +3126,10 @@ func (b *executorBuilder) buildDelete(v *physicalop.Delete) exec.Executor {
 	}
 	if b.triggerExec != nil {
 		deleteExec.triggerExec = b.triggerExec.initTriggerExec(deleteExec, tblID2table, ast.TriggerEventDelete)
+	}
+	b.err = deleteExec.initLBACGuard()
+	if b.err != nil {
+		return nil
 	}
 	return deleteExec
 }
