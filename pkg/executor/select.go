@@ -1096,6 +1096,15 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 		sc.IgnoreExplainIDSuffix = sc.ExplainFormat == types.ExplainFormatBrief || sc.ExplainFormat == types.ExplainFormatPlanTree
 		sc.InVerboseExplain = sc.ExplainFormat == types.ExplainFormatVerbose
 		s = explainStmt.Stmt
+	} else if explainRoutineStmt, ok := s.(*ast.ExplainRoutineStmt); ok {
+		sc.InExplainStmt = true
+		sc.ExplainFormat = strings.ToLower(explainRoutineStmt.Format)
+		if sc.ExplainFormat == "" || sc.ExplainFormat == types.ExplainFormatTraditional {
+			sc.ExplainFormat = types.ExplainFormatROW
+		}
+		sc.InExplainAnalyzeStmt = explainRoutineStmt.Analyze
+		sc.IgnoreExplainIDSuffix = sc.ExplainFormat == types.ExplainFormatBrief || sc.ExplainFormat == types.ExplainFormatPlanTree
+		sc.InVerboseExplain = sc.ExplainFormat == types.ExplainFormatVerbose
 	} else {
 		sc.ExplainFormat = ""
 	}
