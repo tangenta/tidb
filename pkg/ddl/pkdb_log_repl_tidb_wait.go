@@ -36,6 +36,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -61,6 +62,33 @@ var (
 	// from PD in waitDataSync.
 	tidbWaitDataSyncScanBatchSize = pkdbDefaultScanPageSize
 )
+
+func pkdbPDSecurityOption() pd.SecurityOption {
+	cfg := config.GetGlobalConfig()
+	return pd.SecurityOption{
+		CAPath:   cfg.Security.ClusterSSLCA,
+		CertPath: cfg.Security.ClusterSSLCert,
+		KeyPath:  cfg.Security.ClusterSSLKey,
+	}
+}
+
+func pkdbTLSConfig() (*tls.Config, error) {
+	security := config.GetGlobalConfig().Security.ClusterSecurity()
+	return security.ToTLSConfig()
+}
+
+func pkdbDebugDialOptions() ([]grpc.DialOption, error) {
+	tlsCfg, err := pkdbTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	var transportCreds credentials.TransportCredentials = insecure.NewCredentials()
+	if tlsCfg != nil {
+		transportCreds = credentials.NewTLS(tlsCfg)
+	}
+	return []grpc.DialOption{grpc.WithTransportCredentials(transportCreds)}, nil
+}
 
 // tidbWaitJob represents a log replication action that need to use tidb-server's
 // capability to wait something happens. The log replication manager in PD uses etcd
@@ -149,14 +177,19 @@ func (j waitRegionsInit) wait(
 	}
 	defer kvCli.Close()
 
-	sourcePDCli, err := pd.NewClientWithContext(runCtx, "log-repl", sourcePDAddrs, pd.SecurityOption{})
+	sourcePDCli, err := pd.NewClientWithContext(runCtx, "log-repl", sourcePDAddrs, pkdbPDSecurityOption())
 	if err != nil {
 		return err
 	}
 	defer sourcePDCli.Close()
+	tlsCfg, err := pkdbTLSConfig()
+	if err != nil {
+		return err
+	}
 	pdHTTPCli := pdhttp.NewClientWithServiceDiscovery(
 		"log replication",
 		sourcePDCli.GetServiceDiscovery(),
+		pdhttp.WithTLSConfig(tlsCfg),
 	)
 	defer pdHTTPCli.Close()
 
@@ -226,7 +259,7 @@ func (w waitDataSync) wait(runCtx context.Context, sourcePDAddrs []string) error
 	ctx, cancel := context.WithCancelCause(runCtx)
 	defer cancel(nil)
 
-	sourcePDCli, err := pd.NewClientWithContext(ctx, "log-repl", sourcePDAddrs, pd.SecurityOption{})
+	sourcePDCli, err := pd.NewClientWithContext(ctx, "log-repl", sourcePDAddrs, pkdbPDSecurityOption())
 	if err != nil {
 		return err
 	}
@@ -241,9 +274,11 @@ func (w waitDataSync) wait(runCtx context.Context, sourcePDAddrs []string) error
 		storeAddrs[store.GetId()] = store.GetAddress()
 	}
 
-	debugCliPool := newPkdbDebugClientPool([]grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	})
+	debugDialOptions, err := pkdbDebugDialOptions()
+	if err != nil {
+		return err
+	}
+	debugCliPool := newPkdbDebugClientPool(debugDialOptions)
 	defer debugCliPool.Close()
 
 	// Scan source regions and fetch their raft commit indexes in batches, and
@@ -966,7 +1001,7 @@ func (l loadRaftIndex) checkAndWait(ctx context.Context, newJobBytes []byte, las
 		return 0, errors.New("loadRaftIndex got empty new primary pd addrs")
 	}
 
-	primaryPDCli, err := pd.NewClientWithContext(ctx, "log-repl", pdAddrs, pd.SecurityOption{})
+	primaryPDCli, err := pd.NewClientWithContext(ctx, "log-repl", pdAddrs, pkdbPDSecurityOption())
 	if err != nil {
 		return 0, err
 	}
