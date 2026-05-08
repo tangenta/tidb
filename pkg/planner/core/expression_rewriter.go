@@ -2958,7 +2958,7 @@ func (er *expressionRewriter) searchSpVariables(name string) (bool, error) {
 	var err error
 	retType := varType.Clone()
 	// check if the variable is substitute-able
-	if sessionVar.EnableSPParamSubstitute && er.clauseSubstituteAbleForUDV() {
+	if sessionVar.EnableSPParamSubstitute && er.clauseSubstituteAbleForSPParam() {
 		expr = er.assembleConstant(d, retType)
 	} else {
 		expr, err = er.newFunction(ast.GetProcedureVar, retType, expression.DatumToConstant(types.NewStringDatum(name), mysql.TypeString, 0))
@@ -2982,6 +2982,13 @@ func (er *expressionRewriter) clauseSubstituteAbleForUDV() bool {
 		return true
 	}
 	return false
+}
+
+func (er *expressionRewriter) clauseSubstituteAbleForSPParam() bool {
+	if er.clauseSubstituteAbleForUDV() {
+		return true
+	}
+	return er.planCtx.builder.curClause == onClause || er.planCtx.builder.curClause == havingClause
 }
 
 func (er *expressionRewriter) substituteUserDefVar(v *ast.VariableExpr, retType *types.FieldType) bool {

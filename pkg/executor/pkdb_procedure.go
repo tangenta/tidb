@@ -1346,6 +1346,11 @@ func resetStmtCtx(sctx sessionctx.Context, s ast.StmtNode) func() {
 	originalInSetSessionStatesStmt := sc.InSetSessionStatesStmt
 	originalInShowWarning := sc.InShowWarning
 	originalInDiagnostics := sc.InDiagnostics
+	originalInExplainStmt := sc.InExplainStmt
+	originalInExplainAnalyzeStmt := sc.InExplainAnalyzeStmt
+	originalExplainFormat := sc.ExplainFormat
+	originalIgnoreExplainIDSuffix := sc.IgnoreExplainIDSuffix
+	originalInVerboseExplain := sc.InVerboseExplain
 	originalLastWarningNum := sc.LastWarningNum
 	originalPriority := sc.Priority
 	originalNotFillCache := sc.NotFillCache
@@ -1362,6 +1367,11 @@ func resetStmtCtx(sctx sessionctx.Context, s ast.StmtNode) func() {
 		sc.InSetSessionStatesStmt = originalInSetSessionStatesStmt
 		sc.InShowWarning = originalInShowWarning
 		sc.InDiagnostics = originalInDiagnostics
+		sc.InExplainStmt = originalInExplainStmt
+		sc.InExplainAnalyzeStmt = originalInExplainAnalyzeStmt
+		sc.ExplainFormat = originalExplainFormat
+		sc.IgnoreExplainIDSuffix = originalIgnoreExplainIDSuffix
+		sc.InVerboseExplain = originalInVerboseExplain
 		sc.LastWarningNum = originalLastWarningNum
 		sc.Priority = originalPriority
 		sc.NotFillCache = originalNotFillCache
@@ -1379,6 +1389,11 @@ func resetStmtCtx(sctx sessionctx.Context, s ast.StmtNode) func() {
 	sc.InSetSessionStatesStmt = false
 	sc.InShowWarning = false
 	sc.InDiagnostics = false
+	sc.InExplainStmt = false
+	sc.InExplainAnalyzeStmt = false
+	sc.ExplainFormat = ""
+	sc.IgnoreExplainIDSuffix = false
+	sc.InVerboseExplain = false
 	sc.LastWarningNum = 0
 	sc.Priority = mysql.NoPriority
 	sc.NotFillCache = false
@@ -1414,6 +1429,26 @@ func resetStmtCtx(sctx sessionctx.Context, s ast.StmtNode) func() {
 		)
 		sc.Priority = stmt.Priority
 		sc.SetTypeFlags(util.GetTypeFlagsForInsert(sc.TypeFlags(), vars.SQLMode, stmt.IgnoreErr))
+	case *ast.ExplainStmt:
+		sc.InExplainStmt = true
+		sc.ExplainFormat = strings.ToLower(stmt.Format)
+		sc.InExplainAnalyzeStmt = stmt.Analyze
+		sc.IgnoreExplainIDSuffix = sc.ExplainFormat == types.ExplainFormatBrief || sc.ExplainFormat == types.ExplainFormatPlanTree
+		sc.InVerboseExplain = sc.ExplainFormat == types.ExplainFormatVerbose
+	case *ast.ExplainRoutineStmt:
+		sc.InExplainStmt = true
+		sc.ExplainFormat = strings.ToLower(stmt.Format)
+		if sc.ExplainFormat == "" || sc.ExplainFormat == types.ExplainFormatTraditional {
+			sc.ExplainFormat = types.ExplainFormatROW
+		}
+		sc.InExplainAnalyzeStmt = stmt.Analyze
+		sc.IgnoreExplainIDSuffix = sc.ExplainFormat == types.ExplainFormatBrief || sc.ExplainFormat == types.ExplainFormatPlanTree
+		sc.InVerboseExplain = sc.ExplainFormat == types.ExplainFormatVerbose
+	case *ast.ExplainForStmt:
+		sc.InExplainStmt = true
+		sc.InExplainAnalyzeStmt = true
+		sc.ExplainFormat = strings.ToLower(stmt.Format)
+		sc.InVerboseExplain = sc.ExplainFormat == types.ExplainFormatVerbose
 	case *ast.CreateTableStmt, *ast.AlterTableStmt:
 		sc.InCreateOrAlterStmt = true
 		sc.SetTypeFlags(sc.TypeFlags().
