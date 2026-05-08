@@ -918,7 +918,7 @@ func (e *Explain) RenderResult() error {
 // ExplainFlatPlanInRowFormat returns the explain result in row format.
 func ExplainFlatPlanInRowFormat(flat *FlatPhysicalPlan, format string, analyze bool,
 	runtimeStatsColl *execdetails.RuntimeStatsColl) (rows [][]string) {
-	if flat == nil || len(flat.Main) == 0 || flat.InExplain {
+	if flat == nil || flat.InExplain {
 		return
 	}
 	for _, flatOp := range flat.Main {
@@ -941,16 +941,24 @@ func ExplainFlatPlanInRowFormat(flat *FlatPhysicalPlan, format string, analyze b
 }
 
 func (e *Explain) explainFlatPlanInJSONFormat(flat *FlatPhysicalPlan) (encodes []*ExplainInfoForEncode) {
-	if flat == nil || len(flat.Main) == 0 || flat.InExplain {
+	if flat == nil || flat.InExplain {
 		return
 	}
 	// flat.Main[0] must be the root node of tree
-	encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(flat.Main[0], flat.Main))
+	if len(flat.Main) > 0 {
+		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(flat.Main[0], flat.Main))
+	}
 
 	for _, cte := range flat.CTEs {
+		if len(cte) == 0 {
+			continue
+		}
 		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(cte[0], cte))
 	}
 	for _, subQ := range flat.ScalarSubQueries {
+		if len(subQ) == 0 {
+			continue
+		}
 		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(subQ[0], subQ))
 	}
 	return

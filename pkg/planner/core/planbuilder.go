@@ -848,6 +848,9 @@ func (b *PlanBuilder) buildDo(ctx context.Context, v *ast.DoStmt) (base.Plan, er
 
 func (b *PlanBuilder) buildSet(ctx context.Context, v *ast.SetStmt) (base.Plan, error) {
 	p := &Set{}
+	if ExplainRoutineSetStmtHasPlanBearingPath(v) {
+		p.SetSCtx(b.ctx)
+	}
 	for _, vars := range v.Variables {
 		if vars.IsGlobal || vars.IsInstance {
 			err := plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or SYSTEM_VARIABLES_ADMIN")
