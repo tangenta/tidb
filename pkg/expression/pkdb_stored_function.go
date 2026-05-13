@@ -125,12 +125,19 @@ func (b *storedFuncSig) setArgs(ctx EvalContext, row chunk.Row) error {
 	return nil
 }
 
-func (b *storedFuncSig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return "", false, err
-	}
+func (b *storedFuncSig) evalDatum(ctx EvalContext, row chunk.Row) (*types.Datum, error) {
+	vars := b.sctx.GetSessionVars()
+	vars.LockStoredRoutineEval()
+	defer vars.UnlockStoredRoutineEval()
 
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	if err := b.setArgs(ctx, row); err != nil {
+		return nil, err
+	}
+	return Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+}
+
+func (b *storedFuncSig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return "", false, err
 	}
@@ -141,11 +148,7 @@ func (b *storedFuncSig) evalString(ctx EvalContext, row chunk.Row) (string, bool
 }
 
 func (b *storedFuncSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool, error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return 0, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return 0, false, err
 	}
@@ -156,11 +159,7 @@ func (b *storedFuncSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool, er
 }
 
 func (b *storedFuncSig) evalReal(ctx EvalContext, row chunk.Row) (float64, bool, error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return 0, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return 0, false, err
 	}
@@ -171,11 +170,7 @@ func (b *storedFuncSig) evalReal(ctx EvalContext, row chunk.Row) (float64, bool,
 }
 
 func (b *storedFuncSig) evalDecimal(ctx EvalContext, row chunk.Row) (*types.MyDecimal, bool, error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return nil, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return nil, false, err
 	}
@@ -186,11 +181,7 @@ func (b *storedFuncSig) evalDecimal(ctx EvalContext, row chunk.Row) (*types.MyDe
 }
 
 func (b *storedFuncSig) evalTime(ctx EvalContext, row chunk.Row) (types.Time, bool, error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return types.ZeroTime, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return types.ZeroTime, false, err
 	}
@@ -201,11 +192,7 @@ func (b *storedFuncSig) evalTime(ctx EvalContext, row chunk.Row) (types.Time, bo
 }
 
 func (b *storedFuncSig) evalDuration(ctx EvalContext, row chunk.Row) (val types.Duration, isNull bool, err error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return types.Duration{}, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return types.Duration{}, false, err
 	}
@@ -216,11 +203,7 @@ func (b *storedFuncSig) evalDuration(ctx EvalContext, row chunk.Row) (val types.
 }
 
 func (b *storedFuncSig) evalJSON(ctx EvalContext, row chunk.Row) (val types.BinaryJSON, isNull bool, err error) {
-	if err := b.setArgs(ctx, row); err != nil {
-		return types.BinaryJSON{}, false, err
-	}
-
-	d, err := Eval4StoredFunc(b.sctx, b.callPlan, b.callStmt)
+	d, err := b.evalDatum(ctx, row)
 	if err != nil {
 		return types.BinaryJSON{}, false, err
 	}
