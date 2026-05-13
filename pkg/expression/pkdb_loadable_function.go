@@ -207,10 +207,8 @@ type LoadableFunctionDef struct {
 func LoadUDF(soName, funcName string, funcRetType types.EvalType) (def *LoadableFunctionDef, errRet error) {
 	if intest.InTest {
 		if hook := loadUDFHookForTest.Load(); hook != nil {
-			logutil.BgLogger().Info("lance test hook not nil")
 			return (*hook)(soName, funcName, funcRetType)
 		}
-		logutil.BgLogger().Info("lance test hook nil")
 	}
 
 	handle, err := acquireSoHandle(soName)
@@ -364,7 +362,6 @@ func loadSoHandle(soName string) (handle unsafe.Pointer, errRet error) {
 	if handle == nil {
 		// In Linux, dlerror() is thread-safe, so we don't need to lock.
 		// https://man7.org/linux/man-pages/man3/dlerror.3.html#ATTRIBUTES
-		logutil.BgLogger().Info("lance test 1", zap.Stack("stack"))
 		return nil, errCantOpenLibrary.FastGenByArgs(soName, 2, errMsg)
 	}
 	return handle, nil
