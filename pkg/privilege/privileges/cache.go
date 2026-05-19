@@ -1873,6 +1873,17 @@ func (p *MySQLPrivilege) DBIsVisible(user, host, db string) bool {
 		}
 	}
 
+	if item, exists := p.routinePriv.Get(itemRoutinePriv{username: user}); exists {
+		for _, record := range item.data {
+			if record.baseRecord.match(user, host) &&
+				strings.EqualFold(record.DB, db) {
+				if record.RoutinePriv != 0 {
+					return true
+				}
+			}
+		}
+	}
+
 	return false
 }
 
