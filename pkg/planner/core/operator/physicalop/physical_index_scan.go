@@ -217,11 +217,7 @@ func (p *PhysicalIndexScan) AccessObject() base.AccessObject {
 			Name: p.Index.Name.O,
 		}
 		for _, idxCol := range p.Index.Columns {
-			if tblCol := p.Table.Columns[idxCol.Offset]; tblCol.Hidden {
-				index.Cols = append(index.Cols, tblCol.GeneratedExprString)
-			} else {
-				index.Cols = append(index.Cols, idxCol.Name.O)
-			}
+			index.Cols = append(index.Cols, p.Index.GetIndexColumnDisplayString(p.Table, idxCol))
 		}
 		res.Indexes = []access.IndexAccess{index}
 	}

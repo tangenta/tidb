@@ -479,11 +479,7 @@ func (p *PointGetPlan) AccessObject() base.AccessObject {
 			IsClusteredIndex: p.IndexInfo.Primary && p.TblInfo.IsCommonHandle,
 		}
 		for _, idxCol := range p.IndexInfo.Columns {
-			if tblCol := p.TblInfo.Columns[idxCol.Offset]; tblCol.Hidden {
-				index.Cols = append(index.Cols, tblCol.GeneratedExprString)
-			} else {
-				index.Cols = append(index.Cols, idxCol.Name.O)
-			}
+			index.Cols = append(index.Cols, p.IndexInfo.GetIndexColumnDisplayString(p.TblInfo, idxCol))
 		}
 		res.Indexes = []access.IndexAccess{index}
 	}
@@ -1040,11 +1036,7 @@ func (p *BatchPointGetPlan) AccessObject() base.AccessObject {
 			IsClusteredIndex: p.IndexInfo.Primary && p.TblInfo.IsCommonHandle,
 		}
 		for _, idxCol := range p.IndexInfo.Columns {
-			if tblCol := p.TblInfo.Columns[idxCol.Offset]; tblCol.Hidden {
-				index.Cols = append(index.Cols, tblCol.GeneratedExprString)
-			} else {
-				index.Cols = append(index.Cols, idxCol.Name.O)
-			}
+			index.Cols = append(index.Cols, p.IndexInfo.GetIndexColumnDisplayString(p.TblInfo, idxCol))
 		}
 		res.Indexes = []access.IndexAccess{index}
 	}

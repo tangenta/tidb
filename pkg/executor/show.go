@@ -927,7 +927,7 @@ func (e *ShowExec) fetchShowIndex() error {
 			var expression any
 			if tblCol.Hidden {
 				colName = "NULL"
-				expression = tblCol.GeneratedExprString
+				expression = idx.Meta().GetIndexColumnDisplayString(tb.Meta(), col)
 			}
 
 			colStats := statsTbl.GetCol(tblCol.ID)
@@ -1300,7 +1300,7 @@ func constructResultOfShowCreateTable(ctx sessionctx.Context, dbName *ast.CIStr,
 		var colInfo string
 		for _, c := range idxInfo.Columns {
 			if tableInfo.Columns[c.Offset].Hidden {
-				colInfo = fmt.Sprintf("(%s)", tableInfo.Columns[c.Offset].GeneratedExprString)
+				colInfo = fmt.Sprintf("(%s)", idxInfo.GetIndexColumnDisplayString(tableInfo, c))
 			} else {
 				colInfo = stringutil.Escape(c.Name.O, sqlMode)
 				if c.Length != types.UnspecifiedLength {

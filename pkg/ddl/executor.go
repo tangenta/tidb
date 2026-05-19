@@ -5154,7 +5154,7 @@ func (e *executor) CreatePrimaryKey(ctx sessionctx.Context, ti ast.Ident, indexN
 }
 
 func checkIndexNameAndColumns(ctx *metabuild.Context, t table.Table, indexName ast.CIStr,
-	indexPartSpecifications []*ast.IndexPartSpecification, columnarIndexType model.ColumnarIndexType, ifNotExists bool) (ast.CIStr, []*model.ColumnInfo, error) {
+	indexPartSpecifications []*ast.IndexPartSpecification, unique bool, columnarIndexType model.ColumnarIndexType, ifNotExists bool) (ast.CIStr, []*model.ColumnInfo, uint8, error) {
 	// Deal with anonymous index.
 	if len(indexName.L) == 0 {
 		colName := ast.NewCIStr(getAnonymousIndexPrefix(columnarIndexType == model.ColumnarIndexTypeVector))
@@ -5176,28 +5176,29 @@ func checkIndexNameAndColumns(ctx *metabuild.Context, t table.Table, indexName a
 		}
 		if ifNotExists {
 			ctx.AppendNote(err)
-			return ast.CIStr{}, nil, nil
+			return ast.CIStr{}, nil, 0, nil
 		}
-		return ast.CIStr{}, nil, err
+		return ast.CIStr{}, nil, 0, err
 	}
 
 	if err = checkTooLongIndex(indexName); err != nil {
-		return ast.CIStr{}, nil, errors.Trace(err)
+		return ast.CIStr{}, nil, 0, errors.Trace(err)
 	}
 
 	// Build hidden columns if necessary.
 	var hiddenCols []*model.ColumnInfo
+	shardIndexVersion := model.ShardIndexVersionLegacy
 	if columnarIndexType == model.ColumnarIndexTypeNA {
-		hiddenCols, err = buildHiddenColumnInfoWithCheck(ctx, indexPartSpecifications, indexName, t.Meta(), t.Cols())
+		hiddenCols, shardIndexVersion, err = buildHiddenColumnInfoWithCheck(ctx, indexPartSpecifications, indexName, t.Meta(), t.Cols(), unique)
 		if err != nil {
-			return ast.CIStr{}, nil, err
+			return ast.CIStr{}, nil, 0, err
 		}
 	}
 	if err = checkAddColumnTooManyColumns(len(t.Cols()) + len(hiddenCols)); err != nil {
-		return ast.CIStr{}, nil, errors.Trace(err)
+		return ast.CIStr{}, nil, 0, errors.Trace(err)
 	}
 
-	return indexName, hiddenCols, nil
+	return indexName, hiddenCols, shardIndexVersion, nil
 }
 
 func checkTableTypeForColumnarIndex(tblInfo *model.TableInfo) error {
@@ -5242,7 +5243,7 @@ func (e *executor) createColumnarIndex(ctx sessionctx.Context, ti ast.Ident, ind
 	}
 
 	metaBuildCtx := NewMetaBuildContextWithSctx(ctx)
-	indexName, _, err = checkIndexNameAndColumns(metaBuildCtx, t, indexName, indexPartSpecifications, columnarIndexType, ifNotExists)
+	indexName, _, _, err = checkIndexNameAndColumns(metaBuildCtx, t, indexName, indexPartSpecifications, false, columnarIndexType, ifNotExists)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -5377,7 +5378,7 @@ func (e *executor) createIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast
 	}
 
 	metaBuildCtx := NewMetaBuildContextWithSctx(ctx)
-	indexName, hiddenCols, err := checkIndexNameAndColumns(metaBuildCtx, t, indexName, indexPartSpecifications, model.ColumnarIndexTypeNA, ifNotExists)
+	indexName, hiddenCols, shardIndexVersion, err := checkIndexNameAndColumns(metaBuildCtx, t, indexName, indexPartSpecifications, unique, model.ColumnarIndexTypeNA, ifNotExists)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -5419,6 +5420,7 @@ func (e *executor) createIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast
 		if err != nil {
 			return err
 		}
+		indexInfo.ShardIndexVersion = shardIndexVersion
 		return e.addHypoIndexIntoCtx(ctx, ti.Schema, ti.Name, indexInfo)
 	}
 
