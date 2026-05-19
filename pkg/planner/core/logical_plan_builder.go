@@ -3069,6 +3069,22 @@ func (b *PlanBuilder) tblInfoFromCol(from ast.ResultSetNode, name *types.FieldNa
 	return nil
 }
 
+func isStoredRoutineVariableInPlan(p base.LogicalPlan, colName *ast.ColumnName) bool {
+	if p == nil || colName == nil || colName.Schema.L != "" || colName.Table.L != "" {
+		return false
+	}
+	sctx := p.SCtx()
+	if sctx == nil {
+		return false
+	}
+	sessVars := sctx.GetSessionVars()
+	if sessVars == nil || !sessVars.GetCallProcedure() {
+		return false
+	}
+	_, _, notFind := sessVars.GetProcedureVariable(colName.Name.L)
+	return !notFind
+}
+
 func buildFuncDependCol(p base.LogicalPlan, cond ast.ExprNode) (_, _ *types.FieldName, err error) {
 	binOpExpr, ok := cond.(*ast.BinaryOperationExpr)
 	if !ok {
@@ -3083,6 +3099,9 @@ func buildFuncDependCol(p base.LogicalPlan, cond ast.ExprNode) (_, _ *types.Fiel
 	}
 	rColExpr, ok := binOpExpr.R.(*ast.ColumnNameExpr)
 	if !ok {
+		return nil, nil, nil
+	}
+	if isStoredRoutineVariableInPlan(p, lColExpr.Name) || isStoredRoutineVariableInPlan(p, rColExpr.Name) {
 		return nil, nil, nil
 	}
 	lIdx, err := expression.FindFieldName(p.OutputNames(), lColExpr.Name)
@@ -3347,6 +3366,10 @@ func extractSingeValueColNamesFromWhere(p base.LogicalPlan, where ast.ExprNode, 
 					addGbyOrSingleValueColName(p, colExpr.Name, gbyOrSingleValueColNames)
 				}
 			}
+			// a = routine_variable
+			if rhsCol, ok := binOpExpr.R.(*ast.ColumnNameExpr); ok && isStoredRoutineVariableInPlan(p, rhsCol.Name) {
+				addGbyOrSingleValueColName(p, colExpr.Name, gbyOrSingleValueColNames)
+			}
 		} else if colExpr, ok := binOpExpr.R.(*ast.ColumnNameExpr); ok {
 			// value = a
 			if _, ok := binOpExpr.L.(ast.ValueExpr); ok {
@@ -3357,6 +3380,10 @@ func extractSingeValueColNamesFromWhere(p base.LogicalPlan, where ast.ExprNode, 
 				if _, ok := u.V.(ast.ValueExpr); ok {
 					addGbyOrSingleValueColName(p, colExpr.Name, gbyOrSingleValueColNames)
 				}
+			}
+			// routine_variable = a
+			if lhsCol, ok := binOpExpr.L.(*ast.ColumnNameExpr); ok && isStoredRoutineVariableInPlan(p, lhsCol.Name) {
+				addGbyOrSingleValueColName(p, colExpr.Name, gbyOrSingleValueColNames)
 			}
 		}
 	}
@@ -3481,6 +3508,9 @@ func (b *PlanBuilder) checkOnlyFullGroupByWithOutGroupClause(p base.LogicalPlan,
 	}
 	tblMap := make(map[*model.TableInfo]struct{}, len(resolver.nonAggCols))
 	for i, colName := range resolver.nonAggCols {
+		if isStoredRoutineVariableInPlan(p, colName) {
+			continue
+		}
 		idx, err := expression.FindFieldName(p.OutputNames(), colName)
 		if err != nil || idx < 0 {
 			return plannererrors.ErrMixOfGroupFuncAndFields.GenWithStackByArgs(resolver.nonAggColIdxs[i]+1, colName.Name.O)
