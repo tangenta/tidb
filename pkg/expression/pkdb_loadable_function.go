@@ -26,23 +26,23 @@ package expression
 #include "udf_registration_types.h"
 
 bool call_udf_func_init(void *handle, UDF_INIT *initid, UDF_ARGS *args, char *message) {
-  return ((Udf_func_init)handle)(initid, args, message);
+  return ((udf_init)handle)(initid, args, message);
 }
 
 void call_udf_func_deinit(void *handle, UDF_INIT *initid) {
-  ((Udf_func_deinit)handle)(initid);
+  ((udf_deinit)handle)(initid);
 }
 
 long long call_udf_func_longlong(void *handle, UDF_INIT *initid, UDF_ARGS *args, unsigned char *is_null, unsigned char *error) {
-  return ((Udf_func_longlong)handle)(initid, args, is_null, error);
+  return ((udf_longlong)handle)(initid, args, is_null, error);
 }
 
 double call_udf_func_double(void *handle, UDF_INIT *initid, UDF_ARGS *args, unsigned char *is_null, unsigned char *error) {
-  return ((Udf_func_double)handle)(initid, args, is_null, error);
+  return ((udf_double)handle)(initid, args, is_null, error);
 }
 
 char *call_udf_func_string(void *handle, UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned long *length, unsigned char *is_null, unsigned char *error) {
-  return ((Udf_func_string)handle)(initid, args, result, length, is_null, error);
+  return ((udf_string)handle)(initid, args, result, length, is_null, error);
 }
 
 // ---- Test-only mock UDF symbols ----

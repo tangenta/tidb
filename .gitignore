@@ -52,6 +52,7 @@ test_coverage
 coverage.out
 coverage.txt
 coverage.dat
+coverage-loadablefunc.dat
 profile.coverprofile
 *-coverage.xml
 *-junit-report.xml

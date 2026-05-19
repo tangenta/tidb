@@ -7,8 +7,6 @@
 extern "C" {
 #endif
 
-// Item_result matches MySQL's UDF argument/result type enum.
-// Ref: https://dev.mysql.com/doc/extending-mysql/8.4/en/adding-loadable-function.html
 enum Item_result {
   INVALID_RESULT = -1,
   STRING_RESULT = 0,
@@ -26,7 +24,6 @@ typedef struct UDF_ARGS {
   char *maybe_null;
   char **attributes;
   unsigned long *attribute_lengths;
-  void *extension;
 } UDF_ARGS;
 
 typedef struct UDF_INIT {
@@ -35,17 +32,16 @@ typedef struct UDF_INIT {
   unsigned long max_length;
   char *ptr;
   bool const_item;
-  void *extension;
 } UDF_INIT;
 
-typedef void (*Udf_func_deinit)(UDF_INIT *);
-typedef bool (*Udf_func_init)(UDF_INIT *, UDF_ARGS *, char *);
-typedef double (*Udf_func_double)(UDF_INIT *, UDF_ARGS *, unsigned char *,
+typedef void (*udf_deinit)(UDF_INIT *);
+typedef bool (*udf_init)(UDF_INIT *, UDF_ARGS *, char *);
+typedef double (*udf_double)(UDF_INIT *, UDF_ARGS *, unsigned char *,
+                             unsigned char *);
+typedef long long (*udf_longlong)(UDF_INIT *, UDF_ARGS *, unsigned char *,
                                   unsigned char *);
-typedef long long (*Udf_func_longlong)(UDF_INIT *, UDF_ARGS *, unsigned char *,
-                                       unsigned char *);
-typedef char *(*Udf_func_string)(UDF_INIT *, UDF_ARGS *, char *, unsigned long *,
-                                 unsigned char *, unsigned char *);
+typedef char *(*udf_string)(UDF_INIT *, UDF_ARGS *, char *, unsigned long *,
+                            unsigned char *, unsigned char *);
 
 #ifdef __cplusplus
 }  // extern "C"
