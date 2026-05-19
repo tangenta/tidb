@@ -252,10 +252,10 @@ func preloadUserStoredFunction(ctx context.Context, sctx sessionctx.Context, fun
 			internalExecCtx = kv.WithInternalSourceType(ctx, kv.InternalTxnOthers)
 			rs, err := sysSession.GetSQLExecutor().ExecuteInternal(
 				internalExecCtx,
-				"SELECT definition_utf8, sql_mode, character_set_client, connection_collation FROM %n.%n WHERE route_schema = %? AND name = %? AND type = 'FUNCTION'",
+				"SELECT definition_utf8, sql_mode, character_set_client, connection_collation FROM %n.%n WHERE lower(route_schema) = %? AND name = %? AND type = 'FUNCTION'",
 				mysql.SystemDB,
 				mysql.Routines,
-				schema,
+				strings.ToLower(schema),
 				name,
 			)
 			if err != nil {

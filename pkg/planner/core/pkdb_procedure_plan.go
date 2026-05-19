@@ -587,7 +587,7 @@ func (b *PlanBuilder) fetchProcdureInfo(name, db, tp string) (*ProcedurebodyInfo
 	sql := new(strings.Builder)
 	//names = []string{"Procedure", "sql_mode", "Create Procedure", "character_set_client", "collation_connection", "Database Collation"}
 	sqlescape.MustFormatSQL(sql, "select name, sql_mode ,definition_utf8, parameter_str, character_set_client, connection_collation,")
-	sqlescape.MustFormatSQL(sql, "schema_collation, definer, security_type, last_altered from %n.%n where route_schema = %?  and name = %? and type = %? ", mysql.SystemDB, mysql.Routines, db, name, tp)
+	sqlescape.MustFormatSQL(sql, "schema_collation, definer, security_type, last_altered from %n.%n where lower(route_schema) = %?  and name = %? and type = %? ", mysql.SystemDB, mysql.Routines, strings.ToLower(db), name, tp)
 	rs, err := exec.ExecuteInternal(ctx, sql.String())
 	if rs == nil {
 		return nil, plannererrors.ErrSpDoesNotExist.GenWithStackByArgs(tp, db+"."+name)

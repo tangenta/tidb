@@ -41,6 +41,8 @@ const (
 	eeversion14 = 14
 	// eeversion15 adds the support for lower_case_table_names in EE.
 	eeversion15 = 15
+	// eeversion16 cleans up stale mysql.routines rows left behind by mixed-case schema drops.
+	eeversion16 = 16
 )
 
 const (
@@ -51,7 +53,7 @@ const (
 
 // currentEEBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // Please make sure this is the largest version.
-var currentEEBootstrapVersion int64 = eeversion15
+var currentEEBootstrapVersion int64 = eeversion16
 
 var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeEEToVer2,
@@ -68,6 +70,7 @@ var bootstrapEEVersion = []func(sessionapi.Session, int64){
 	upgradeToEEVer13,
 	upgradeToEEVer14,
 	upgradeToEEVer15,
+	upgradeToEEVer16,
 }
 
 func doPkdbDDLWorks(s sessionapi.Session) {
@@ -385,4 +388,35 @@ func upgradeToEEVer15(s sessionapi.Session, ver int64) {
 	}
 	// Forbid updating lower_case_table_names for existing clusters.
 	writeLowerCaseTableNamesParameter(s, 2)
+}
+
+func upgradeToEEVer16(s sessionapi.Session, ver int64) {
+	if ver >= eeversion16 {
+		return
+	}
+	// Older versions could leave mysql.routines rows behind after dropping a
+	// mixed-case schema. When the schema is recreated with a different letter
+	// case, these rows can later collide with the newly created live routine
+	// metadata and trigger duplicate routine lookups. Clean only the stale
+	// duplicate rows that are shadowed by an exact-case live schema/routine row.
+	mustExecute(s, `DELETE FROM %n.%n
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM information_schema.schemata
+			WHERE schema_name = mysql.routines.route_schema
+		)
+		  AND EXISTS (
+			SELECT 1
+			FROM information_schema.schemata
+			WHERE lower(schema_name) = lower(mysql.routines.route_schema)
+			  AND EXISTS (
+				SELECT 1
+				FROM mysql.routines AS live
+				WHERE live.route_schema = information_schema.schemata.schema_name
+				  AND live.name = mysql.routines.name
+				  AND live.type = mysql.routines.type
+			  )
+		)`,
+		mysql.SystemDB, mysql.Routines,
+	)
 }
