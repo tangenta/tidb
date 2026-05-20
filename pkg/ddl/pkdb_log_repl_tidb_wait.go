@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/engine"
 	"github.com/pingcap/tidb/pkg/util/intest"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/redact"
@@ -41,6 +42,8 @@ import (
 )
 
 const logReplStateCf = "lr-state"
+
+const replicaClusterIDLabelKey = "replica_cluster_id"
 
 var (
 	// tidbWaitJobWatchRetryInterval is used when the etcd watch needs to be
@@ -139,7 +142,7 @@ func (j waitRegionsInit) checkAndWait(
 	ctx context.Context,
 	newJobBytes []byte,
 	lastFinishedVersion uint64,
-	_ kv.Storage,
+	store kv.Storage,
 	etcdCli *clientv3.Client,
 ) (version uint64, err error) {
 	curr := &pdpb.ReplicaWaitRegionsInit{}
@@ -154,7 +157,7 @@ func (j waitRegionsInit) checkAndWait(
 	if !curr.GetNeedWait() {
 		return version, nil
 	}
-	err = j.wait(ctx, curr.GetSourcePdAddrs(), etcdCli)
+	err = j.wait(ctx, curr.GetSourcePdAddrs(), etcdCli, store.GetClusterID())
 	if err != nil {
 		return 0, err
 	}
@@ -165,6 +168,7 @@ func (j waitRegionsInit) wait(
 	runCtx context.Context,
 	sourcePDAddrs []string,
 	etcdCli *clientv3.Client,
+	clusterID uint64,
 ) error {
 	cfg := config.GetGlobalConfig()
 	kvCli, err := rawkv.NewClient(
@@ -193,7 +197,7 @@ func (j waitRegionsInit) wait(
 	)
 	defer pdHTTPCli.Close()
 
-	progressTracker := newStandbyInitProgressTracker(pdHTTPCli, etcdCli)
+	progressTracker := newStandbyInitProgressTracker(pdHTTPCli, etcdCli, clusterID)
 	estRegionCnt, err := progressTracker.estimateTotalRegionCnt(runCtx)
 	if err != nil {
 		return err
@@ -1362,11 +1366,10 @@ func checkInited(
 	ctx context.Context,
 	cli rawKVScanClient,
 	resumeKey []byte,
-) (allDone bool, advancedStateCnt int, nextResumeKey []byte, err error) {
+) (allDone bool, nextResumeKey []byte, err error) {
 	// resumeKey is also the end key of the last continuous state prefix obtained
 	// from the last call of this function.
 	currResumeKey := resumeKey
-	advancedStateCnt = 0
 
 	advanceWithState := func(state *logreplicationpb.LogReplicationState) (allDone bool, gap bool) {
 		if bytes.Compare(state.StartKey, currResumeKey) > 0 {
@@ -1382,7 +1385,6 @@ func checkInited(
 		}
 		if bytes.Compare(state.EndKey, currResumeKey) > 0 {
 			currResumeKey = state.EndKey
-			advancedStateCnt++
 		}
 		return false, false
 	}
@@ -1390,7 +1392,7 @@ func checkInited(
 	for {
 		keys, values, err := cli.Scan(ctx, currResumeKey, nil, pkdbDefaultScanPageSize, rawkv.SetColumnFamily(logReplStateCf))
 		if err != nil {
-			return false, 0, nil, err
+			return false, nil, err
 		}
 
 		if len(keys) == 0 || !bytes.Equal(keys[0], currResumeKey) {
@@ -1404,7 +1406,7 @@ func checkInited(
 					zap.String("from", "min-key"),
 					zap.String("to", gapEnd),
 				)
-				return false, advancedStateCnt, bytes.Clone(currResumeKey), nil
+				return false, bytes.Clone(currResumeKey), nil
 			}
 
 			// Between two scans, the state whose start key equals scanKey may have been
@@ -1412,7 +1414,7 @@ func checkInited(
 			// now covers scanKey.
 			_, prevValues, err := cli.ReverseScan(ctx, currResumeKey, nil, 1, rawkv.SetColumnFamily(logReplStateCf))
 			if err != nil {
-				return false, 0, nil, err
+				return false, nil, err
 			}
 			if len(prevValues) == 0 {
 				logutil.BgLogger().Info(
@@ -1420,33 +1422,33 @@ func checkInited(
 					zap.String("from", "(unknown prev key)"),
 					zap.String("to", redact.Key(currResumeKey)),
 				)
-				return false, advancedStateCnt, bytes.Clone(currResumeKey), nil
+				return false, bytes.Clone(currResumeKey), nil
 			}
 
 			prev := &logreplicationpb.LogReplicationState{}
 			if err := prev.Unmarshal(prevValues[0]); err != nil {
-				return false, 0, nil, err
+				return false, nil, err
 			}
 			allDone, gap := advanceWithState(prev)
 			if gap {
-				return false, advancedStateCnt, bytes.Clone(currResumeKey), nil
+				return false, bytes.Clone(currResumeKey), nil
 			}
 			if allDone {
-				return true, advancedStateCnt, nil, nil
+				return true, nil, nil
 			}
 		}
 
 		for _, v := range values {
 			state := &logreplicationpb.LogReplicationState{}
 			if err := state.Unmarshal(v); err != nil {
-				return false, 0, nil, err
+				return false, nil, err
 			}
 			allDone, gap := advanceWithState(state)
 			if gap {
-				return false, advancedStateCnt, bytes.Clone(currResumeKey), nil
+				return false, bytes.Clone(currResumeKey), nil
 			}
 			if allDone {
-				return true, advancedStateCnt, nil, nil
+				return true, nil, nil
 			}
 		}
 
@@ -1459,23 +1461,28 @@ func checkInited(
 			zap.String("from", redact.Key(currResumeKey)),
 			zap.String("to", "infinity"),
 		)
-		return false, advancedStateCnt, bytes.Clone(currResumeKey), nil
+		return false, bytes.Clone(currResumeKey), nil
 	}
 }
 
 type standbyInitProgressTracker struct {
 	pdHTTPCli pdhttp.Client
 	etcdCli   clientv3.KV
+	clusterID uint64
 
-	doneStateCnt int
-	resumeKey    []byte
+	resumeKey []byte
 }
 
 // newStandbyInitProgressTracker does not take ownership of given clients.
-func newStandbyInitProgressTracker(pdHTTPCli pdhttp.Client, etcdCli clientv3.KV) *standbyInitProgressTracker {
+func newStandbyInitProgressTracker(
+	pdHTTPCli pdhttp.Client,
+	etcdCli clientv3.KV,
+	clusterID uint64,
+) *standbyInitProgressTracker {
 	return &standbyInitProgressTracker{
 		pdHTTPCli: pdHTTPCli,
 		etcdCli:   etcdCli,
+		clusterID: clusterID,
 	}
 }
 
@@ -1495,11 +1502,10 @@ func (t *standbyInitProgressTracker) checkInitedAndUpdateProgress(
 	cli rawKVScanClient,
 	estRegionCnt int,
 ) (bool, error) {
-	allDone, advancedStateCnt, resumeKey, err := checkInited(ctx, cli, t.resumeKey)
+	allDone, resumeKey, err := checkInited(ctx, cli, t.resumeKey)
 	if err != nil {
 		return false, err
 	}
-	t.doneStateCnt += advancedStateCnt
 	t.resumeKey = resumeKey
 	if allDone {
 		_, err = t.etcdCli.Put(ctx, constants.PkdbInitPercentage, "100")
@@ -1509,19 +1515,49 @@ func (t *standbyInitProgressTracker) checkInitedAndUpdateProgress(
 		return true, nil
 	}
 
-	percentage := t.percentage(estRegionCnt)
+	learnerCnt, err := t.learnerCnt(ctx)
+	if err != nil {
+		return false, err
+	}
+	percentage := t.percentage(learnerCnt, estRegionCnt)
 	_, err = t.etcdCli.Put(ctx, constants.PkdbInitPercentage, strconv.FormatFloat(percentage, 'f', -1, 32))
 	return false, err
 }
 
-func (t *standbyInitProgressTracker) percentage(estRegionCnt int) float64 {
+func (t *standbyInitProgressTracker) learnerCnt(ctx context.Context) (int, error) {
+	stores, err := t.pdHTTPCli.GetStores(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	learnerCnt := 0
+	for _, store := range stores.Stores {
+		if !engine.IsReplicatorHTTPResp(&store.Store) || !t.matched(store.Store.Labels) {
+			continue
+		}
+		learnerCnt += int(store.Status.RegionCount)
+	}
+	return learnerCnt, nil
+}
+
+func (t *standbyInitProgressTracker) matched(labels []pdhttp.StoreLabel) bool {
+	clusterID := strconv.FormatUint(t.clusterID, 10)
+	for _, label := range labels {
+		if label.Key == replicaClusterIDLabelKey && label.Value == clusterID {
+			return true
+		}
+	}
+	return false
+}
+
+func (*standbyInitProgressTracker) percentage(learnerCnt, estRegionCnt int) float64 {
 	if estRegionCnt <= 0 {
 		return 0
 	}
-	percentage := float64(t.doneStateCnt) / float64(estRegionCnt) * 100
+	percentage := float64(learnerCnt) / float64(estRegionCnt) * 100
 	// Only write 100% once standby is fully inited.
 	if percentage >= 100 {
-		return float64(t.doneStateCnt) / float64(t.doneStateCnt+1) * 100
+		return float64(estRegionCnt-1) / float64(estRegionCnt) * 100
 	}
 	return percentage
 }
