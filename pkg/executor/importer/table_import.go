@@ -46,6 +46,7 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	verify "github.com/pingcap/tidb/pkg/lightning/verification"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	tidbmetrics "github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/objstore/compressedio"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -812,10 +813,17 @@ func PostProcess(
 		return err
 	}
 
+	remoteChecksumFn := func() (*local.RemoteChecksum, error) {
+		return RemoteChecksumTableBySQL(ctx, se, plan, logger)
+	}
+	if plan.TableInfo != nil && plan.TableInfo.State != model.StatePublic {
+		remoteChecksumFn = func() (*local.RemoteChecksum, error) {
+			return RemoteChecksumTableByTiKV(ctx, se, plan, logger)
+		}
+	}
+
 	return VerifyChecksum(ctx, plan, localChecksum.MergedChecksum(), logger,
-		func() (*local.RemoteChecksum, error) {
-			return RemoteChecksumTableBySQL(ctx, se, plan, logger)
-		},
+		remoteChecksumFn,
 	)
 }
 
@@ -877,6 +885,30 @@ func RebaseAllocatorBases(ctx context.Context, kvStore tidbkv.Storage, maxIDs ma
 }
 
 type remoteChecksumFunction func() (*local.RemoteChecksum, error)
+
+// RemoteChecksumTableByTiKV executes checksum requests directly from table metadata.
+func RemoteChecksumTableByTiKV(ctx context.Context, se sessionctx.Context, plan *Plan, logger *zap.Logger) (*local.RemoteChecksum, error) {
+	pdStore, ok := se.GetStore().(tidbkv.StorageWithPD)
+	if !ok {
+		return nil, errors.New("store does not support PD client for TiKV checksum")
+	}
+	ctxWithLogger := logutil.WithLogger(ctx, logger)
+	backoffWeight := GetBackoffWeight(plan)
+	mgr := local.NewTiKVChecksumManager(
+		se.GetStore().GetClient(),
+		pdStore.GetPDClient(),
+		uint(plan.DistSQLScanConcurrency),
+		backoffWeight,
+		se.GetSessionVars().StmtCtx.ResourceGroupName,
+		tidbkv.InternalImportInto,
+	)
+	defer mgr.Close()
+	return mgr.Checksum(ctxWithLogger, &checkpoints.TidbTableInfo{
+		DB:   plan.DBName,
+		Name: plan.TableInfo.Name.L,
+		Core: plan.TableInfo,
+	})
+}
 
 // VerifyChecksum verify the checksum of the table.
 func VerifyChecksum(ctx context.Context, plan *Plan, localChecksum verify.KVChecksum, logger *zap.Logger, getRemoteChecksumFn remoteChecksumFunction) error {

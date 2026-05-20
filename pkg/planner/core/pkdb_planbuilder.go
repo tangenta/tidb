@@ -2,16 +2,26 @@ package core
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
+	"github.com/pingcap/tidb/pkg/planner/core/operator/logicalop"
 	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
+	"github.com/pingcap/tidb/pkg/sessiontxn"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/table/temptable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
+	"github.com/pingcap/tidb/pkg/util/generatedexpr"
 )
 
 // CreateLogReplication represents a CREATE LOG REPLICATION plan.
@@ -260,4 +270,148 @@ func parseDegradeTimeoutOption(planTimeoutSec *uint64, mode ast.ProtectionMode, 
 		return errors.Errorf("DEGRADE_TIMEOUT is required when PROTECTION_MODE is MAXIMUM_AVAILABILITY")
 	}
 	return nil
+}
+
+func buildDefaultOptionsForCTAS(logicalPlan base.LogicalPlan, idx int) ([]*ast.ColumnOption, error) {
+	colInfo := findSourceColumnInfoForCTAS(logicalPlan, idx)
+	if colInfo == nil {
+		return nil, nil
+	}
+
+	expr, err := buildDefaultExprForCTAS(logicalPlan.SCtx().GetExprCtx(), colInfo)
+	if err != nil || expr == nil {
+		return nil, err
+	}
+
+	return []*ast.ColumnOption{{
+		Tp:   ast.ColumnOptionDefaultValue,
+		Expr: expr,
+	}}, nil
+}
+
+func findSourceColumnInfoForCTAS(logicalPlan base.LogicalPlan, idx int) *model.ColumnInfo {
+	if idx < 0 || idx >= logicalPlan.Schema().Len() {
+		return nil
+	}
+	return findSourceColumnInfoInPlan(logicalPlan, logicalPlan.Schema().Columns[idx])
+}
+
+func findSourceColumnInfoInPlan(logicalPlan base.LogicalPlan, col *expression.Column) *model.ColumnInfo {
+	switch p := logicalPlan.(type) {
+	case *logicalop.DataSource:
+		for i, dsCol := range p.Schema().Columns {
+			if dsCol.UniqueID == col.UniqueID && i < len(p.Columns) {
+				return p.Columns[i]
+			}
+		}
+	case *logicalop.LogicalProjection:
+		for i, projCol := range p.Schema().Columns {
+			if projCol.UniqueID != col.UniqueID {
+				continue
+			}
+			exprCol, ok := p.Exprs[i].(*expression.Column)
+			if !ok || len(p.Children()) != 1 {
+				return nil
+			}
+			return findSourceColumnInfoInPlan(p.Children()[0], exprCol)
+		}
+	default:
+		for _, child := range p.Children() {
+			for _, childCol := range child.Schema().Columns {
+				if childCol.UniqueID == col.UniqueID {
+					return findSourceColumnInfoInPlan(child, childCol)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func buildDefaultExprForCTAS(exprCtx expression.BuildContext, colInfo *model.ColumnInfo) (ast.ExprNode, error) {
+	defaultValue := colInfo.GetDefaultValue()
+	if defaultValue == nil || mysql.HasNoDefaultValueFlag(colInfo.GetFlag()) {
+		return nil, nil
+	}
+
+	if colInfo.DefaultIsExpr {
+		defaultExpr, ok := defaultValue.(string)
+		if !ok {
+			return nil, errors.Errorf("default expression for column %s has unexpected type %T", colInfo.Name.O, defaultValue)
+		}
+		return generatedexpr.ParseExpression(defaultExpr)
+	}
+
+	if defaultStr, ok := defaultValue.(string); ok {
+		switch defaultStr {
+		case strings.ToUpper(ast.CurrentTimestamp):
+			defaultExpr := strings.ToUpper(ast.CurrentTimestamp)
+			if colInfo.GetDecimal() > 0 {
+				defaultExpr = fmt.Sprintf("%s(%d)", defaultExpr, colInfo.GetDecimal())
+			}
+			return generatedexpr.ParseExpression(defaultExpr)
+		case strings.ToUpper(ast.CurrentDate):
+			return generatedexpr.ParseExpression(strings.ToUpper(ast.CurrentDate))
+		}
+	}
+
+	if colInfo.GetType() == mysql.TypeTimestamp {
+		datum, err := table.GetColDefaultValue(exprCtx, colInfo)
+		if err != nil {
+			return nil, err
+		}
+		return ast.NewValueExpr(datum.GetMysqlTime().String(), "", ""), nil
+	}
+
+	if colInfo.GetType() == mysql.TypeBit {
+		defaultStr, ok := defaultValue.(string)
+		if !ok {
+			return nil, errors.Errorf("bit default for column %s has unexpected type %T", colInfo.Name.O, defaultValue)
+		}
+		return ast.NewValueExpr(types.BinaryLiteral(defaultStr), "", ""), nil
+	}
+
+	return ast.NewValueExpr(defaultValue, "", ""), nil
+}
+
+func (b *PlanBuilder) buildCTASSelectPlan(ctx context.Context, stmt *ast.CreateTableStmt) (base.LogicalPlan, error) {
+	sctx, err := AsSctx(b.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if stmt.CTASSnapshotTS == 0 {
+		readTS, err := sessiontxn.GetTxnManager(sctx).GetStmtReadTS()
+		if err != nil {
+			return nil, err
+		}
+		stmt.CTASSnapshotTS = readTS
+	}
+
+	snapshotIS, err := domain.GetDomain(sctx).GetSnapshotInfoSchema(stmt.CTASSnapshotTS)
+	if err != nil {
+		return nil, err
+	}
+	snapshotIS = temptable.AttachLocalTemporaryTableInfoSchema(sctx, snapshotIS)
+
+	sessionVars := sctx.GetSessionVars()
+	origSnapshotTS := sessionVars.SnapshotTS
+	origSnapshotIS := sessionVars.SnapshotInfoschema
+	origIS := b.is
+	sessionVars.SnapshotTS = stmt.CTASSnapshotTS
+	sessionVars.SnapshotInfoschema = snapshotIS
+	b.is = snapshotIS
+	defer func() {
+		sessionVars.SnapshotTS = origSnapshotTS
+		sessionVars.SnapshotInfoschema = origSnapshotIS
+		b.is = origIS
+	}()
+
+	switch selectStmt := stmt.Select.(type) {
+	case *ast.SelectStmt:
+		return b.buildSelect(ctx, selectStmt)
+	case *ast.SetOprStmt:
+		return b.buildSetOpr(ctx, selectStmt)
+	default:
+		return nil, errors.New("unsupported select stmt type: " + reflect.TypeOf(selectStmt).String())
+	}
 }

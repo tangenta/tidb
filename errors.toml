@@ -2151,6 +2151,11 @@ error = '''
 Query execution was stopped by the global memory arbitrator [reason=%s] [conn=%d]
 '''
 
+["executor:8182"]
+error = '''
+CREATE TABLE ... SELECT dist task failed: %s
+'''
+
 ["executor:8212"]
 error = '''
 Failed to split region ranges: %s
@@ -2804,6 +2809,11 @@ Duplicate condition information item '%s'
 ["planner:1706"]
 error = '''
 Primary key/partition key update is not allowed since the table is updated both as '%-.192s' and '%-.192s'.
+'''
+
+["planner:1746"]
+error = '''
+Can't update table '%-.192s' while '%-.192s' is being created.
 '''
 
 ["planner:1747"]

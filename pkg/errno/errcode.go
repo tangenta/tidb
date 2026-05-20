@@ -1094,6 +1094,7 @@ const (
 	ErrTimeStampInDSTTransition            = 8179
 	ErrQueryExecStopped                    = 8180
 	_                                      = 8181 // reserved for ErrPDTimestampLagsTooMuch
+	ErrCTASDistTask                        = 8182
 
 	// Error codes used by TiDB ddl package
 	ErrUnsupportedDDLOperation            = 8200

@@ -1561,6 +1561,9 @@ func (e *InsertValues) addRecordWithAutoIDHint(
 // CreateSession will be assigned by session package.
 var CreateSession func(ctx sessionctx.Context) (sessionctx.Context, error)
 
+// CreateSessionWithStore will be assigned by session package.
+var CreateSessionWithStore func(store kv.Storage) (sessionctx.Context, error)
+
 // CloseSession will be assigned by session package.
 var CloseSession func(ctx sessionctx.Context)
 

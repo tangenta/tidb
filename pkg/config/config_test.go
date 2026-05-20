@@ -839,6 +839,8 @@ max_connections = 200
 log-rotate = true
 [performance]
 mem-profile-interval="1m"
+[experimental]
+enable-create-table-as-select=true
 [stmt-summary]
 enable=false
 enable-internal-query=true

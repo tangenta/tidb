@@ -54,6 +54,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/owner"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -139,6 +140,15 @@ const (
 // OnExist specifies what to do when a new object has a name collision.
 type OnExist uint8
 
+// CreateTableCTASConfig is the configuration of `create table as select`
+type CreateTableCTASConfig struct {
+	CTASSnapshotTS      uint64
+	CTASSql             string
+	CTASOnDuplicate     ast.OnDuplicateKeyHandlingType
+	CTASSubmitterExecID string
+	CTASSubmitterConnID uint64
+}
+
 // CreateTableConfig is the configuration of `CreateTableWithInfo`.
 type CreateTableConfig struct {
 	OnExist OnExist
@@ -147,6 +157,7 @@ type CreateTableConfig struct {
 	// by BR now. By reusing IDs BR can save a lot of works such as rewriting table
 	// IDs in backed up KVs.
 	IDAllocated bool
+	CreateTableCTASConfig
 }
 
 // CreateTableOption is the option for creating table.

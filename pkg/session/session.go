@@ -156,6 +156,9 @@ func init() {
 	executor.CreateSession = func(ctx sessionctx.Context) (sessionctx.Context, error) {
 		return CreateSession(ctx.GetStore())
 	}
+	executor.CreateSessionWithStore = func(store kv.Storage) (sessionctx.Context, error) {
+		return CreateSession(store)
+	}
 	executor.CloseSession = func(ctx sessionctx.Context) {
 		if se, ok := ctx.(sessionapi.Session); ok {
 			se.Close()
@@ -4238,6 +4241,18 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 		proto.ImportInto,
 		func(ctx context.Context, task *proto.Task, param taskexecutor.Param) taskexecutor.TaskExecutor {
 			return importinto.NewImportExecutor(ctx, task, param)
+		},
+	)
+	scheduler.RegisterSchedulerFactory(
+		proto.CTAS,
+		func(ctx context.Context, task *proto.Task, param scheduler.Param) scheduler.Scheduler {
+			return executor.NewCTASScheduler(ctx, task, param)
+		},
+	)
+	taskexecutor.RegisterTaskType(
+		proto.CTAS,
+		func(ctx context.Context, task *proto.Task, param taskexecutor.Param) taskexecutor.TaskExecutor {
+			return executor.NewCTASTaskExecutor(ctx, task, param)
 		},
 	)
 
