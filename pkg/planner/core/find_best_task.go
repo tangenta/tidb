@@ -1843,10 +1843,9 @@ func findBestTask4LogicalDataSource(super base.LogicalPlan, prop *property.Physi
 		defer func() {
 			ds.StoreTask(prop, t)
 		}()
-		// when datasource leaf is in index join's inner side, build the task out with old
-		// index join build logic, we can't merge this with normal datasource's index range
-		// because normal index range is built on expression EQ/IN. while index join's inner
-		// has its special runtime constants detecting and filling logic.
+		// When a datasource is on the inner side of an index join, build it with the
+		// indexJoinProp-specific range logic instead of the normal EQ/IN range path,
+		// because the runtime constants are filled by the outer side at execution time.
 		return getBestIndexJoinInnerTaskByProp(ds, prop)
 	}
 	var unenforcedTask base.Task
