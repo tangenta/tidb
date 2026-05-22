@@ -800,6 +800,42 @@ func (e *Explain) renderResultForExplore() error {
 	return nil
 }
 
+// RenderFlatResult renders the explain result for a pre-flattened plan.
+func (e *Explain) RenderFlatResult(flat *FlatPhysicalPlan) error {
+	sctx := e.SCtx()
+	if sctx != nil && sctx.GetSessionVars() != nil {
+		sctx.GetSessionVars().StmtCtx.InExplainStmt = true
+	}
+	switch strings.ToLower(e.Format) {
+	case types.ExplainFormatROW, types.ExplainFormatBrief, types.ExplainFormatVerbose, types.ExplainFormatTrueCardCost, types.ExplainFormatCostTrace, types.ExplainFormatPlanCache, types.ExplainFormatPlanTree:
+		e.Rows = ExplainFlatPlanInRowFormat(flat, e.Format, e.Analyze, e.RuntimeStatsColl)
+		if e.Analyze && len(e.Rows) > 0 && len(e.Rows[0]) > 7 && sctx != nil && sctx.GetSessionVars() != nil &&
+			sctx.GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
+			sctx.GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
+			row := e.Rows[0]
+			tracker := sctx.GetSessionVars().MemTracker
+			row[7] = row[7] + "(Total: " + tracker.FormatBytes(tracker.MaxConsumed()) + ")"
+		}
+	case types.ExplainFormatTiDBJSON:
+		encodes := e.explainFlatPlanInJSONFormat(flat)
+		if e.Analyze && len(encodes) > 0 && sctx != nil && sctx.GetSessionVars() != nil &&
+			sctx.GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
+			sctx.GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
+			encodeRoot := encodes[0]
+			tracker := sctx.GetSessionVars().MemTracker
+			encodeRoot.TotalMemoryConsumed = tracker.FormatBytes(tracker.MaxConsumed())
+		}
+		str, err := JSONToString(encodes)
+		if err != nil {
+			return err
+		}
+		e.Rows = append(e.Rows, []string{str})
+	default:
+		return errors.Errorf("explain format '%s' is not supported now", e.Format)
+	}
+	return nil
+}
+
 // RenderResult renders the explain result as specified format.
 func (e *Explain) RenderResult() error {
 	if e.Explore {
@@ -872,13 +908,8 @@ func (e *Explain) RenderResult() error {
 	case types.ExplainFormatROW, types.ExplainFormatBrief, types.ExplainFormatVerbose, types.ExplainFormatTrueCardCost, types.ExplainFormatCostTrace, types.ExplainFormatPlanCache, types.ExplainFormatPlanTree:
 		if e.Rows == nil || e.Analyze {
 			flat := FlattenPhysicalPlan(e.TargetPlan, true)
-			e.Rows = ExplainFlatPlanInRowFormat(flat, e.Format, e.Analyze, e.RuntimeStatsColl)
-			if e.Analyze &&
-				e.SCtx().GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
-				e.SCtx().GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
-				row := e.Rows[0]
-				tracker := e.SCtx().GetSessionVars().MemTracker
-				row[7] = row[7] + "(Total: " + tracker.FormatBytes(tracker.MaxConsumed()) + ")"
+			if err := e.RenderFlatResult(flat); err != nil {
+				return err
 			}
 		}
 	case types.ExplainFormatDOT:
@@ -896,19 +927,9 @@ func (e *Explain) RenderResult() error {
 		e.Rows = append(e.Rows, []string{str})
 	case types.ExplainFormatTiDBJSON:
 		flat := FlattenPhysicalPlan(e.TargetPlan, true)
-		encodes := e.explainFlatPlanInJSONFormat(flat)
-		if e.Analyze && len(encodes) > 0 &&
-			e.SCtx().GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
-			e.SCtx().GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
-			encodeRoot := encodes[0]
-			tracker := e.SCtx().GetSessionVars().MemTracker
-			encodeRoot.TotalMemoryConsumed = tracker.FormatBytes(tracker.MaxConsumed())
-		}
-		str, err := JSONToString(encodes)
-		if err != nil {
+		if err := e.RenderFlatResult(flat); err != nil {
 			return err
 		}
-		e.Rows = append(e.Rows, []string{str})
 	default:
 		return errors.Errorf("explain format '%s' is not supported now", e.Format)
 	}
