@@ -40,6 +40,12 @@ var pkdbSysVars = []*SysVar{
 		},
 		IsHintUpdatableVerified: true,
 	},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableSPPlanCache, Value: BoolToOnOff(vardef.DefTiDBEnableSPPlanCache), Type: vardef.TypeBool,
+		SetSession: func(s *SessionVars, val string) error {
+			s.EnableSPPlanCache = TiDBOptOn(val)
+			return nil
+		},
+	},
 	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBEnableWhitelist, Value: BoolToOnOff(vardef.DefPKDBEnableWhitelist), Type: vardef.TypeBool,
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			vardef.EnableWhitelist.Store(TiDBOptOn(val))

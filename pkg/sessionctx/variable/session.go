@@ -1858,6 +1858,9 @@ type SessionVars struct {
 	// EnableSPParamSubstitute indicate whether to enable stored procedure parameter substitute, it is only used to control
 	// the replacement of parameters (in, out, inout) in stored procedures.
 	EnableSPParamSubstitute bool
+	// EnableSPPlanCache indicates whether to enable the stored-routine hidden prepared plan-cache path
+	// and the related compatibility behavior added for it.
+	EnableSPPlanCache bool
 
 	// InternalSQLScanUserTable indicates whether to use user table for internal SQL. it will be used by TTL scan
 	InternalSQLScanUserTable bool
@@ -2512,6 +2515,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 	vars.TiFlashQuerySpillRatio = vardef.DefTiFlashQuerySpillRatio
 	vars.TiFlashHashJoinVersion = vardef.DefTiFlashHashJoinVersion
 	vars.MPPStoreFailTTL = vardef.DefTiDBMPPStoreFailTTL
+	vars.EnableSPPlanCache = vardef.DefTiDBEnableSPPlanCache
 	vars.DiskTracker = disk.NewTracker(memory.LabelForSession, -1)
 	vars.MemTracker = memory.NewTracker(memory.LabelForSession, vars.MemQuotaQuery)
 	vars.MemTracker.IsRootTrackerOfSess = true

@@ -530,6 +530,8 @@ type PlanCacheValue struct {
 	OutputColumns    types.NameSlice    // output column names of this plan
 	ParamTypes       []*types.FieldType // all parameters' types, different parameters may share same plan
 	StmtHints        *hint.StmtHints    // related hints of this plan, like 'max_execution_time'.
+	Warnings         []stmtctx.SQLWarn  // warnings produced while building the cached plan
+	ExtraWarnings    []stmtctx.SQLWarn  // extra warnings produced while building the cached plan
 
 	// Runtime Info, all are READ-WRITE, use UpdateRuntimeInfo() and RuntimeInfo() to access them.
 	executions         int64 // the execution times.
@@ -597,6 +599,19 @@ func (v *PlanCacheValue) MemoryUsage() (sum int64) {
 
 	for _, name := range v.OutputColumns {
 		sum += name.MemoryUsage()
+	}
+	sum += size.SizeOfSlice * 2
+	for _, warn := range v.Warnings {
+		sum += size.SizeOfString + int64(len(warn.Level))
+		if warn.Err != nil {
+			sum += size.SizeOfInterface + int64(len(warn.Err.Error()))
+		}
+	}
+	for _, warn := range v.ExtraWarnings {
+		sum += size.SizeOfString + int64(len(warn.Level))
+		if warn.Err != nil {
+			sum += size.SizeOfInterface + int64(len(warn.Err.Error()))
+		}
 	}
 	sum += int64(len(v.SQLDigest)) + int64(len(v.SQLText)) + int64(len(v.StmtType)) + int64(len(v.BinaryPlan)) +
 		int64(len(v.ParseUser)) + int64(len(v.Binding)) + int64(len(v.OptimizerEnvHash)) + int64(len(v.ParseValues))
@@ -670,6 +685,10 @@ func NewPlanCacheValue(
 		OutputColumns: names,
 		ParamTypes:    userParamTypes,
 		StmtHints:     stmtHints.Clone(),
+	}
+	if stmt.ReplayWarningsOnHit {
+		pcv.Warnings = sctx.GetSessionVars().StmtCtx.CopyWarnings(nil)
+		pcv.ExtraWarnings = append([]stmtctx.SQLWarn(nil), sctx.GetSessionVars().StmtCtx.GetExtraWarnings()...)
 	}
 	pcv.MemoryUsage() // initialize the memory usage field
 	return pcv
@@ -762,6 +781,12 @@ type PlanCacheStmt struct {
 	// InUse is used to mark plan cache is used.
 	// Avoid stored procedures being recursively called in prepare.
 	InUse bool
+
+	// ReplayWarningsOnHit marks cached statements whose build-time warnings must
+	// be replayed when the cached plan is reused. This is currently reserved for
+	// hidden stored-routine prepared templates so their warning handlers observe
+	// the same warnings on cache hits as on cache misses.
+	ReplayWarningsOnHit bool
 
 	// dbName and tbls are used to add metadata lock.
 	dbName []ast.CIStr

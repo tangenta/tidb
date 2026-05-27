@@ -1786,9 +1786,12 @@ func ResolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) 
 // separate "ADD PRIMARY KEY(...)" specs so that they can be executed as a multi-schema change.
 //
 // MySQL allows statements like:
-//   ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;
+//
+//	ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;
+//
 // which is equivalent to:
-//   ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT, ADD PRIMARY KEY (id);
+//
+//	ALTER TABLE t ADD COLUMN id INT AUTO_INCREMENT, ADD PRIMARY KEY (id);
 //
 // TiDB's add/modify column paths don't apply index/PK constraints embedded in column definition,
 // so we expand them here to reuse the existing multi-schema implementation.
@@ -1889,10 +1892,10 @@ func resolveAlterTableInlinePrimaryKey(specs []*ast.AlterTableSpec) ([]*ast.Alte
 			idxOpt.Global = true
 		}
 		addPKSpec := &ast.AlterTableSpec{
-			Tp:        ast.AlterTableAddConstraint,
+			Tp:         ast.AlterTableAddConstraint,
 			Constraint: &ast.Constraint{Tp: ast.ConstraintPrimaryKey, Name: mysql.PrimaryKeyName, Keys: keys, Option: idxOpt},
-			Algorithm: spec.Algorithm,
-			LockType:  spec.LockType,
+			Algorithm:  spec.Algorithm,
+			LockType:   spec.LockType,
 		}
 		newSpecs = append(newSpecs, addPKSpec)
 	}
