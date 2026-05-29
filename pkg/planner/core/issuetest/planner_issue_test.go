@@ -421,6 +421,13 @@ HAVING EXISTS (SELECT 1 FROM t_panic WHERE x IS NULL);`).Check(testkit.Rows("<ni
 		tk.MustHavePlan("select a from t where a=@A", "IndexRangeScan")
 	}
 
+	// Regression test for user-variable assignment inside scalar subquery with aggregate.
+	{
+		tk := prepareSharedTestKit(t)
+		tk.MustQuery("select (select sum(1))").Check(testkit.Rows("1"))
+		tk.MustQuery("select (select @a:=sum(1))").Check(testkit.Rows("1"))
+	}
+
 	// plan-cache-explain-for-connection
 	{
 		tk := prepareSharedTestKit(t)
