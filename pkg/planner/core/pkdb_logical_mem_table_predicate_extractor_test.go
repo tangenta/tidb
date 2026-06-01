@@ -85,6 +85,12 @@ func TestLogReplWorkflowHistoryGlobalExtractor(t *testing.T) {
 			limit:           1,
 		},
 		{
+			sql:             "select * from information_schema.LR_WORKFLOW_HISTORY_GLOBAL where 10 < WORKFLOW_ID and 20 > WORKFLOW_ID limit 5",
+			startWorkflowID: 11,
+			endWorkflowID:   20,
+			limit:           5,
+		},
+		{
 			sql: "select * from information_schema.LR_WORKFLOW_HISTORY_GLOBAL where WORKFLOW_ID = 10 or WORKFLOW_ID = 20 limit 5",
 		},
 		{
