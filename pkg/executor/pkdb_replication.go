@@ -51,6 +51,7 @@ var (
 		tikvConfigReplicatorEnabledKey,
 		tikvConfigLogArchiveEnabledKey,
 	}
+	errLogReplWorkflowCleaned = stderrors.New("log replication workflow has been cleaned")
 )
 
 // CreateLogReplicationExec executes CREATE LOG REPLICATION statement.
@@ -297,8 +298,11 @@ func (e *DropLogReplicationExec) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	return pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
+	err = pollWorkflowComplete(ctx, pdCli, workflowID, &e.Ctx().GetSessionVars().SQLKiller)
+	if stderrors.Is(err, errLogReplWorkflowCleaned) {
+		return nil
+	}
+	return err
 }
 
 // SwitchOverPrimaryExec executes ADMIN SWITCHOVER PRIMARY statement.
@@ -706,6 +710,10 @@ func newWorkflowNotCancelableErr(workflowID uint64) error {
 	return errors.Errorf("workflow %d cannot be cancelled at the moment", workflowID)
 }
 
+func newLogReplWorkflowCleanedErr(workflowID uint64) error {
+	return fmt.Errorf("%w: workflow %d", errLogReplWorkflowCleaned, workflowID)
+}
+
 func pollWorkflowComplete(
 	ctx context.Context,
 	workflowLister logReplWorkflowLister,
@@ -741,7 +749,7 @@ func pollWorkflowComplete(
 			return err
 		}
 		if len(workflows) == 0 || workflows[0].Id != workflowID {
-			return backoff.Permanent(errors.Errorf("workflow %d has been cleaned", workflowID))
+			return backoff.Permanent(newLogReplWorkflowCleanedErr(workflowID))
 		}
 
 		wf := workflows[0]
