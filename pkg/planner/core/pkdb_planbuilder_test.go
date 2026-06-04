@@ -62,6 +62,26 @@ func TestIllegalAlterLogRepl(t *testing.T) {
 			errMsg: "ALTER LOG REPLICATION CHANGE SOURCE cannot be combined with option list",
 		},
 		{
+			name: "rename-with-options",
+			a: &ast.AlterLogReplication{
+				Name:    ast.NewCIStr("repl"),
+				NewName: ast.NewCIStr("repl_renamed"),
+				Opts: []*ast.LogReplicationOpt{
+					{Tp: ast.LogReplicationOptProtectionMode, UintValue: uint64(ast.ProtectionModeMaximumProtection)},
+				},
+			},
+			errMsg: "ALTER LOG REPLICATION RENAME cannot be combined with other alter options",
+		},
+		{
+			name: "rename-with-change-source",
+			a: &ast.AlterLogReplication{
+				Name:               ast.NewCIStr("repl"),
+				NewSourceClusterID: &sourceID,
+				NewName:            ast.NewCIStr("repl_renamed"),
+			},
+			errMsg: "ALTER LOG REPLICATION RENAME cannot be combined with other alter options",
+		},
+		{
 			name: "unsupported-option",
 			a: &ast.AlterLogReplication{
 				Name: ast.NewCIStr("repl"),
@@ -152,6 +172,22 @@ func TestBuildAdminCreateLogReplicationDetached(t *testing.T) {
 	require.True(t, createPlan.Detached)
 	require.Equal(t, 1, createPlan.Schema().Len())
 	require.Equal(t, "WORKFLOW_ID", createPlan.OutputNames()[0].ColName.O)
+}
+
+func TestBuildAdminAlterLogReplicationRename(t *testing.T) {
+	b := &PlanBuilder{}
+	ctx := context.Background()
+
+	p, err := b.buildAdminAlterLogReplication(ctx, &ast.AlterLogReplication{
+		Name:    ast.NewCIStr("test"),
+		NewName: ast.NewCIStr("test_renamed"),
+	})
+	require.NoError(t, err)
+
+	renamePlan, ok := p.(*AlterLogReplication)
+	require.True(t, ok)
+	require.Equal(t, ast.NewCIStr("test"), renamePlan.Name)
+	require.Equal(t, ast.NewCIStr("test_renamed"), renamePlan.NewName)
 }
 
 func TestIllegalCreateLogReplication(t *testing.T) {

@@ -19203,6 +19203,13 @@ AdminAlterLogReplication:
 			NewSourceClusterID: &v,
 		}
 	}
+|	"ALTER" "LOG" "REPLICATION" Identifier "RENAME" "TO" Identifier
+	{
+		$$ = &ast.AlterLogReplication{
+			Name:    ast.NewCIStr($4),
+			NewName: ast.NewCIStr($7),
+		}
+	}
 
 AdminPauseLogReplication:
 	"PAUSE" "LOG" "REPLICATION" Identifier

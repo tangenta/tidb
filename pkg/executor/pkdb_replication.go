@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/sqlkiller"
 	pd "github.com/tikv/pd/client"
-	"github.com/tikv/pd/client/clients/pkdb"
 	"github.com/tikv/pd/client/opt"
 	"go.uber.org/zap"
 )
@@ -148,6 +147,7 @@ type AlterLogReplicationExec struct {
 	NewSourceClusterID uint64
 	ProtectionMode     ast.ProtectionMode
 	DegradeTimeoutSec  uint64
+	NewName            ast.CIStr
 }
 
 // Open implements the Executor Open interface.
@@ -173,6 +173,7 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 				return err
 			}
 
+			// TODO(lance6716): query by name
 			statuses, err := pdCli.ListLogReplStatuses(ctx)
 			if err != nil {
 				return err
@@ -192,15 +193,15 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 			replicationMode := targetStatus.GetReplicationMode()
 			replicationState := targetStatus.GetState()
 			switch replicationState {
-			case pkdb.LogReplicationStatePaused:
+			case pdpb.LogReplication_PAUSED.String():
 				return errors.Errorf("replication status for %s is %s, can't ALTER", e.Name.L, replicationState)
-			case pkdb.LogReplicationStateInitializing:
+			case pdpb.LogReplication_INITIALIZING.String():
 				// leave lagSec = -1 to retry
-			case pkdb.LogReplicationStateReplicating:
+			case pdpb.LogReplication_REPLICATING.String():
 				switch replicationMode {
-				case pkdb.LogReplicationModeSync:
+				case pdpb.LogReplication_SYNC.String():
 					break waitLagRetryLoop
-				case pkdb.LogReplicationModeAsync:
+				case pdpb.LogReplication_ASYNC.String():
 					lagSec = targetStatus.GetCheckpointLagSec()
 				}
 			default:
@@ -210,6 +211,7 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 
 			if lagSec < 0 || lagSec > maxLagSec {
 				logutil.Logger(ctx).Warn("lag is too large or unavailable, will wait lag decreased",
+					zap.String("replicationState", replicationState),
 					zap.String("replicationMode", replicationMode),
 					zap.Int64("currentLagSec", lagSec),
 					zap.Int64("maxLagSec", maxLagSec))
@@ -229,6 +231,7 @@ func (e *AlterLogReplicationExec) Open(ctx context.Context) error {
 		ProtectionMode:     astProtectionModeToPB(e.ProtectionMode),
 		DegradeTimeoutSec:  e.DegradeTimeoutSec,
 		NewSourceClusterID: e.NewSourceClusterID,
+		NewName:            e.NewName.L,
 	}
 
 	pkdbrepl.HoldRestart()
@@ -690,14 +693,14 @@ func tikvStatusConfigURL(statusAddr string, useTLS bool) string {
 }
 
 func astProtectionModeToPB(mode ast.ProtectionMode) pdpb.ProtectionMode {
-	pbProtectionMode := pdpb.ProtectionMode_MaximumPerformance
+	pbProtectionMode := pdpb.ProtectionMode_MAXIMUM_PERFORMANCE
 	switch mode {
 	case ast.ProtectionModeMaximumAvailability:
-		pbProtectionMode = pdpb.ProtectionMode_MaximumAvailability
+		pbProtectionMode = pdpb.ProtectionMode_MAXIMUM_AVAILABILITY
 	case ast.ProtectionModeMaximumPerformance:
-		pbProtectionMode = pdpb.ProtectionMode_MaximumPerformance
+		pbProtectionMode = pdpb.ProtectionMode_MAXIMUM_PERFORMANCE
 	case ast.ProtectionModeMaximumProtection:
-		pbProtectionMode = pdpb.ProtectionMode_MaximumProtection
+		pbProtectionMode = pdpb.ProtectionMode_MAXIMUM_PROTECTION
 	}
 	return pbProtectionMode
 }
