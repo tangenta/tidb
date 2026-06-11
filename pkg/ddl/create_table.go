@@ -834,6 +834,7 @@ func BuildTableInfoWithStmt(ctx *metabuild.Context, s *ast.CreateTableStmt, dbCh
 	// set default shard row id bits and pre-split regions for table.
 	if !tbInfo.HasClusteredIndex() && tbInfo.TempTableType == model.TempTableNone {
 		tbInfo.ShardRowIDBits = ctx.GetShardRowIDBits()
+		tbInfo.MaxShardRowIDBits = tbInfo.ShardRowIDBits
 		tbInfo.PreSplitRegions = ctx.GetPreSplitRegions()
 	}
 
