@@ -610,25 +610,6 @@ func (sc *StatementContext) Reset() bool {
 	return true
 }
 
-// RegisterUDFCleanup registers a statement-scoped cleanup callback for loadable
-// functions (UDF). It is concurrency-safe.
-func (sc *StatementContext) RegisterUDFCleanup(cleanup func()) {
-	if cleanup == nil {
-		return
-	}
-	sc.UserFuncCtx.Lock()
-	sc.UserFuncCtx.loadableFuncCleanups = append(sc.UserFuncCtx.loadableFuncCleanups, cleanup)
-	sc.UserFuncCtx.Unlock()
-}
-
-// UDFCleanup calls cleanup functions registered by RegisterUDFCleanup.
-func (sc *StatementContext) UDFCleanup() {
-	for _, f := range sc.UserFuncCtx.loadableFuncCleanups {
-		f()
-	}
-	sc.UserFuncCtx.loadableFuncCleanups = nil
-}
-
 // CtxID returns the context id of the statement
 func (sc *StatementContext) CtxID() uint64 {
 	return sc.ctxID
