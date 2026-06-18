@@ -13,6 +13,7 @@ make build
 ## Testing
 
 See `docs/agents/test-guide.md`.
+- If you modify `pkg/parser/parser.y`/`parser.go`, run `make fmt` from `pkg/parser` before commit (then regenerate with `make parser`).
 
 ## Workflow Principles
 

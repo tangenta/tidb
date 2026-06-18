@@ -1476,6 +1476,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	SelectStmtFromTable                    "SELECT statement from table"
 	SelectStmtGroup                        "SELECT statement optional GROUP BY clause"
 	SelectStmtIntoOption                   "SELECT statement into clause"
+	SelectStmtIntoOptionAfterFrom          "SELECT statement into clause after FROM"
 	SelectStmtIntoVars                     "SELECT statement into variables"
 	SelectIntoProcedureVarIdentifier       "SELECT into procedure variables identifier"
 	SequenceOption                         "Create sequence option"
@@ -10268,7 +10269,7 @@ SelectStmt:
 		}
 		$$ = st
 	}
-|	SelectStmtFromDualTable SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOption
+|	SelectStmtFromDualTable SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOptionAfterFrom
 	{
 		st := $1.(*ast.SelectStmt)
 		if $2 != nil {
@@ -10316,7 +10317,7 @@ SelectStmt:
 		}
 		$$ = st
 	}
-|	SelectStmtFromTable OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOption
+|	SelectStmtFromTable OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOptionAfterFrom
 	{
 		st := $1.(*ast.SelectStmt)
 		if $4 != nil {
@@ -11274,6 +11275,13 @@ SelectStmtIntoOption:
 		$$ = x
 	}
 
+SelectStmtIntoOptionAfterFrom:
+	SelectStmtIntoOption
+|	SelectStmtIntoVars
+	{
+		$$ = $1
+	}
+
 SelectIntoProcedureVarIdentifier:
 	Identifier
 	{
@@ -11322,6 +11330,9 @@ SubSelect:
 		src := parser.src
 		// See the implementation of yyParse function
 		rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+		if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+			return 1
+		}
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
 |	'(' SetOprStmt ')'
@@ -11329,6 +11340,9 @@ SubSelect:
 		rs := $2.(*ast.SetOprStmt)
 		src := parser.src
 		rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+		if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+			return 1
+		}
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
 |	'(' SelectStmtWithClause ')'
@@ -11340,10 +11354,16 @@ SubSelect:
 			src := parser.src
 			// See the implementation of yyParse function
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		case *ast.SetOprStmt:
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		}
 	}
@@ -11363,10 +11383,16 @@ SubSelect:
 			parser.setLastSelectFieldText(rs, endOffset)
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		case *ast.SetOprStmt:
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		}
 	}
