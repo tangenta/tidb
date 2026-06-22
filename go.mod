@@ -1,6 +1,6 @@
 module github.com/pingcap/tidb
 
-go 1.25.6
+go 1.25.8
 
 require (
 	cloud.google.com/go/kms v1.15.8
@@ -106,7 +106,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/fn v1.0.0
-	github.com/pingcap/kvproto v0.0.0-20260120063856-d09230288811
+	github.com/pingcap/kvproto v0.0.0-20260312105126-336501798048
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
 	github.com/pingcap/metering_sdk v0.0.0-20251110022152-dac449ac5389
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
@@ -371,11 +371,11 @@ require (
 	stathat.com/c/consistent v1.0.0 // indirect
 )
 
-replace github.com/pingcap/kvproto => git.pingcap.net/pingkai/kvproto v0.0.0-20260616103039-eaf08ec220fe
+replace github.com/pingcap/kvproto => git.pingcap.net/pingkai/kvproto v0.0.0-20260618150418-a8d2239432ca
 
-replace github.com/tikv/client-go/v2 => git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260422124021-a17fad509c3f
+replace github.com/tikv/client-go/v2 => git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260611033704-b41f1ad2b6d7
 
-replace github.com/tikv/pd/client => git.pingcap.net/pingkai/pd/client v0.0.0-20260609032041-686c13be78ee
+replace github.com/tikv/pd/client => git.pingcap.net/pingkai/pd/client v0.0.0-20260618162149-61d5ebe19f64
 
 replace (
 	// Downgrade grpc to v1.63.2, as well as other related modules.
