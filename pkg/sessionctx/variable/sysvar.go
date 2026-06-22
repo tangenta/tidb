@@ -3897,7 +3897,6 @@ var defaultSysVars = []*SysVar{
 		// because the special character in custom syntax cannot be correctly handled in set_var hint
 		IsHintUpdatableVerified: true,
 	},
-	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBAlterSyncMaxLagSeconds, Value: strconv.Itoa(vardef.DefTiDBAlterSyncMaxLagSeconds), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: math.MaxInt32},
 	{
 		Scope:    vardef.ScopeGlobal,
 		Name:     vardef.TiDBAdvancerCheckPointLagLimit,
