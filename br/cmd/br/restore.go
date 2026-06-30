@@ -32,14 +32,18 @@ func runRestoreCommand(command *cobra.Command, cmdName string) error {
 		return errors.Trace(err)
 	}
 
-	if err := metricsutil.RegisterMetricsForBR(cfg.PD, cfg.TLS, cfg.KeyspaceName); err != nil {
-		return errors.Trace(err)
-	}
-
 	if task.IsStreamRestore(cmdName) {
 		if err := cfg.ParseStreamRestoreFlags(command.Flags()); err != nil {
 			return errors.Trace(err)
 		}
+	} else if cfg.FullBackupType != task.FullBackupTypeEBS && cfg.FullBackupType != task.FullBackupTypeIDC {
+		if err := autoDetectKeyspaceName(GetDefaultContext(), &cfg.Config); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if err := metricsutil.RegisterMetricsForBR(cfg.PD, cfg.TLS, cfg.KeyspaceName); err != nil {
+		return errors.Trace(err)
 	}
 
 	// have to skip grant table, in order to NotifyUpdatePrivilege in binary mode
