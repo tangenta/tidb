@@ -40,6 +40,9 @@ const (
 	PKDBEnableEAL = "pkdb_eal"
 	// PKDBExtraDataType indicates whether to enable extra data types.
 	PKDBExtraDataType = "pkdb_extra_data_type"
+	// PKDBCommentByteLengthLimit controls the byte-length limit override for table and column comments.
+	// Value 0 means keeping the built-in MySQL-compatible baseline.
+	PKDBCommentByteLengthLimit = "pkdb_comment_byte_length_limit"
 	// TiDBEnableLBAC is used to enable or disable LBAC enforcement on TiDB.
 	TiDBEnableLBAC = "pkdb_lbac"
 )
@@ -64,6 +67,7 @@ const (
 	DefPKDBEnableEAL                 = false
 	DefPKDBExtraDataType             = false
 	DefTiDBEnableLBAC                = false
+	DefPKDBCommentByteLengthLimit      = int64(0)
 )
 
 // UnspecifiedServerID indicates the unspecified server id.
@@ -76,4 +80,5 @@ var (
 	EnableWhitelist                         = atomic.NewBool(DefPKDBEnableWhitelist)
 	EnableEAL                               = atomic.NewBool(DefPKDBEnableEAL)
 	EnableLBAC                              = atomic.NewBool(DefTiDBEnableLBAC)
+	CommentByteLengthLimit     = atomic.NewInt64(DefPKDBCommentByteLengthLimit)
 )

@@ -3,6 +3,7 @@ package variable
 import (
 	"context"
 	"math"
+	"strconv"
 	"time"
 
 	parsertypes "github.com/pingcap/tidb/pkg/parser/types"
@@ -69,6 +70,14 @@ var pkdbSysVars = []*SysVar{
 			return nil
 		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
 			return BoolToOnOff(parsertypes.EnableExtraDataType.Load()), nil
+		},
+	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBCommentByteLengthLimit, Value: strconv.FormatInt(vardef.DefPKDBCommentByteLengthLimit, 10), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: math.MaxInt32,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			vardef.CommentByteLengthLimit.Store(TidbOptInt64(val, vardef.DefPKDBCommentByteLengthLimit))
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return strconv.FormatInt(vardef.CommentByteLengthLimit.Load(), 10), nil
 		},
 	},
 }
