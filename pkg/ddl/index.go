@@ -1095,8 +1095,8 @@ func (w *worker) checkColumnarIndexProcessOnce(jobCtx *jobContext, tbl table.Tab
 	// Get and process info from multiple TiFlash nodes.
 	errMsg := ""
 	for _, row := range rows {
-		notAddedIndexCnt += row.GetInt64(0)
-		addedIndexCnt += row.GetInt64(1)
+		notAddedIndexCnt = max(notAddedIndexCnt, row.GetInt64(0))
+		addedIndexCnt = max(addedIndexCnt, row.GetInt64(1))
 		errMsg = row.GetString(2)
 		if len(errMsg) != 0 {
 			err = dbterror.ErrTiFlashBackfillIndex.FastGenByArgs(errMsg)
