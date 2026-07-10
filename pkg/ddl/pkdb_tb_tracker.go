@@ -462,7 +462,7 @@ func (tracker *TableTracker) modifyExistingColumn(newColDef *ast.ColumnDef, pos 
 	if err := ProcessModifyColumnOptions(tracker.sctx, newCol, newColDef.Options); err != nil {
 		return err
 	}
-	err := checkModifyTypes(oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
+	err := checkModifyTypes(tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
 	if err != nil {
 		return err
 	}
@@ -521,7 +521,7 @@ func (tracker *TableTracker) changeExistingColumn(oldColName ast.CIStr, newColDe
 	if err := ProcessModifyColumnOptions(tracker.sctx, newCol, newColDef.Options); err != nil {
 		return err
 	}
-	err := checkModifyTypes(oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
+	err := checkModifyTypes(tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
 	if err != nil {
 		return err
 	}
