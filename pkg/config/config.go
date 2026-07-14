@@ -1584,16 +1584,16 @@ var hideConfig = []string{
 	"performance.index-usage-sync-lease",
 }
 
-// GetJSONConfig returns the config as JSON with hidden items removed
-// It replaces the earlier HideConfig() which used strings.Split() in
-// an way that didn't work for similarly named items (like enable).
+// GetJSONConfig returns the config as JSON with hidden items removed.
+// It keeps JSON values as raw messages while removing hidden fields so large
+// integer configuration values do not lose precision through float64 decoding.
 func GetJSONConfig() (string, error) {
 	j, err := json.Marshal(GetGlobalConfig())
 	if err != nil {
 		return "", err
 	}
 
-	jsonValue := make(map[string]any)
+	jsonValue := make(map[string]json.RawMessage)
 	err = json.Unmarshal(j, &jsonValue)
 	if err != nil {
 		return "", err
@@ -1606,20 +1606,8 @@ func GetJSONConfig() (string, error) {
 	removedPaths = append(removedPaths, hideConfig...)
 
 	for _, path := range removedPaths {
-		s := strings.Split(path, ".")
-		curValue := jsonValue
-		for i, key := range s {
-			if i == len(s)-1 {
-				delete(curValue, key)
-			}
-			if curValue[key] == nil {
-				break
-			}
-			mapValue, ok := curValue[key].(map[string]any)
-			if !ok {
-				break
-			}
-			curValue = mapValue
+		if err := deleteJSONConfigPath(jsonValue, strings.Split(path, ".")); err != nil {
+			return "", err
 		}
 	}
 
@@ -1633,6 +1621,37 @@ func GetJSONConfig() (string, error) {
 		return "", err
 	}
 	return resBuf.String(), nil
+}
+
+func deleteJSONConfigPath(jsonValue map[string]json.RawMessage, path []string) error {
+	if len(path) == 0 {
+		return nil
+	}
+	if len(path) == 1 {
+		delete(jsonValue, path[0])
+		return nil
+	}
+
+	child, ok := jsonValue[path[0]]
+	if !ok {
+		return nil
+	}
+
+	// Decode only the object structure along the path. Leaf values remain as
+	// json.RawMessage, preserving integer literals that exceed float64 precision.
+	childValue := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(child, &childValue); err != nil {
+		return nil
+	}
+	if err := deleteJSONConfigPath(childValue, path[1:]); err != nil {
+		return err
+	}
+	updatedChild, err := json.Marshal(childValue)
+	if err != nil {
+		return err
+	}
+	jsonValue[path[0]] = updatedChild
+	return nil
 }
 
 // ContainHiddenConfig checks whether it contains the configuration that needs to be hidden.
