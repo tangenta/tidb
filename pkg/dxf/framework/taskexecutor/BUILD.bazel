@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config",
+        "//pkg/domain/pkdb_repl",
         "//pkg/dxf/framework/dxfmetric",
         "//pkg/dxf/framework/handle",
         "//pkg/dxf/framework/metering",

@@ -16,9 +16,8 @@ package variable
 
 import (
 	"context"
-	"time"
-
 	"go.uber.org/atomic"
+	"time"
 )
 
 var (

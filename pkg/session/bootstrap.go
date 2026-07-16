@@ -121,6 +121,8 @@ const (
 	tidbDefOOMAction = "default_oom_action"
 	// The variable name in mysql.tidb table and it records the current DDLTableVersion
 	tidbDDLTableVersion = "ddl_table_version"
+	// The variable name in mysql.tidb table and it records the lower_case_table_names value.
+	lowerCaseTableNames = "lower_case_table_names"
 	// The variable name in mysql.tidb table and it records the cluster id of this cluster
 	tidbClusterID = "cluster_id"
 )
@@ -407,6 +409,8 @@ func doDDLWorks(s sessionapi.Session) {
 	mustExecute(s, metadef.CreateSchemaUnusedIndexesView)
 	// Create a test database.
 	mustExecute(s, "CREATE DATABASE IF NOT EXISTS test")
+	// Create PKDB specific system tables.
+	doPkdbDDLWorks(s)
 }
 
 func checkSystemTableConstraint(tblInfo *model.TableInfo) error {
@@ -510,9 +514,12 @@ func doDMLWorks(s sessionapi.Session) {
 	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES(%?, %?, "Bootstrap version. Do not delete.")`,
 		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion,
 	)
+	doPkdbDMLWorks(s)
 	writeSystemTZ(s)
 
 	writeNewCollationParameter(s, config.GetGlobalConfig().NewCollationsEnabledOnFirstBootstrap)
+
+	writeLowerCaseTableNamesParameter(s, config.GetGlobalConfig().LowerCaseTableNamesOnFirstBootstrap)
 
 	writeStmtSummaryVars(s)
 

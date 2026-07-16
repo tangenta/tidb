@@ -12,6 +12,7 @@ go_library(
         "//pkg/config/kerneltype",
         "//pkg/ddl/logutil",
         "//pkg/ddl/util",
+        "//pkg/domain/pkdb_repl",
         "//pkg/domain/serverinfo",
         "//pkg/metrics",
         "//pkg/sessionctx/vardef",

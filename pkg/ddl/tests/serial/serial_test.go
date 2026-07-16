@@ -775,7 +775,7 @@ func TestCancelJobByErrorCountLimit(t *testing.T) {
 
 	limit := vardef.GetDDLErrorCountLimit()
 	tk.MustExec("set @@global.tidb_ddl_error_count_limit = 16")
-	err := util.LoadGlobalVars(tk.Session(), vardef.TiDBDDLErrorCountLimit)
+	err := util.LoadGlobalVars(context.Background(), tk.Session(), []string{vardef.TiDBDDLErrorCountLimit})
 	require.NoError(t, err)
 	defer tk.MustExec(fmt.Sprintf("set @@global.tidb_ddl_error_count_limit = %d", limit))
 

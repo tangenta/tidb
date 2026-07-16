@@ -3203,6 +3203,7 @@ SYSTEM_USER	Server Admin
 SYSTEM_VARIABLES_ADMIN	Server Admin	
 ROLE_ADMIN	Server Admin	
 CONNECTION_ADMIN	Server Admin	
+CONFIG_VIEW	Server Admin	
 PLACEMENT_ADMIN	Server Admin	
 DASHBOARD_CLIENT	Server Admin	
 RESTRICTED_TABLES_ADMIN	Server Admin	
@@ -3217,6 +3218,8 @@ RESOURCE_GROUP_ADMIN	Server Admin
 RESOURCE_GROUP_USER	Server Admin	
 TRAFFIC_CAPTURE_ADMIN	Server Admin	
 TRAFFIC_REPLAY_ADMIN	Server Admin	
+AUDIT_ADMIN	Server Admin	
+RESTRICTED_AUDIT_ADMIN	Server Admin	
 show table status;
 Name	Engine	Version	Row_format	Rows	Avg_row_length	Data_length	Max_data_length	Index_length	Data_free	Auto_increment	Create_time	Update_time	Check_time	Collation	Checksum	Create_options	Comment
 t	InnoDB	10	Compact	0	0	0	0	0	0	NULL	0	NULL	NULL	utf8mb4_bin			

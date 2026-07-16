@@ -39,6 +39,7 @@ var (
 	_ StmtNode = &DoStmt{}
 	_ StmtNode = &ExecuteStmt{}
 	_ StmtNode = &ExplainStmt{}
+	_ StmtNode = &ExplainRoutineStmt{}
 	_ StmtNode = &GrantStmt{}
 	_ StmtNode = &PrepareStmt{}
 	_ StmtNode = &RollbackStmt{}
@@ -219,6 +220,87 @@ type ExplainStmt struct {
 	SQLDigest string
 	// PlanDigest to explain, used in `EXPLAIN [ANALYZE] <plan_digest>`.
 	PlanDigest string
+}
+
+const (
+	// ExplainRoutineTypeFunction indicates EXPLAIN ROUTINE FUNCTION.
+	ExplainRoutineTypeFunction = "FUNCTION"
+	// ExplainRoutineTypeProcedure indicates EXPLAIN ROUTINE PROCEDURE.
+	ExplainRoutineTypeProcedure = "PROCEDURE"
+)
+
+// ExplainRoutineStmt is a statement to provide information about static SQL statements inside a stored routine.
+type ExplainRoutineStmt struct {
+	stmtNode
+
+	Format               string
+	Analyze              bool
+	RoutineType          string
+	Name                 *TableName
+	Args                 []ExprNode
+	HasTargetStmtOrdinal bool
+	TargetStmtOrdinal    uint64
+}
+
+// Restore implements Node interface.
+func (n *ExplainRoutineStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("EXPLAIN ")
+	if n.Analyze {
+		ctx.WriteKeyWord("ANALYZE ")
+	}
+	if n.Format != "" && strings.ToLower(n.Format) != "row" {
+		ctx.WriteKeyWord("FORMAT ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.Format)
+		ctx.WritePlain(" ")
+	}
+	ctx.WriteKeyWord("ROUTINE ")
+	ctx.WriteKeyWord(n.RoutineType)
+	ctx.WritePlain(" ")
+	if err := n.Name.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore ExplainRoutineStmt.Name")
+	}
+	ctx.WritePlain("(")
+	for i, arg := range n.Args {
+		if i > 0 {
+			ctx.WritePlain(", ")
+		}
+		if err := arg.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore ExplainRoutineStmt.Args[%d]", i)
+		}
+	}
+	ctx.WritePlain(")")
+	if n.HasTargetStmtOrdinal {
+		ctx.WritePlain(" ")
+		ctx.WriteKeyWord("FOR ")
+		ctx.WriteKeyWord("STMT ")
+		ctx.WritePlain(strconv.FormatUint(n.TargetStmtOrdinal, 10))
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *ExplainRoutineStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ExplainRoutineStmt)
+	if n.Name != nil {
+		node, ok := n.Name.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Name = node.(*TableName)
+	}
+	for i, arg := range n.Args {
+		node, ok := arg.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Args[i] = node.(ExprNode)
+	}
+	return v.Leave(n)
 }
 
 // Restore implements Node interface.
@@ -981,6 +1063,9 @@ type VariableAssignment struct {
 	IsGlobal   bool
 	IsSystem   bool
 
+	// The syntax can be used to stored procedure internal variables
+	CanSPVariable bool
+
 	// ExtendValue is a way to store extended info.
 	// VariableAssignment should be able to store information for SetCharset/SetPWD Stmt.
 	// For SetCharsetStmt, Value is charset, ExtendValue is collation.
@@ -990,18 +1075,20 @@ type VariableAssignment struct {
 
 // Restore implements Node interface.
 func (n *VariableAssignment) Restore(ctx *format.RestoreCtx) error {
-	if n.IsSystem {
-		ctx.WritePlain("@@")
-		if n.IsGlobal {
-			ctx.WriteKeyWord("GLOBAL")
-		} else if n.IsInstance {
-			ctx.WriteKeyWord("INSTANCE")
-		} else {
-			ctx.WriteKeyWord("SESSION")
+	if !n.CanSPVariable {
+		if n.IsSystem {
+			ctx.WritePlain("@@")
+			if n.IsGlobal {
+				ctx.WriteKeyWord("GLOBAL")
+			} else if n.IsInstance {
+				ctx.WriteKeyWord("INSTANCE")
+			} else {
+				ctx.WriteKeyWord("SESSION")
+			}
+			ctx.WritePlain(".")
+		} else if n.Name != SetNames && n.Name != SetCharset {
+			ctx.WriteKeyWord("@")
 		}
-		ctx.WritePlain(".")
-	} else if n.Name != SetNames && n.Name != SetCharset {
-		ctx.WriteKeyWord("@")
 	}
 	if n.Name == SetNames {
 		ctx.WriteKeyWord("NAMES ")
@@ -2568,6 +2655,15 @@ const (
 	AdminAlterDDLJob
 	AdminWorkloadRepoCreate
 	AdminReloadClusterBindings
+	AdminLBACEnable
+	AdminCreateLogReplication
+	AdminAlterLogReplication
+	AdminPauseLogReplication
+	AdminResumeLogReplication
+	AdminDropLogReplication
+	AdminSwitchOverPrimary
+	AdminSwitchOverAsPrimary
+	AdminActivateStandby
 	// adminTpCount is the total number of admin statement types.
 	adminTpCount
 )
@@ -2695,6 +2791,16 @@ type AdminStmt struct {
 	LimitSimple     LimitSimple
 	BDRRole         BDRRole
 	AlterJobOptions []*AlterJobOption
+
+	// pkdb
+	CreateLogReplication *CreateLogReplication
+	AlterLogReplication  *AlterLogReplication
+	PauseLogReplication  *PauseLogReplication
+	ResumeLogReplication *ResumeLogReplication
+	DropLogReplication   *DropLogReplication
+	SwitchOverPrimary    *SwitchOverPrimary
+	SwitchOverAsPrimary  *SwitchOverAsPrimary
+	ActivateStandby      *ActivateStandby
 }
 
 // Restore implements Node interface.
@@ -2817,6 +2923,8 @@ func (n *AdminStmt) Restore(ctx *format.RestoreCtx) error {
 			}
 			ctx.WritePlain(v)
 		}
+	case AdminLBACEnable:
+		ctx.WriteKeyWord("LBAC ENABLE")
 	case AdminPluginDisable:
 		ctx.WriteKeyWord("PLUGINS DISABLE")
 		for i, v := range n.Plugins {
@@ -2874,6 +2982,38 @@ func (n *AdminStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case AdminWorkloadRepoCreate:
 		ctx.WriteKeyWord("CREATE WORKLOAD SNAPSHOT")
+	case AdminCreateLogReplication:
+		if err := n.CreateLogReplication.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.CreateLogReplication")
+		}
+	case AdminAlterLogReplication:
+		if err := n.AlterLogReplication.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.AlterLogReplication")
+		}
+	case AdminPauseLogReplication:
+		if err := n.PauseLogReplication.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.PauseLogReplication")
+		}
+	case AdminResumeLogReplication:
+		if err := n.ResumeLogReplication.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.ResumeLogReplication")
+		}
+	case AdminDropLogReplication:
+		if err := n.DropLogReplication.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.DropLogReplication")
+		}
+	case AdminSwitchOverPrimary:
+		if err := n.SwitchOverPrimary.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.SwitchOverPrimary")
+		}
+	case AdminSwitchOverAsPrimary:
+		if err := n.SwitchOverAsPrimary.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.SwitchOverAsPrimary")
+		}
+	case AdminActivateStandby:
+		if err := n.ActivateStandby.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AdminStmt.ActivateStandby")
+		}
 	default:
 		return errors.New("Unsupported AdminStmt type")
 	}
@@ -2942,6 +3082,8 @@ type PrivElem struct {
 
 	Priv mysql.PrivilegeType
 	Cols []*ColumnName
+
+	// Name stores the extended privilege like dynamic privilege.
 	Name string
 }
 
@@ -3021,6 +3163,11 @@ func (n ObjectTypeType) Restore(ctx *format.RestoreCtx) error {
 	return nil
 }
 
+// IsRoutineType checks whether it is a routine type
+func (n ObjectTypeType) IsRoutineType() bool {
+	return n == ObjectTypeProcedure || n == ObjectTypeFunction
+}
+
 // GrantLevelType is the type for grant level.
 type GrantLevelType int
 
@@ -3031,7 +3178,7 @@ const (
 	GrantLevelGlobal
 	// GrantLevelDB means the privileges apply to all objects in a given database.
 	GrantLevelDB
-	// GrantLevelTable means the privileges apply to all columns in a given table.
+	// GrantLevelTable means the privileges apply to columns in a given table.
 	GrantLevelTable
 )
 
@@ -4137,7 +4284,7 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 		}
 	case "tidb_hj", "tidb_smj", "tidb_inlj", "hash_join", "hash_join_build", "hash_join_probe", "merge_join", "inl_join",
 		"broadcast_join", "shuffle_join", "inl_hash_join", "inl_merge_join", "no_hash_join", "no_merge_join",
-		"no_index_join", "no_index_hash_join", "no_index_merge_join":
+		"no_index_join", "no_index_hash_join", "no_index_merge_join", "full":
 		for i, table := range n.Tables {
 			if i != 0 {
 				ctx.WritePlain(", ")

@@ -823,8 +823,8 @@ func TestRecoverArgs(t *testing.T) {
 			ID:   100,
 			Name: ast.NewCIStr("table"),
 		},
-		OldSchemaName: "old",
-		OldTableName:  "table",
+		OldSchemaName: ast.NewCIStr("old"),
+		OldTableName:  ast.NewCIStr("table"),
 	}
 
 	inArgs := &RecoverArgs{

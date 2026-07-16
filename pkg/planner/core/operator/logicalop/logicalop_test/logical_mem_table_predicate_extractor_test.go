@@ -443,6 +443,13 @@ func TestClusterLogTableExtractor(t *testing.T) {
 			endTime:   timestamp(t, "2019-10-11 10:10:10") - 1,
 		},
 		{
+			sql:       "select * from information_schema.cluster_log where '2019-10-10 10:10:10' < time and '2019-10-11 10:10:10' > time",
+			nodeTypes: set.NewStringSet(),
+			instances: set.NewStringSet(),
+			startTime: timestamp(t, "2019-10-10 10:10:10") + 1,
+			endTime:   timestamp(t, "2019-10-11 10:10:10") - 1,
+		},
+		{
 			sql:         "select * from information_schema.cluster_log where time>='2019-10-12 10:10:10' and time<'2019-10-11 10:10:10'",
 			nodeTypes:   set.NewStringSet(),
 			instances:   set.NewStringSet(),
@@ -631,6 +638,12 @@ func TestMetricTableExtractor(t *testing.T) {
 			promQL:    `histogram_quantile(0.9, sum(rate(tidb_server_handle_query_duration_seconds_bucket{}[60s])) by (le,sql_type,instance))`,
 			startTime: parseTime(t, "2019-10-10 10:10:10"),
 			endTime:   parseTime(t, "2019-10-10 10:20:10"),
+		},
+		{
+			sql:       "select * from metrics_schema.tidb_query_duration where '2019-10-10 10:10:10' < time and '2019-10-11 10:10:10' > time",
+			promQL:    `histogram_quantile(0.9, sum(rate(tidb_server_handle_query_duration_seconds_bucket{}[60s])) by (le,sql_type,instance))`,
+			startTime: parseTime(t, "2019-10-10 10:10:10.001"),
+			endTime:   parseTime(t, "2019-10-11 10:10:09.999"),
 		},
 		{
 			sql:         "select * from metrics_schema.tidb_query_duration where time>='2019-10-10 10:10:10' and time<='2019-10-09 10:10:10'",
@@ -1138,6 +1151,14 @@ func TestTiDBHotRegionsHistoryTableExtractor(t *testing.T) {
 		{
 			sql:            "select * from information_schema.tidb_hot_regions_history where update_time>='2019-10-10 10:10:10' and update_time<'2019-10-11 10:10:10'",
 			startTime:      timestamp(t, "2019-10-10 10:10:10"),
+			endTime:        timestamp(t, "2019-10-11 10:10:10") - 1,
+			isLearners:     []bool{false, true},
+			isLeaders:      []bool{false, true},
+			hotRegionTypes: set.NewStringSet(plannercore.HotRegionTypeRead, plannercore.HotRegionTypeWrite),
+		},
+		{
+			sql:            "select * from information_schema.tidb_hot_regions_history where '2019-10-10 10:10:10' < update_time and '2019-10-11 10:10:10' > update_time",
+			startTime:      timestamp(t, "2019-10-10 10:10:10") + 1,
 			endTime:        timestamp(t, "2019-10-11 10:10:10") - 1,
 			isLearners:     []bool{false, true},
 			isLeaders:      []bool{false, true},
@@ -1766,6 +1787,41 @@ PARTITION BY RANGE COLUMNS ( id ) (
 	}
 }
 
+func TestInfoSchemaParametersExtractor(t *testing.T) {
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+
+	se, err := session.CreateSession4Test(store)
+	require.NoError(t, err)
+
+	parser := parser.New()
+	cases := []struct {
+		sql            string
+		specificSchema set.StringSet
+		specificName   set.StringSet
+	}{
+		{
+			sql:            "select * from information_schema.parameters where specific_schema='test' and specific_name='proc_target'",
+			specificSchema: set.NewStringSet("test"),
+			specificName:   set.NewStringSet("proc_target"),
+		},
+		{
+			sql:            "select * from information_schema.parameters where specific_schema in ('TEST', 'mysql') and specific_name in ('PROC_A', 'proc_b')",
+			specificSchema: set.NewStringSet("test", "mysql"),
+			specificName:   set.NewStringSet("proc_a", "proc_b"),
+		},
+	}
+
+	for _, ca := range cases {
+		logicalMemTable, ok := getLogicalMemTable(t, dom, se, parser, ca.sql)
+		require.True(t, ok, "SQL: %v", ca.sql)
+		require.NotNil(t, logicalMemTable.Extractor, "SQL: %v", ca.sql)
+
+		extractor := logicalMemTable.Extractor.(*plannercore.InfoSchemaParametersExtractor)
+		require.EqualValues(t, ca.specificSchema, extractor.ColPredicates["specific_schema"], "SQL: %v", ca.sql)
+		require.EqualValues(t, ca.specificName, extractor.ColPredicates["specific_name"], "SQL: %v", ca.sql)
+	}
+}
+
 func TestExtractorInPreparedStmt(t *testing.T) {
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	tk := testkit.NewTestKit(t, store)
@@ -2126,5 +2182,95 @@ func TestInfoSchemaTableExtract(t *testing.T) {
 			require.Equal(t, ca.skipRequest, ex.GetBase().SkipRequest, "SQL: %v", ca.sql)
 			require.Equal(t, ca.colPredicates, ex.GetBase().ColPredicates, "SQL: %v", ca.sql)
 		}
+	}
+}
+
+// TestTableRegionsExtractor verifies that TableRegionsExtractor can correctly extract
+// schema and table names from the WHERE clause.
+func TestTableRegionsExtractor(t *testing.T) {
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+
+	se, err := session.CreateSession4Test(store)
+	require.NoError(t, err)
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec(`create table t (id int)`)
+	tk.MustExec(`create table p (id int) partition by hash(id) partitions 4`)
+
+	var cases = []struct {
+		sql             string
+		expectDBName    string
+		expectTableName string
+		explainInfo     string
+	}{
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where db_name = 'test' and table_name = 't'",
+			expectDBName:    "test",
+			expectTableName: "t",
+			explainInfo:     "schema name: test, table name: t",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where table_name = 't' and db_name = 'test'",
+			expectDBName:    "test",
+			expectTableName: "t",
+			explainInfo:     "schema name: test, table name: t",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where db_name = 'test' and table_name = 'p'",
+			expectDBName:    "test",
+			expectTableName: "p",
+			explainInfo:     "schema name: test, table name: p",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where db_name = 'test'",
+			expectDBName:    "",
+			expectTableName: "",
+			explainInfo:     "",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where table_name = 't'",
+			expectDBName:    "",
+			expectTableName: "",
+			explainInfo:     "",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where db_name in ('test', 'mysql') and table_name = 't'",
+			expectDBName:    "",
+			expectTableName: "",
+			explainInfo:     "",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS where db_name = 'test' or table_name = 't'",
+			expectDBName:    "",
+			expectTableName: "",
+			explainInfo:     "",
+		},
+		{
+			sql:             "select * from information_schema.TABLE_REGIONS",
+			expectDBName:    "",
+			expectTableName: "",
+			explainInfo:     "",
+		},
+	}
+
+	parser := parser.New()
+	for _, ca := range cases {
+		logicalMemTable, _ := getLogicalMemTable(t, dom, se, parser, ca.sql)
+		require.NotNil(t, logicalMemTable.Extractor, "Extractor should not be nil for SQL: %s", ca.sql)
+
+		tre, ok := logicalMemTable.Extractor.(*plannercore.TableRegionsExtractor)
+		require.True(t, ok, "Extractor should be of type *plannercore.TableRegionsExtractor")
+
+		dbName := tre.GetSchemaName().L
+		tableName := tre.GetTableName().L
+
+		require.Equal(t, ca.expectDBName, dbName, "Mismatch in extracted DB name for SQL: %s", ca.sql)
+		require.Equal(t, ca.expectTableName, tableName, "Mismatch in extracted table name for SQL: %s", ca.sql)
+
+		// Assuming getLogicalMemTable also triggers the extraction and population of schemaName and tableName
+		// we can then check the ExplainInfo result.
+		explain := tre.ExplainInfo(nil) // The argument is not used in the method
+		require.Equal(t, ca.explainInfo, explain, "Mismatch in ExplainInfo for SQL: %s", ca.sql)
 	}
 }

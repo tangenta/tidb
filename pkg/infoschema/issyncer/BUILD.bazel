@@ -15,6 +15,7 @@ go_library(
         "//pkg/config",
         "//pkg/ddl/schemaver",
         "//pkg/ddl/systable",
+        "//pkg/domain/pkdb_repl",
         "//pkg/infoschema",
         "//pkg/infoschema/issyncer/mdldef",
         "//pkg/infoschema/metrics",

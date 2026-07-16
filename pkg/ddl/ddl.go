@@ -54,6 +54,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/owner"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -96,7 +97,30 @@ var (
 	jobV2FirstVer        = *semver.New("8.4.0")
 	globalIdxV1FirstVer  = *semver.New("8.5.6")
 	detectJobVerInterval = 10 * time.Second
+	eeVersions           = map[string]string{
+		"7.1.8-5": "8.5",
+		"7.1.7-5": "7.5",
+	}
 )
+
+func mayConvertFromEEVersion(ver *semver.Version) *semver.Version {
+	strVer := ver.String()
+	for eeVersion, version := range eeVersions {
+		if strings.HasPrefix(strVer, eeVersion) {
+			newVersion := strings.Replace(strVer, eeVersion, version, 1)
+			if newVersion == version {
+				// Add the patch version
+				newVersion += ".0"
+			}
+			newVer, err := semver.NewVersion(newVersion)
+			if err == nil {
+				return newVer
+			}
+		}
+	}
+	// no one match, just return the original one
+	return ver
+}
 
 // StartMode is an enum type for the start mode of the DDL.
 type StartMode string
@@ -117,6 +141,15 @@ const (
 // OnExist specifies what to do when a new object has a name collision.
 type OnExist uint8
 
+// CreateTableCTASConfig is the configuration of `create table as select`
+type CreateTableCTASConfig struct {
+	CTASSnapshotTS      uint64
+	CTASSql             string
+	CTASOnDuplicate     ast.OnDuplicateKeyHandlingType
+	CTASSubmitterExecID string
+	CTASSubmitterConnID uint64
+}
+
 // CreateTableConfig is the configuration of `CreateTableWithInfo`.
 type CreateTableConfig struct {
 	OnExist OnExist
@@ -125,6 +158,7 @@ type CreateTableConfig struct {
 	// by BR now. By reusing IDs BR can save a lot of works such as rewriting table
 	// IDs in backed up KVs.
 	IDAllocated bool
+	CreateTableCTASConfig
 }
 
 // CreateTableOption is the option for creating table.
@@ -1059,6 +1093,9 @@ func (d *ddl) detectAndUpdateJobVersionOnce() error {
 			logutil.SampleLogger().Warn("parse server version failed", zap.String("version", info.Version),
 				zap.String("err", err2.Error()))
 			break
+		}
+		if string(ver.PreRelease) != "" {
+			ver = mayConvertFromEEVersion(ver)
 		}
 		// sem-ver also compares pre-release labels, but we don't need to consider
 		// them here, so we clear them.

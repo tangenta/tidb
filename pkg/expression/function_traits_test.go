@@ -49,6 +49,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"aes_encrypt",
 		"and", // operator
 		"any_value",
+		"array_element",
 		"ascii",
 		"asin",
 		"atan",
@@ -71,6 +72,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"coalesce",
 		"coercibility",
 		"collation",
+		"column_decryption",
 		"compress",
 		"concat",
 		"concat_ws",
@@ -100,6 +102,7 @@ func TestIllegalFunctions4GeneratedColumns(t *testing.T) {
 		"exp",
 		"export_set",
 		"extract",
+		"extractvalue",
 		"field",
 		"find_in_set",
 		"floor",

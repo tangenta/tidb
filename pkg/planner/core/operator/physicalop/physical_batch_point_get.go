@@ -93,6 +93,12 @@ type PointGetPlan struct {
 	accessCols []*expression.Column
 
 	// NOTE: please update FastClonePointGetForPlanCache accordingly if you add new fields here.
+
+	// required by column privileges
+	// unfold indicates whether the FieldName in 'names' is unfolded from wildcard
+	Unfold []bool
+	// columns in the where clause should be check privilege
+	ColsInWhereClause []string
 }
 
 // Init initializes PointGetPlan.
@@ -473,11 +479,7 @@ func (p *PointGetPlan) AccessObject() base.AccessObject {
 			IsClusteredIndex: p.IndexInfo.Primary && p.TblInfo.IsCommonHandle,
 		}
 		for _, idxCol := range p.IndexInfo.Columns {
-			if tblCol := p.TblInfo.Columns[idxCol.Offset]; tblCol.Hidden {
-				index.Cols = append(index.Cols, tblCol.GeneratedExprString)
-			} else {
-				index.Cols = append(index.Cols, idxCol.Name.O)
-			}
+			index.Cols = append(index.Cols, p.IndexInfo.GetIndexColumnDisplayString(p.TblInfo, idxCol))
 		}
 		res.Indexes = []access.IndexAccess{index}
 	}
@@ -528,6 +530,12 @@ type BatchPointGetPlan struct {
 	PlanCostVer2 costusage.CostVer2 `plan-cache-clone:"shallow"`
 	// accessCols represents actual columns the PointGet will access, which are used to calculate row-size
 	accessCols []*expression.Column
+
+	// required by column privileges
+	// unfold indicates whether the FieldName in 'names' is unfolded from wildcard
+	Unfold []bool
+	// columns in the where clause should be check privilege
+	ColsInWhereClause []string
 }
 
 // Init initializes BatchPointGetPlan.
@@ -1028,11 +1036,7 @@ func (p *BatchPointGetPlan) AccessObject() base.AccessObject {
 			IsClusteredIndex: p.IndexInfo.Primary && p.TblInfo.IsCommonHandle,
 		}
 		for _, idxCol := range p.IndexInfo.Columns {
-			if tblCol := p.TblInfo.Columns[idxCol.Offset]; tblCol.Hidden {
-				index.Cols = append(index.Cols, tblCol.GeneratedExprString)
-			} else {
-				index.Cols = append(index.Cols, idxCol.Name.O)
-			}
+			index.Cols = append(index.Cols, p.IndexInfo.GetIndexColumnDisplayString(p.TblInfo, idxCol))
 		}
 		res.Indexes = []access.IndexAccess{index}
 	}

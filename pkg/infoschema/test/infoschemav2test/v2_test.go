@@ -668,9 +668,9 @@ func TestGCOldVersionPivotDeletedLeadsToReferredFKMissing(t *testing.T) {
 	defer tkTxn.MustExec("rollback")
 	cutVer := tkTxn.Session().GetInfoSchema().SchemaMetaVersion()
 	tk.MustExec("create table child2 (pid int, foreign key fk2(pid) references parent(id))")
-	require.Len(t, dom.InfoSchema().GetTableReferredForeignKeys("test", "parent"), 2)
+	require.Len(t, dom.InfoSchema().GetTableReferredForeignKeys(ast.NewCIStr("test"), ast.NewCIStr("parent")), 2)
 	dom.InfoCache().Data.GCOldVersion(cutVer)
-	ref := tkTxn.Session().GetInfoSchema().GetTableReferredForeignKeys("test", "parent")
+	ref := tkTxn.Session().GetInfoSchema().GetTableReferredForeignKeys(ast.NewCIStr("test"), ast.NewCIStr("parent"))
 	require.Len(t, ref, 1)
 	require.Equal(t, "child1", ref[0].ChildTable.L)
 }

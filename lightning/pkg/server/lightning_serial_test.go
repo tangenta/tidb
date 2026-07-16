@@ -94,7 +94,16 @@ func TestRun(t *testing.T) {
 	require.EqualError(t, err, "[Lightning:Checkpoint:ErrUnknownCheckpointDriver]unknown checkpoint driver 'invalid'")
 	require.Contains(t, buffer.String(), `"acquired keyspace name","keyspaceName":""`)
 
+	mock.ExpectQuery("show config").WillReturnRows(sqlmock.NewRows(
+		[]string{"Type", "Instance", "Name", "Value"},
+	).AddRow("tidb", "127.0.0.1:4000", "keyspace-name", "a"))
+	buffer.Reset()
+	err = lightning.run(ctx, cfgKeyspaceName, o)
+	require.EqualError(t, err, "[Lightning:Checkpoint:ErrUnknownCheckpointDriver]unknown checkpoint driver 'invalid'")
+	require.Contains(t, buffer.String(), `"acquired keyspace name","keyspaceName":"a"`)
+
 	cfgKeyspaceName.TikvImporter.KeyspaceName = "test"
+	buffer.Reset()
 	err = lightning.run(ctx, cfgKeyspaceName, o)
 	require.EqualError(t, err, "[Lightning:Checkpoint:ErrUnknownCheckpointDriver]unknown checkpoint driver 'invalid'")
 	require.Contains(t, buffer.String(), `"acquired keyspace name","keyspaceName":"test"`)

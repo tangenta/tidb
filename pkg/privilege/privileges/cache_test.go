@@ -17,6 +17,7 @@ package privileges_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -453,10 +454,24 @@ func TestGlobalPrivValueRequireStr(t *testing.T) {
 }
 
 func checkUserRecord(t *testing.T, x, y []privileges.UserRecord) {
-	require.Equal(t, len(x), len(y))
-	for i := range x {
-		require.Equal(t, x[i].User, y[i].User)
-		require.Equal(t, x[i].Host, y[i].Host)
+	var sbX, sbY strings.Builder
+	for _, u := range x {
+		sbX.WriteString(u.User)
+		sbX.WriteString("@")
+		sbX.WriteString(u.Host)
+		sbX.WriteString("\n")
+	}
+	for _, u := range y {
+		sbY.WriteString(u.User)
+		sbY.WriteString("@")
+		sbY.WriteString(u.Host)
+		sbY.WriteString("\n")
+	}
+
+	require.Equal(t, len(x), len(y), "%s\n vs %s\n", sbX.String(), sbY.String())
+	for i := 0; i < len(x); i++ {
+		require.Equal(t, x[i].User, y[i].User, "%s\n vs %s\n", sbX.String(), sbY.String())
+		require.Equal(t, x[i].Host, y[i].Host, "%s\n vs %s\n", sbX.String(), sbY.String())
 	}
 }
 
@@ -522,4 +537,11 @@ func TestDBIsVisible(t *testing.T) {
 	isVisible = p.DBIsVisible("testvisdb9", "%", "visdb")
 	require.True(t, isVisible)
 	tk.MustExec("delete from mysql.user")
+
+	tk.MustExec(`INSERT INTO mysql.procs_priv (Host, User, Db, Routine_name, Routine_type, Grantor, Proc_priv) VALUES ("%", "testvisdb10", "visdb", "f1", "FUNCTION", "root@%", "Execute")`)
+	p = privileges.NewMySQLPrivilege()
+	require.NoError(t, p.LoadAll(se.GetSQLExecutor()))
+	isVisible = p.DBIsVisible("testvisdb10", "%", "visdb")
+	require.True(t, isVisible)
+	tk.MustExec("delete from mysql.procs_priv")
 }

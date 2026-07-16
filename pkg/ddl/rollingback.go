@@ -15,10 +15,14 @@
 package ddl
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/dxf/framework/handle"
+	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
+	dxfstorage "github.com/pingcap/tidb/pkg/dxf/framework/storage"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
@@ -602,6 +606,48 @@ func rollingbackTruncateTable(jobCtx *jobContext, job *model.Job) (ver int64, er
 	return cancelOnlyNotHandledJob(job, model.StateNone)
 }
 
+func setCTASRollbackJobError(job *model.Job, err error) {
+	if err != nil {
+		job.Error = toTError(err)
+		return
+	}
+	if job.Error == nil || job.Error.Equal(dbterror.ErrCannotCancelDDLJob) {
+		job.Error = toTError(dbterror.ErrCancelledDDLJob)
+	}
+}
+
+func driveCTASLoadTaskTowardRollback(ctx context.Context, task *proto.Task) error {
+	if task.State == proto.TaskStatePaused {
+		// A paused task will stay parked until it is resumed, so resume it first
+		// and let a later DDL retry cancel it once DXF brings it back to running.
+		return handle.ResumeTask(ctx, task.Key)
+	}
+	return handle.CancelTask(ctx, task.Key)
+}
+
+func (w *worker) rollbackCTASTableOnCancel(jobCtx *jobContext, job *model.Job, tbInfo *model.TableInfo) (int64, error) {
+	ctx := jobCtx.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	task, err := getCTASLoadSubtask(ctx, job)
+	if err != nil {
+		if !errors.ErrorEqual(err, dxfstorage.ErrTaskNotFound) {
+			return 0, err
+		}
+		setCTASRollbackJobError(job, nil)
+		return w.rollbackCTASTable(jobCtx, job, tbInfo)
+	}
+
+	if task.IsDone() {
+		setCTASRollbackJobError(job, task.Error)
+		return w.rollbackCTASTable(jobCtx, job, tbInfo)
+	}
+	// Keep the DDL job in cancelling state until DXF finishes converging the task.
+	return 0, driveCTASLoadTaskTowardRollback(ctx, task)
+}
+
 func convertJob2RollbackJob(w *worker, jobCtx *jobContext, job *model.Job) (ver int64, err error) {
 	switch job.Type {
 	case model.ActionAddColumn:
@@ -633,6 +679,18 @@ func convertJob2RollbackJob(w *worker, jobCtx *jobContext, job *model.Job) (ver 
 		ver, err = rollingbackRenameIndex(jobCtx, job)
 	case model.ActionTruncateTable:
 		ver, err = rollingbackTruncateTable(jobCtx, job)
+	case model.ActionCreateTable:
+		var args *model.CreateTableArgs
+		args, err = model.GetCreateTableArgs(job)
+		if err != nil {
+			job.State = model.JobStateCancelled
+			break
+		}
+		if args.CTASSnapshotTS == 0 || job.SchemaState != model.StateWriteReorganization {
+			ver, err = cancelOnlyNotHandledJob(job, model.StateNone)
+			break
+		}
+		ver, err = w.rollbackCTASTableOnCancel(jobCtx, job, args.TableInfo)
 	case model.ActionModifyColumn:
 		ver, err = rollingbackModifyColumn(jobCtx, job)
 	case model.ActionDropForeignKey:

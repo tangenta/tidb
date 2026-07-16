@@ -70,6 +70,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	toTSO                "TO TSO"
 	memberof             "MEMBER OF"
 	optionallyEnclosedBy "OPTIONALLY ENCLOSED BY"
+	intoOutfile          "INTO OUTFILE"
 
 	/*yy:token "_%c"    */
 	underscoreCS "UNDERSCORE_CHARSET"
@@ -97,6 +98,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	array             "ARRAY"
 	as                "AS"
 	asc               "ASC"
+	before            "BEFORE"
 	between           "BETWEEN"
 	bigIntType        "BIGINT"
 	binaryType        "BINARY"
@@ -112,6 +114,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	check             "CHECK"
 	collate           "COLLATE"
 	column            "COLUMN"
+	condition         "CONDITION"
 	constraint        "CONSTRAINT"
 	continueKwd       "CONTINUE"
 	convert           "CONVERT"
@@ -131,6 +134,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	dayMinute         "DAY_MINUTE"
 	daySecond         "DAY_SECOND"
 	decimalType       "DECIMAL"
+	declare           "DECLARE"
 	defaultKwd        "DEFAULT"
 	delayed           "DELAYED"
 	deleteKwd         "DELETE"
@@ -143,6 +147,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	doubleType        "DOUBLE"
 	drop              "DROP"
 	dual              "DUAL"
+	each              "EACH"
 	elseKwd           "ELSE"
 	elseIfKwd         "ELSEIF"
 	enclosed          "ENCLOSED"
@@ -163,6 +168,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	from              "FROM"
 	fulltext          "FULLTEXT"
 	generated         "GENERATED"
+	get               "GET"
 	grant             "GRANT"
 	group             "GROUP"
 	groups            "GROUPS"
@@ -214,6 +220,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	long              "LONG"
 	longblobType      "LONGBLOB"
 	longtextType      "LONGTEXT"
+	loop              "LOOP"
 	lowPriority       "LOW_PRIORITY"
 	match             "MATCH"
 	maxValue          "MAXVALUE"
@@ -247,6 +254,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	precisionType     "PRECISION"
 	primary           "PRIMARY"
 	procedure         "PROCEDURE"
+	purge             "PURGE"
 	rangeKwd          "RANGE"
 	rank              "RANK"
 	read              "READ"
@@ -260,6 +268,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	replace           "REPLACE"
 	require           "REQUIRE"
 	restrict          "RESTRICT"
+	returnKwd         "RETURN"
 	revoke            "REVOKE"
 	right             "RIGHT"
 	rlike             "RLIKE"
@@ -270,6 +279,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	selectKwd         "SELECT"
 	set               "SET"
 	show              "SHOW"
+	signal            "SIGNAL"
 	smallIntType      "SMALLINT"
 	spatial           "SPATIAL"
 	sql               "SQL"
@@ -285,6 +295,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	straightJoin      "STRAIGHT_JOIN"
 	tableKwd          "TABLE"
 	tableSample       "TABLESAMPLE"
+	tableSplit        "TABLESPLIT"
 	terminated        "TERMINATED"
 	then              "THEN"
 	tidbCurrentTSO    "TIDB_CURRENT_TSO"
@@ -324,6 +335,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	zerofill          "ZEROFILL"
 
 	/* The following tokens belong to UnReservedKeyword. Notice: make sure these tokens are contained in UnReservedKeyword. */
+	access                     "ACCESS"
 	account                    "ACCOUNT"
 	action                     "ACTION"
 	addColumnarReplicaOnDemand "ADD_COLUMNAR_REPLICA_ON_DEMAND"
@@ -331,6 +343,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	affinity                   "AFFINITY"
 	after                      "AFTER"
 	against                    "AGAINST"
+	aggregate                  "AGGREGATE"
 	ago                        "AGO"
 	algorithm                  "ALGORITHM"
 	always                     "ALWAYS"
@@ -339,6 +352,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	ascii                      "ASCII"
 	attribute                  "ATTRIBUTE"
 	attributes                 "ATTRIBUTES"
+	authorized                 "AUTHORIZED"
 	autoextendSize             "AUTOEXTEND_SIZE"
 	autoIdCache                "AUTO_ID_CACHE"
 	autoIncrement              "AUTO_INCREMENT"
@@ -366,6 +380,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	calibrate                  "CALIBRATE"
 	capture                    "CAPTURE"
 	cascaded                   "CASCADED"
+	catalogName                "CATALOG_NAME"
 	causal                     "CAUSAL"
 	chain                      "CHAIN"
 	charsetKwd                 "CHARSET"
@@ -373,6 +388,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	checksum                   "CHECKSUM"
 	checksumConcurrency        "CHECKSUM_CONCURRENCY"
 	cipher                     "CIPHER"
+	classOrigin                "CLASS_ORIGIN"
 	cleanup                    "CLEANUP"
 	client                     "CLIENT"
 	clientErrorsSummary        "CLIENT_ERRORS_SUMMARY"
@@ -384,10 +400,13 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	columnar                   "COLUMNAR"
 	columns                    "COLUMNS"
 	columnFormat               "COLUMN_FORMAT"
+	columnName                 "COLUMN_NAME"
 	comment                    "COMMENT"
 	commit                     "COMMIT"
 	committed                  "COMMITTED"
 	compact                    "COMPACT"
+	component                  "COMPONENT"
+	components                 "COMPONENTS"
 	compressed                 "COMPRESSED"
 	compression                "COMPRESSION"
 	compressionLevel           "COMPRESSION_LEVEL"
@@ -397,6 +416,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	connection                 "CONNECTION"
 	consistency                "CONSISTENCY"
 	consistent                 "CONSISTENT"
+	constraintCaraLog          "CONSTRAINT_CATALOG"
+	constraintName             "CONSTRAINT_NAME"
+	constraintSchema           "CONSTRAINT_SCHEMA"
+	contains                   "CONTAINS"
 	context                    "CONTEXT"
 	cpu                        "CPU"
 	csvBackslashEscape         "CSV_BACKSLASH_ESCAPE"
@@ -407,15 +430,17 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	csvSeparator               "CSV_SEPARATOR"
 	csvTrimLastSeparators      "CSV_TRIM_LAST_SEPARATORS"
 	current                    "CURRENT"
+	cursorName                 "CURSOR_NAME"
 	cycle                      "CYCLE"
 	data                       "DATA"
 	dateType                   "DATE"
 	datetimeType               "DATETIME"
 	day                        "DAY"
 	deallocate                 "DEALLOCATE"
-	declare                    "DECLARE"
 	definer                    "DEFINER"
 	delayKeyWrite              "DELAY_KEY_WRITE"
+	deterministic              "DETERMINISTIC"
+	diagnostics                "DIAGNOSTICS"
 	digest                     "DIGEST"
 	directory                  "DIRECTORY"
 	disable                    "DISABLE"
@@ -445,6 +470,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	exchange                   "EXCHANGE"
 	exclusive                  "EXCLUSIVE"
 	execute                    "EXECUTE"
+	exemption                  "EXEMPTION"
 	expansion                  "EXPANSION"
 	expire                     "EXPIRE"
 	explore                    "EXPLORE"
@@ -457,6 +483,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	fixed                      "FIXED"
 	flush                      "FLUSH"
 	following                  "FOLLOWING"
+	follows                    "FOLLOWS"
 	format                     "FORMAT"
 	found                      "FOUND"
 	full                       "FULL"
@@ -490,11 +517,14 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	issuer                     "ISSUER"
 	jsonType                   "JSON"
 	keyBlockSize               "KEY_BLOCK_SIZE"
+	label                      "LABEL"
 	labels                     "LABELS"
 	language                   "LANGUAGE"
 	last                       "LAST"
 	lastval                    "LASTVAL"
 	lastBackup                 "LAST_BACKUP"
+	lbac                       "LBAC"
+	lbacRules                  "LBACRULES"
 	less                       "LESS"
 	level                      "LEVEL"
 	list                       "LIST"
@@ -516,14 +546,17 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	member                     "MEMBER"
 	memory                     "MEMORY"
 	merge                      "MERGE"
+	messageText                "MESSAGE_TEXT"
 	microsecond                "MICROSECOND"
 	minute                     "MINUTE"
 	minValue                   "MINVALUE"
 	minRows                    "MIN_ROWS"
 	mode                       "MODE"
+	modifies                   "MODIFIES"
 	modify                     "MODIFY"
 	monitor                    "MONITOR"
 	month                      "MONTH"
+	mysqlErrno                 "MYSQL_ERRNO"
 	names                      "NAMES"
 	national                   "NATIONAL"
 	ncharType                  "NCHAR"
@@ -540,6 +573,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	none                       "NONE"
 	nowait                     "NOWAIT"
 	nulls                      "NULLS"
+	number                     "NUMBER"
 	nvarcharType               "NVARCHAR"
 	off                        "OFF"
 	offset                     "OFFSET"
@@ -551,6 +585,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	onDuplicate                "ON_DUPLICATE"
 	open                       "OPEN"
 	optional                   "OPTIONAL"
+	override                   "OVERRIDE"
 	packKeys                   "PACK_KEYS"
 	pageSym                    "PAGE"
 	pageChecksum               "PAGE_CHECKSUM"
@@ -570,6 +605,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	plugins                    "PLUGINS"
 	point                      "POINT"
 	policy                     "POLICY"
+	precedes                   "PRECEDES"
 	preceding                  "PRECEDING"
 	prepare                    "PREPARE"
 	preserve                   "PRESERVE"
@@ -580,12 +616,12 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	profile                    "PROFILE"
 	profiles                   "PROFILES"
 	proxy                      "PROXY"
-	purge                      "PURGE"
 	quarter                    "QUARTER"
 	queries                    "QUERIES"
 	query                      "QUERY"
 	quick                      "QUICK"
 	rateLimit                  "RATE_LIMIT"
+	reads                      "READS"
 	rebuild                    "REBUILD"
 	recommend                  "RECOMMEND"
 	recover                    "RECOVER"
@@ -606,11 +642,14 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	restore                    "RESTORE"
 	restores                   "RESTORES"
 	resume                     "RESUME"
+	returned_sqlstate          "RETURNED_SQLSTATE"
+	returns                    "RETURNS"
 	reuse                      "REUSE"
 	reverse                    "REVERSE"
 	role                       "ROLE"
 	rollback                   "ROLLBACK"
 	rollup                     "ROLLUP"
+	root                       "ROOT"
 	routine                    "ROUTINE"
 	rowCount                   "ROW_COUNT"
 	rowFormat                  "ROW_FORMAT"
@@ -618,13 +657,16 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	rule                       "RULE"
 	san                        "SAN"
 	savepoint                  "SAVEPOINT"
+	schemaName                 "SCHEMA_NAME"
 	second                     "SECOND"
 	secondary                  "SECONDARY"
 	secondaryEngine            "SECONDARY_ENGINE"
 	secondaryEngineAttribute   "SECONDARY_ENGINE_ATTRIBUTE"
 	secondaryLoad              "SECONDARY_LOAD"
 	secondaryUnload            "SECONDARY_UNLOAD"
+	secured                    "SECURED"
 	security                   "SECURITY"
+	securityLabelType          "SECURITYLABEL"
 	sendCredentialsToTiKV      "SEND_CREDENTIALS_TO_TIKV"
 	separator                  "SEPARATOR"
 	sequence                   "SEQUENCE"
@@ -644,7 +686,12 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	slow                       "SLOW"
 	snapshot                   "SNAPSHOT"
 	some                       "SOME"
+	soname                     "SONAME"
 	source                     "SOURCE"
+	sourceHost                 "SOURCE_HOST"
+	sourcePassword             "SOURCE_PASSWORD"
+	sourcePort                 "SOURCE_PORT"
+	sourceUser                 "SOURCE_USER"
 	sqlBufferResult            "SQL_BUFFER_RESULT"
 	sqlCache                   "SQL_CACHE"
 	sqlNoCache                 "SQL_NO_CACHE"
@@ -656,6 +703,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	sqlTsiSecond               "SQL_TSI_SECOND"
 	sqlTsiWeek                 "SQL_TSI_WEEK"
 	sqlTsiYear                 "SQL_TSI_YEAR"
+	stacked                    "STACKED"
 	start                      "START"
 	statsAutoRecalc            "STATS_AUTO_RECALC"
 	statsColChoice             "STATS_COL_CHOICE"
@@ -665,8 +713,11 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	statsSamplePages           "STATS_SAMPLE_PAGES"
 	statsSampleRate            "STATS_SAMPLE_RATE"
 	status                     "STATUS"
+	stmt                       "STMT"
 	storage                    "STORAGE"
 	strictFormat               "STRICT_FORMAT"
+	stringType                 "STRING"
+	subclassOrigin             "SUBCLASS_ORIGIN"
 	subject                    "SUBJECT"
 	subpartition               "SUBPARTITION"
 	subpartitions              "SUBPARTITIONS"
@@ -678,6 +729,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	tables                     "TABLES"
 	tablespace                 "TABLESPACE"
 	tableChecksum              "TABLE_CHECKSUM"
+	tableName                  "TABLE_NAME"
 	temporary                  "TEMPORARY"
 	temptable                  "TEMPTABLE"
 	textType                   "TEXT"
@@ -693,6 +745,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	traditional                "TRADITIONAL"
 	transaction                "TRANSACTION"
 	transactional              "TRANSACTIONAL"
+	tree                       "TREE"
 	triggers                   "TRIGGERS"
 	truncate                   "TRUNCATE"
 	tsoType                    "TSO"
@@ -703,6 +756,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	unbounded                  "UNBOUNDED"
 	uncommitted                "UNCOMMITTED"
 	undefined                  "UNDEFINED"
+	under                      "UNDER"
 	unicodeSym                 "UNICODE"
 	unknown                    "UNKNOWN"
 	unset                      "UNSET"
@@ -720,8 +774,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	weightString               "WEIGHT_STRING"
 	without                    "WITHOUT"
 	withSysTable               "WITH_SYS_TABLE"
+	work                       "WORK"
 	workload                   "WORKLOAD"
 	x509                       "X509"
+	xml                        "XML"
 	yearType                   "YEAR"
 
 	/* The following tokens belong to NotKeywordToken. Notice: make sure these tokens are contained in NotKeywordToken. */
@@ -758,6 +814,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	follower              "FOLLOWER"
 	followerConstraints   "FOLLOWER_CONSTRAINTS"
 	followers             "FOLLOWERS"
+	forceCommit           "FORCE_COMMIT"
 	fullBackupStorage     "FULL_BACKUP_STORAGE"
 	gcTTL                 "GC_TTL"
 	getFormat             "GET_FORMAT"
@@ -857,6 +914,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	watch                 "WATCH"
 
 	/* The following tokens belong to TiDBKeyword. Notice: make sure these tokens are contained in TiDBKeyword. */
+	activate                   "ACTIVATE"
 	admin                      "ADMIN"
 	batch                      "BATCH"
 	buckets                    "BUCKETS"
@@ -890,12 +948,15 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	builtinVarSamp
 	cancel                     "CANCEL"
 	cardinality                "CARDINALITY"
+	clusterId                  "CLUSTER_ID"
 	cmSketch                   "CMSKETCH"
 	columnStatsUsage           "COLUMN_STATS_USAGE"
 	correlation                "CORRELATION"
 	ddl                        "DDL"
+	degradeTimeout             "DEGRADE_TIMEOUT"
 	dependency                 "DEPENDENCY"
 	depth                      "DEPTH"
+	detached                   "DETACHED"
 	distribute                 "DISTRIBUTE"
 	distribution               "DISTRIBUTION"
 	distributions              "DISTRIBUTIONS"
@@ -904,11 +965,15 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	job                        "JOB"
 	jobs                       "JOBS"
 	lite                       "LITE"
+	maximumAvailability        "MAXIMUM_AVAILABILITY"
+	maximumPerformance         "MAXIMUM_PERFORMANCE"
+	maximumProtection          "MAXIMUM_PROTECTION"
 	nodeID                     "NODE_ID"
 	nodeState                  "NODE_STATE"
 	optimistic                 "OPTIMISTIC"
 	pessimistic                "PESSIMISTIC"
 	policies                   "POLICIES"
+	protectionMode             "PROTECTION_MODE"
 	region                     "REGION"
 	regions                    "REGIONS"
 	reset                      "RESET"
@@ -917,6 +982,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	samples                    "SAMPLES"
 	sessionStates              "SESSION_STATES"
 	split                      "SPLIT"
+	standby                    "STANDBY"
 	statistics                 "STATISTICS"
 	stats                      "STATS"
 	statsBuckets               "STATS_BUCKETS"
@@ -927,6 +993,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	statsLocked                "STATS_LOCKED"
 	statsMeta                  "STATS_META"
 	statsTopN                  "STATS_TOPN"
+	switchover                 "SWITCHOVER"
 	tidb                       "TIDB"
 	tiFlash                    "TIFLASH"
 	topn                       "TOPN"
@@ -997,145 +1064,166 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	WindowFuncCall                  "WINDOW function call"
 	RepeatableOpt                   "Repeatable optional in sample clause"
 	ProcedureCall                   "Procedure call with Identifier or identifier"
+	SignalAllowedExpr               "Signal support expr"
+	ConditionNumber                 "Diagnostics number"
 
 %type	<statement>
-	AdminStmt                  "Check table statement or show ddl statement"
-	AlterDatabaseStmt          "Alter database statement"
-	AlterTableStmt             "Alter table statement"
-	AlterUserStmt              "Alter user statement"
-	AlterInstanceStmt          "Alter instance statement"
-	AlterRangeStmt             "Alter data range configuration statement"
-	AlterPolicyStmt            "Alter Placement Policy statement"
-	AlterResourceGroupStmt     "Alter Resource Group statement"
-	AlterSequenceStmt          "Alter sequence statement"
-	AnalyzeTableStmt           "Analyze table statement"
-	BeginTransactionStmt       "BEGIN TRANSACTION statement"
-	BinlogStmt                 "Binlog base64 statement"
-	BRIEStmt                   "BACKUP or RESTORE statement"
-	CalibrateResourceStmt      "CALIBRATE RESOURCE statement"
-	CancelDistributionJobStmt  "CANCEL DISTRIBUTION JOB statement"
-	CommitStmt                 "COMMIT statement"
-	CreateTableStmt            "CREATE TABLE statement"
-	CreateViewStmt             "CREATE VIEW  statement"
-	CreateUserStmt             "CREATE User statement"
-	CreateRoleStmt             "CREATE Role statement"
-	CreateDatabaseStmt         "Create Database Statement"
-	CreateIndexStmt            "CREATE INDEX statement"
-	CreateBindingStmt          "CREATE BINDING statement"
-	CreatePolicyStmt           "CREATE PLACEMENT POLICY statement"
-	CreateMaskingPolicyStmt    "CREATE MASKING POLICY statement"
-	CreateProcedureStmt        "CREATE PROCEDURE statement"
-	AddQueryWatchStmt          "ADD QUERY WATCH statement"
-	CreateResourceGroupStmt    "CREATE RESOURCE GROUP statement"
-	CreateSequenceStmt         "CREATE SEQUENCE statement"
-	CreateStatisticsStmt       "CREATE STATISTICS statement"
-	DoStmt                     "Do statement"
-	DropDatabaseStmt           "DROP DATABASE statement"
-	DropIndexStmt              "DROP INDEX statement"
-	DropProcedureStmt          "DROP PROCEDURE statement"
-	DropQueryWatchStmt         "DROP QUERY WATCH statement"
-	DropResourceGroupStmt      "DROP RESOURCE GROUP statement"
-	DropStatisticsStmt         "DROP STATISTICS statement"
-	DropStatsStmt              "DROP STATS statement"
-	DropTableStmt              "DROP TABLE statement"
-	DropSequenceStmt           "DROP SEQUENCE statement"
-	DropUserStmt               "DROP USER"
-	DropRoleStmt               "DROP ROLE"
-	DropViewStmt               "DROP VIEW statement"
-	DropBindingStmt            "DROP BINDING  statement"
-	DropPolicyStmt             "DROP PLACEMENT POLICY statement"
-	DeallocateStmt             "Deallocate prepared statement"
-	DeleteFromStmt             "DELETE FROM statement"
-	DeleteWithoutUsingStmt     "Normal DELETE statement"
-	DeleteWithUsingStmt        "DELETE USING statement"
-	DistributeTableStmt        "Distribute table statement"
-	EmptyStmt                  "empty statement"
-	ExecuteStmt                "Execute statement"
-	ExplainStmt                "EXPLAIN statement"
-	ExplainableStmt            "explainable statement"
-	FlushStmt                  "Flush statement"
-	FlashbackTableStmt         "Flashback table statement"
-	FlashbackToTimestampStmt   "Flashback cluster statement"
-	FlashbackDatabaseStmt      "Flashback Database statement"
-	GrantStmt                  "Grant statement"
-	GrantProxyStmt             "Grant proxy statement"
-	GrantRoleStmt              "Grant role statement"
-	InsertIntoStmt             "INSERT INTO statement"
-	CallStmt                   "CALL statement"
-	ImportIntoStmt             "IMPORT INTO statement"
-	ImportFromSelectStmt       "SELECT statement of IMPORT INTO"
-	KillStmt                   "Kill statement"
-	LoadDataStmt               "Load data statement"
-	LoadStatsStmt              "Load statistic statement"
-	LockStatsStmt              "Lock statistic statement"
-	UnlockStatsStmt            "Unlock statistic statement"
-	LockTablesStmt             "Lock tables statement"
-	NonTransactionalDMLStmt    "Non-transactional DML statement"
-	OptimizeTableStmt          "OPTIMIZE statement"
-	PlanReplayerStmt           "Plan replayer statement"
-	PreparedStmt               "PreparedStmt"
-	ProcedureProcStmt          "The entrance of procedure statements which contains all kinds of statements in procedure"
-	ProcedureStatementStmt     "The normal statements in procedure, such as dml, select, set ..."
-	SelectStmt                 "SELECT statement"
-	SelectStmtWithClause       "common table expression SELECT statement"
-	RenameTableStmt            "rename table statement"
-	RenameUserStmt             "rename user statement"
-	ReplaceIntoStmt            "REPLACE INTO statement"
-	RecoverTableStmt           "recover table statement"
-	RevokeStmt                 "Revoke statement"
-	RevokeRoleStmt             "Revoke role statement"
-	RollbackStmt               "ROLLBACK statement"
-	ReleaseSavepointStmt       "RELEASE SAVEPOINT statement"
-	RefreshStatsStmt           "REFRESH STATS statement"
-	SavepointStmt              "SAVEPOINT statement"
-	SplitRegionStmt            "Split index region statement"
-	SetStmt                    "Set variable statement"
-	SetBindingStmt             "Set binding statement"
-	SetRoleStmt                "Set active role statement"
-	SetDefaultRoleStmt         "Set default statement for some user"
-	ShowStmt                   "Show engines/databases/tables/user/columns/warnings/status statement"
-	Statement                  "statement"
-	TraceStmt                  "TRACE statement"
-	TraceableStmt              "traceable statement"
-	TruncateTableStmt          "TRUNCATE TABLE statement"
-	UnlockTablesStmt           "Unlock tables statement"
-	UpdateStmt                 "UPDATE statement"
-	SetOprStmt                 "Union/Except/Intersect select statement"
-	SetOprStmtWithLimitOrderBy "Union/Except/Intersect select statement with limit and order by"
-	SetOprStmtWoutLimitOrderBy "Union/Except/Intersect select statement without limit and order by"
-	UseStmt                    "USE statement"
-	ShutdownStmt               "SHUTDOWN statement"
-	RestartStmt                "RESTART statement"
-	RecommendIndexStmt         "RECOMMEND INDEX statement"
-	CreateViewSelectOpt        "Select/Union/Except/Intersect statement in CREATE VIEW ... AS SELECT"
-	BindableStmt               "Statement that can be created binding on"
-	UpdateStmtNoWith           "Update statement without CTE clause"
-	HelpStmt                   "HELP statement"
-	ShardableStmt              "Shardable statement that can be used in non-transactional DMLs"
-	CancelImportStmt           "CANCEL IMPORT JOB statement"
-	TrafficStmt                "Traffic capture/replay statement"
-	ProcedureUnlabeledBlock    "The statement block without label in procedure"
-	ProcedureBlockContent      "The statement block in procedure expressed with 'Begin ... End'"
-	SimpleWhenThen             "Procedure case when then"
-	SearchWhenThen             "Procedure search when then"
-	ProcedureIfstmt            "The if statement in procedure, expressed by if ... elseif .. else ... end if"
-	procedurceElseIfs          "The else block in procedure, expressed by elseif or else or nil"
-	ProcedureIf                "The if block in procedure, expressed by expr then statement procedurceElseIfs"
-	ProcedureUnlabelLoopBlock  "The loop block without label in procedure "
-	ProcedureUnlabelLoopStmt   "The loop statement in procedure, expressed by repeat/do while/loop"
-	ProcedureCaseStmt          "Case statement in procedure, expressed by `case ... when.. then ..`"
-	ProcedureSimpleCase        "The simpe case statement in procedure, expressed by `case expr when expr then statement ... end case`"
-	ProcedureSearchedCase      "The searched case statement in procedure, expressed by `case when expr then statement ... end case`"
-	ProcedureCursorSelectStmt  "The select stmt can used in procedure cursor."
-	ProcedureOpenCur           "The open cursor statement in procedure, expressed by `open ...`"
-	ProcedureCloseCur          "The close cursor statement in procedure, expressed by `close ...`"
-	ProcedureFetchInto         "The fetch into statement in procedure, expressed by `fetch ... into ...`"
-	ProcedureHcond             "The handler value statement in procedure, expressed by condition_value"
-	ProcedurceCond             "The handler code statement in procedure, expressed by code error num or `sqlstate ...`"
-	ProcedureLabeledBlock      "The statement block with label in procedure"
-	ProcedurelabeledLoopStmt   "The loop block with label in procedure"
-	ProcedureIterate           "The iterate statement in procedure, expressed by `iterate ...`"
-	ProcedureLeave             "The leave statement in procedure, expressed by `leave ...`"
+	AdminStmt                        "Check table statement or show ddl statement"
+	AlterDatabaseStmt                "Alter database statement"
+	AlterTableStmt                   "Alter table statement"
+	AlterUserStmt                    "Alter user statement"
+	AlterInstanceStmt                "Alter instance statement"
+	AlterRangeStmt                   "Alter data range configuration statement"
+	AlterPolicyStmt                  "Alter Placement Policy statement"
+	AlterResourceGroupStmt           "Alter Resource Group statement"
+	AlterProcedureStmt               "Alter procedurce attributes statement"
+	AlterSequenceStmt                "Alter sequence statement"
+	AnalyzeTableStmt                 "Analyze table statement"
+	BeginTransactionStmt             "BEGIN TRANSACTION statement"
+	BinlogStmt                       "Binlog base64 statement"
+	BRIEStmt                         "BACKUP or RESTORE statement"
+	CalibrateResourceStmt            "CALIBRATE RESOURCE statement"
+	CancelDistributionJobStmt        "CANCEL DISTRIBUTION JOB statement"
+	CommitStmt                       "COMMIT statement"
+	CreateTableStmt                  "CREATE TABLE statement"
+	CreateViewStmt                   "CREATE VIEW  statement"
+	CreateUserStmt                   "CREATE User statement"
+	CreateRoleStmt                   "CREATE Role statement"
+	CreateDatabaseStmt               "Create Database Statement"
+	CreateIndexStmt                  "CREATE INDEX statement"
+	CreateBindingStmt                "CREATE BINDING statement"
+	CreatePolicyStmt                 "CREATE PLACEMENT POLICY statement"
+	CreateSecurityLabelComponentStmt "CREATE SECURITY LABEL COMPONENT statement"
+	CreateSecurityPolicyStmt         "CREATE SECURITY POLICY statement"
+	CreateSecurityLabelStmt          "CREATE SECURITY LABEL statement"
+	DropSecurityLabelComponentStmt   "DROP SECURITY LABEL COMPONENT statement"
+	DropSecurityPolicyStmt           "DROP SECURITY POLICY statement"
+	DropSecurityLabelStmt            "DROP SECURITY LABEL statement"
+	GrantSecurityLabelStmt           "GRANT SECURITY LABEL statement"
+	RevokeSecurityLabelStmt          "REVOKE SECURITY LABEL statement"
+	GrantExemptionStmt               "GRANT EXEMPTION statement"
+	RevokeExemptionStmt              "REVOKE EXEMPTION statement"
+	CreateMaskingPolicyStmt          "CREATE MASKING POLICY statement"
+	CreateProcedureStmt              "CREATE PROCEDURE statement"
+	CreateTriggerStmt                "CREATE TRIGGER statement"
+	CreateStoredFunctionStmt         "CREATE FUNCTION statement for stored function"
+	AddQueryWatchStmt                "ADD QUERY WATCH statement"
+	CreateResourceGroupStmt          "CREATE RESOURCE GROUP statement"
+	CreateSequenceStmt               "CREATE SEQUENCE statement"
+	CreateStatisticsStmt             "CREATE STATISTICS statement"
+	DoStmt                           "Do statement"
+	DropDatabaseStmt                 "DROP DATABASE statement"
+	DropFunctionStmt                 "DROP FUNCTION statement"
+	DropIndexStmt                    "DROP INDEX statement"
+	DropProcedureStmt                "DROP PROCEDURE statement"
+	DropTriggerStmt                  "DROP TRIGGER statement"
+	DropQueryWatchStmt               "DROP QUERY WATCH statement"
+	DropResourceGroupStmt            "DROP RESOURCE GROUP statement"
+	DropStatisticsStmt               "DROP STATISTICS statement"
+	DropStatsStmt                    "DROP STATS statement"
+	DropTableStmt                    "DROP TABLE statement"
+	DropSequenceStmt                 "DROP SEQUENCE statement"
+	DropUserStmt                     "DROP USER"
+	DropRoleStmt                     "DROP ROLE"
+	DropViewStmt                     "DROP VIEW statement"
+	DropBindingStmt                  "DROP BINDING  statement"
+	DropPolicyStmt                   "DROP PLACEMENT POLICY statement"
+	DeallocateStmt                   "Deallocate prepared statement"
+	DeleteFromStmt                   "DELETE FROM statement"
+	DeleteWithoutUsingStmt           "Normal DELETE statement"
+	DeleteWithUsingStmt              "DELETE USING statement"
+	DistributeTableStmt              "Distribute table statement"
+	EmptyStmt                        "empty statement"
+	ExecuteStmt                      "Execute statement"
+	ExplainStmt                      "EXPLAIN statement"
+	ExplainableStmt                  "explainable statement"
+	FlushStmt                        "Flush statement"
+	FlashbackTableStmt               "Flashback table statement"
+	FlashbackToTimestampStmt         "Flashback cluster statement"
+	FlashbackDatabaseStmt            "Flashback Database statement"
+	GrantStmt                        "Grant statement"
+	GrantProxyStmt                   "Grant proxy statement"
+	GrantRoleStmt                    "Grant role statement"
+	InsertIntoStmt                   "INSERT INTO statement"
+	CallStmt                         "CALL statement"
+	ImportIntoStmt                   "IMPORT INTO statement"
+	ImportFromSelectStmt             "SELECT statement of IMPORT INTO"
+	KillStmt                         "Kill statement"
+	LoadDataStmt                     "Load data statement"
+	LoadStatsStmt                    "Load statistic statement"
+	LockStatsStmt                    "Lock statistic statement"
+	UnlockStatsStmt                  "Unlock statistic statement"
+	LockTablesStmt                   "Lock tables statement"
+	NonTransactionalDMLStmt          "Non-transactional DML statement"
+	OptimizeTableStmt                "OPTIMIZE statement"
+	PlanReplayerStmt                 "Plan replayer statement"
+	PreparedStmt                     "PreparedStmt"
+	ProcedureProcStmt                "The entrance of procedure statements which contains all kinds of statements in procedure"
+	ProcedureStatementStmt           "The normal statements in procedure, such as dml, select, set ..."
+	SelectStmt                       "SELECT statement"
+	SelectStmtWithClause             "common table expression SELECT statement"
+	StartTransactionStmt             "START TRANSACTION statement"
+	RenameTableStmt                  "rename table statement"
+	RenameUserStmt                   "rename user statement"
+	ReplaceIntoStmt                  "REPLACE INTO statement"
+	RecoverTableStmt                 "recover table statement"
+	RevokeStmt                       "Revoke statement"
+	RevokeRoleStmt                   "Revoke role statement"
+	RollbackStmt                     "ROLLBACK statement"
+	ReleaseSavepointStmt             "RELEASE SAVEPOINT statement"
+	RefreshStatsStmt                 "REFRESH STATS statement"
+	SavepointStmt                    "SAVEPOINT statement"
+	SplitRegionStmt                  "Split index region statement"
+	SetStmt                          "Set variable statement"
+	SetBindingStmt                   "Set binding statement"
+	SetRoleStmt                      "Set active role statement"
+	SetDefaultRoleStmt               "Set default statement for some user"
+	ShowStmt                         "Show engines/databases/tables/user/columns/warnings/status statement"
+	Statement                        "statement"
+	TraceStmt                        "TRACE statement"
+	TraceableStmt                    "traceable statement"
+	TruncateTableStmt                "TRUNCATE TABLE statement"
+	UnlockTablesStmt                 "Unlock tables statement"
+	UpdateStmt                       "UPDATE statement"
+	SetOprStmt                       "Union/Except/Intersect select statement"
+	SetOprStmtWithLimitOrderBy       "Union/Except/Intersect select statement with limit and order by"
+	SetOprStmtWoutLimitOrderBy       "Union/Except/Intersect select statement without limit and order by"
+	UseStmt                          "USE statement"
+	ShutdownStmt                     "SHUTDOWN statement"
+	RestartStmt                      "RESTART statement"
+	RecommendIndexStmt               "RECOMMEND INDEX statement"
+	CreateViewSelectOpt              "Select/Union/Except/Intersect statement in CREATE VIEW ... AS SELECT"
+	BindableStmt                     "Statement that can be created binding on"
+	UpdateStmtNoWith                 "Update statement without CTE clause"
+	HelpStmt                         "HELP statement"
+	ShardableStmt                    "Shardable statement that can be used in non-transactional DMLs"
+	CancelImportStmt                 "CANCEL IMPORT JOB statement"
+	TrafficStmt                      "Traffic capture/replay statement"
+	ProcedureUnlabeledBlock          "The statement block without label in procedure"
+	ProcedureBlockContent            "The statement block in procedure expressed with 'Begin ... End'"
+	SimpleWhenThen                   "Procedure case when then"
+	SearchWhenThen                   "Procedure search when then"
+	ProcedureReturnStmt              "The return statement in stored function, expressed by return expr"
+	ProcedureIfstmt                  "The if statement in procedure, expressed by if ... elseif .. else ... end if"
+	procedurceElseIfs                "The else block in procedure, expressed by elseif or else or nil"
+	ProcedureIf                      "The if block in procedure, expressed by expr then statement procedurceElseIfs"
+	ProcedureUnlabelLoopBlock        "The loop block without label in procedure "
+	ProcedureUnlabelLoopStmt         "The loop statement in procedure, expressed by repeat/do while/loop"
+	ProcedureCaseStmt                "Case statement in procedure, expressed by `case ... when.. then ..`"
+	ProcedureSimpleCase              "The simpe case statement in procedure, expressed by `case expr when expr then statement ... end case`"
+	ProcedureSearchedCase            "The searched case statement in procedure, expressed by `case when expr then statement ... end case`"
+	ProcedureCursorSelectStmt        "The select stmt can used in procedure cursor."
+	ProcedureOpenCur                 "The open cursor statement in procedure, expressed by `open ...`"
+	ProcedureCloseCur                "The close cursor statement in procedure, expressed by `close ...`"
+	ProcedureFetchInto               "The fetch into statement in procedure, expressed by `fetch ... into ...`"
+	ProcedureHcond                   "The handler value statement in procedure, expressed by condition_value"
+	ProcedurceCond                   "The handler code statement in procedure, expressed by code error num or `sqlstate ...`"
+	ProcedureLabeledBlock            "The statement block with label in procedure"
+	ProcedurelabeledLoopStmt         "The loop block with label in procedure"
+	ProcedureIterate                 "The iterate statement in procedure, expressed by `iterate ...`"
+	ProcedureLeave                   "The leave statement in procedure, expressed by `leave ...`"
+	SignalStmt                       "The signal statment, User actively declares errors"
+	GetDiagnosticsStmt               "The get diagnostics statement, get prev SQL error information"
 
 %type	<item>
 	AdminShowSlow                          "Admin Show Slow statement"
@@ -1182,6 +1270,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	ColumnSetValueList                     "insert statement set value by column name list"
 	CompareOp                              "Compare opcode"
 	ColumnOption                           "column definition option"
+	LBACComponentDef                       "LBAC component definition"
+	LBACTreeDef                            "LBAC component tree definition"
+	LBACTreeDefOpt                         "LBAC component tree definition option"
+	LBACTreeNodeDef                        "LBAC component tree node definition"
 	ColumnOptionList                       "column definition option list"
 	VirtualOrStored                        "indicate generated column is stored or not"
 	ColumnOptionListOpt                    "optional column definition option list"
@@ -1275,6 +1367,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	LimitOption                            "Limit option could be integer or parameter marker."
 	Lines                                  "Lines clause"
 	LinesTerminated                        "Lines terminated by"
+	LoadableFunctionReturnType             "Return type of loadable function"
 	LoadDataSetSpecOpt                     "Optional load data specification"
 	LoadDataOptionListOpt                  "Optional load data option list"
 	LoadDataOptionList                     "Load data option list"
@@ -1316,6 +1409,16 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	PartitionMethod                        "Partition method"
 	PartitionOpt                           "Partition option"
 	PartitionNameList                      "Partition name list"
+	ComponentNameList                      "Component name list"
+	SecurityComponentSpec                  "Security component specification"
+	SecurityComponentSpecList              "Security component specification list"
+	SecurityLabelUserList                  "security label user list"
+	SecurityLabelUser                      "security label user"
+	GrantSecurityLabelAccessList           "Grant security label access list"
+	GrantSecurityLabelAccess               "Grant security label access"
+	ExemptionRule                          "Exemption Rule"
+	SecurityPolicyOpt                      "Security policy option"
+	SecurityPolicyRuleOpt                  "Security policy rule option"
 	PartitionNameListOpt                   "table partition names list optional"
 	PartitionNumOpt                        "PARTITION NUM option"
 	PartDefValuesOpt                       "VALUES {LESS THAN {(expr | value_list) | MAXVALUE} | IN {value_list}"
@@ -1375,6 +1478,9 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	SelectStmtFromTable                    "SELECT statement from table"
 	SelectStmtGroup                        "SELECT statement optional GROUP BY clause"
 	SelectStmtIntoOption                   "SELECT statement into clause"
+	SelectStmtIntoOptionAfterFrom          "SELECT statement into clause after FROM"
+	SelectStmtIntoVars                     "SELECT statement into variables"
+	SelectIntoProcedureVarIdentifier       "SELECT into procedure variables identifier"
 	SequenceOption                         "Create sequence option"
 	SequenceOptionList                     "Create sequence option list"
 	SetRoleOpt                             "Set role options"
@@ -1426,6 +1532,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	TableSampleOpt                         "table sample clause optional"
 	TableSampleMethodOpt                   "table sample method optional"
 	TableSampleUnitOpt                     "table sample unit optional"
+	TableSplitOpt                          "table split optional"
 	TableToTable                           "rename table to table"
 	TableToTableList                       "rename table to table by list"
 	TextString                             "text string item"
@@ -1436,6 +1543,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	TrafficCaptureOptList                  "Traffic capture option list"
 	TrafficReplayOpt                       "Traffic replay option"
 	TrafficReplayOptList                   "Traffic replay option list"
+	TriggerDefiner                         "Trigger definer"
+	TriggerEvent                           "Trigger event"
+	TriggerOrder                           "Trigger order"
+	TriggerTiming                          "Trigger timing"
 	LockType                               "Table locks type"
 	TransactionChar                        "Transaction characteristic"
 	TransactionChars                       "Transaction characteristic list"
@@ -1574,10 +1685,13 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	StatsOptionsOpt                        "Stats options"
 	DryRunOptions                          "Dry run options"
 	OptionalShardColumn                    "Optional shard column"
-	SpOptInout                             "Optional procedure param type"
+	ProcedureInOut                         "Procedure param type"
 	OptSpPdparams                          "Optional procedure param list"
+	OptStoredFunctionParams                "Optional stored function param list"
 	SpPdparams                             "Procedure params"
+	StoredFunctionParams                   "Stored function params"
 	SpPdparam                              "Procedure param"
+	StoredFunctionParam                    "Stored function param"
 	ProcedureOptDefault                    "Optional procedure variable default value"
 	ProcedureProcStmts                     "Procedure statement list"
 	ProcedureProcStmt1s                    "One more procedure statement"
@@ -1591,10 +1705,42 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	ProcedureFetchList                     "Procedure fetch into variables"
 	ProcedureHandlerType                   "Procedure handler operation type"
 	ProcedureHcondList                     "Procedure handler condition value list"
+	ProcedureCreateChistics                "Attributes when creating stored procedures"
+	ProcedureCreateChistic                 "Attribute when creating stored procedures"
+	ProcedureChistic                       "Attribute about stored procedures"
+	ProcedureAlterChistics                 "Attributes when alter stored procedures"
+	ProcedureName                          "Procedure Name"
+	RoutineDefiner                         "Routine definer"
+	CreateFunctionStmtPrefix               "Create function statement prefix"
+	SQLStateText                           "Sqlstate text"
+	SetSignalInformationOpt                "Signal information opt"
+	SignalInformationItemList              "Signal information list"
+	SignalInformationItemName              "Signal information name"
+	SignalValue                            "Signal error status"
+	DiagnosticsArea                        "Diagnostics area"
+	DiagnosticsInformation                 "Diagnostics information"
+	StatementInformationList               "Diagnostics information Statement list"
+	StatementInformationItemName           "Diagnostics statement item name"
+	ConditionInformationList               "Diagnostics condition name list"
+	StatementInformation                   "The diagnostics statement information"
+	ConditionInformation                   "The diagnostics condition information"
+	DiagnosticsInformationItemName         "The diagnostics condition information name"
 	SplitOptionBetween                     "Split index option, between format"
 	SplitIndexOption                       "Split index option in CREATE/ALTER table"
 	SplitIndexList                         "Split index option list in CREATE table"
 	SplitIndexListOpt                      "Optional split index option list"
+	AdminCreateLogReplication              "Admin create log replication statement"
+	AdminAlterLogReplication               "Admin alter log replication statement"
+	AdminPauseLogReplication               "Admin pause log replication statement"
+	AdminResumeLogReplication              "Admin resume log replication statement"
+	AdminDropLogReplication                "Admin drop log replication statement"
+	AdminSwitchOverPrimary                 "Admin switchover primary statement"
+	AdminSwitchOverAsPrimary               "Admin switchover as primary statement"
+	AdminActivateStandby                   "Admin activate standby statement"
+	ActivateStandbyMode                    "Activate standby mode"
+	LogReplicationOptList                  "Log replication option list"
+	LogReplicationOpt                      "Log replication option"
+	ProtectionMode                         "Log replication protection mode"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -1640,6 +1786,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 
 %type	<ident>
 	Identifier                      "identifier or unreserved keyword"
+	ProcedureCursorName             "Procedure cursor name"
 	NotKeywordToken                 "Tokens not mysql keyword but treated specially"
 	UnReservedKeyword               "MySQL unreserved keywords"
 	TiDBKeyword                     "TiDB added keywords"
@@ -1664,6 +1811,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	FieldTerminator                 "Field terminator"
 	FlashbackToNewName              "Flashback to new name"
 	HashString                      "Hashed string"
+	LoadableFunctionSoname          "SONAME clause of loadable function"
 	LikeOrIlikeEscapeOpt            "like or ilike escape option"
 	OptCharset                      "Optional Character setting"
 	OptCollate                      "Optional Collate setting"
@@ -3703,6 +3851,10 @@ BeginTransactionStmt:
 	{
 		$$ = &ast.BeginStmt{}
 	}
+|	"BEGIN" "WORK"
+	{
+		$$ = &ast.BeginStmt{}
+	}
 |	"BEGIN" "PESSIMISTIC"
 	{
 		$$ = &ast.BeginStmt{
@@ -3715,7 +3867,9 @@ BeginTransactionStmt:
 			Mode: ast.Optimistic,
 		}
 	}
-|	"START" "TRANSACTION"
+
+StartTransactionStmt:
+	"START" "TRANSACTION"
 	{
 		$$ = &ast.BeginStmt{}
 	}
@@ -3868,6 +4022,10 @@ ColumnNameOrUserVarListOptWithBrackets:
 
 CommitStmt:
 	"COMMIT"
+	{
+		$$ = &ast.CommitStmt{}
+	}
+|	"COMMIT" "WORK"
 	{
 		$$ = &ast.CommitStmt{}
 	}
@@ -4055,6 +4213,14 @@ ColumnOption:
 			Tp:       ast.ColumnOptionSecondaryEngineAttribute,
 			StrValue: $3,
 		}
+	}
+|	"SECURED" "WITH" Identifier
+	{
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionSecuredWith, StrValue: $3}
+	}
+|	"ENCRYPTION" EqOpt EncryptionOpt
+	{
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionEncryption, StrValue: $3}
 	}
 
 AutoRandomOpt:
@@ -4367,7 +4533,7 @@ DefaultValueExpr:
 BuiltinFunction:
 	'(' BuiltinFunction ')'
 	{
-		$$ = $2.(*ast.FuncCallExpr)
+		$$ = $2
 	}
 |	identifier '(' ')'
 	{
@@ -4387,6 +4553,32 @@ BuiltinFunction:
 		$$ = &ast.FuncCallExpr{
 			FnName: ast.NewCIStr($1),
 			Args:   $3.([]ast.ExprNode),
+		}
+	}
+|	builtinCast '(' Expression "AS" CastType ArrayKwdOpt ')'
+	{
+		/* See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_cast */
+		tp := $5.(*types.FieldType)
+		defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimalForCast(tp.GetType())
+		if tp.GetFlen() == types.UnspecifiedLength {
+			tp.SetFlen(defaultFlen)
+		}
+		if tp.GetDecimal() == types.UnspecifiedLength {
+			tp.SetDecimal(defaultDecimal)
+		}
+		isArray := $6.(bool)
+		tp.SetArray(isArray)
+		explicitCharset := parser.explicitCharset
+		if isArray && !explicitCharset && tp.GetCharset() != charset.CharsetBin {
+			tp.SetCharset(charset.CharsetUTF8MB4)
+			tp.SetCollate(charset.CollationUTF8MB4)
+		}
+		parser.explicitCharset = false
+		$$ = &ast.FuncCastExpr{
+			Expr:            $3,
+			Tp:              tp,
+			FunctionType:    ast.CastFunction,
+			ExplicitCharSet: explicitCharset,
 		}
 	}
 
@@ -5432,7 +5624,7 @@ CreateViewStmt:
 	}
 
 OrReplace:
-	/* EMPTY */
+	/* EMPTY */ %prec empty
 	{
 		$$ = false
 	}
@@ -5704,7 +5896,7 @@ DropUserStmt:
 	}
 
 DropRoleStmt:
-	"DROP" "ROLE" RolenameList
+	"DROP" RoleOrGroup RolenameList
 	{
 		tmp := make([]*auth.UserIdentity, 0, 10)
 		roleList := $3.([]*auth.RoleIdentity)
@@ -5713,7 +5905,7 @@ DropRoleStmt:
 		}
 		$$ = &ast.DropUserStmt{IsDropRole: true, IfExists: false, UserList: tmp}
 	}
-|	"DROP" "ROLE" "IF" "EXISTS" RolenameList
+|	"DROP" RoleOrGroup "IF" "EXISTS" RolenameList
 	{
 		tmp := make([]*auth.UserIdentity, 0, 10)
 		roleList := $5.([]*auth.RoleIdentity)
@@ -5746,6 +5938,10 @@ DropStatsStmt:
 			IsGlobalStats: true,
 		}
 	}
+
+RoleOrGroup:
+	"ROLE"
+|	"GROUP"
 
 RestrictOrCascadeOpt:
 	{}
@@ -5849,6 +6045,14 @@ ExplainStmt:
 			Analyze:   true,
 		}
 	}
+|	ExplainSym "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", false, ast.ExplainRoutineTypeFunction, $4)
+	}
+|	ExplainSym "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", false, ast.ExplainRoutineTypeProcedure, $4)
+	}
 |	ExplainSym TableName
 	{
 		$$ = &ast.ExplainStmt{
@@ -5903,6 +6107,14 @@ ExplainStmt:
 			Format: $4,
 		}
 	}
+|	ExplainSym "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeFunction, $7)
+	}
+|	ExplainSym "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeProcedure, $7)
+	}
 |	ExplainSym "FORMAT" "=" ExplainFormatType "FOR" "CONNECTION" NUM
 	{
 		$$ = &ast.ExplainForStmt{
@@ -5916,6 +6128,14 @@ ExplainStmt:
 			Stmt:   $5,
 			Format: $4,
 		}
+	}
+|	ExplainSym "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeFunction, $7)
+	}
+|	ExplainSym "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($4, false, ast.ExplainRoutineTypeProcedure, $7)
 	}
 |	ExplainSym "FORMAT" "=" ExplainFormatType stringLit
 	{
@@ -5939,6 +6159,22 @@ ExplainStmt:
 			Analyze: true,
 		}
 	}
+|	ExplainSym "ANALYZE" "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", true, ast.ExplainRoutineTypeFunction, $5)
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget("row", true, ast.ExplainRoutineTypeFunction, $5, true, getUint64FromNUM($8))
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt("row", true, ast.ExplainRoutineTypeProcedure, $5)
+	}
+|	ExplainSym "ANALYZE" "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget("row", true, ast.ExplainRoutineTypeProcedure, $5, true, getUint64FromNUM($8))
+	}
 |	ExplainSym "ANALYZE" stringLit
 	{
 		$$ = &ast.ExplainStmt{
@@ -5954,6 +6190,22 @@ ExplainStmt:
 			Format:  $5,
 			Analyze: true,
 		}
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeFunction, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeFunction, $8, true, getUint64FromNUM($11))
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeProcedure, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeProcedure, $8, true, getUint64FromNUM($11))
 	}
 |	ExplainSym "ANALYZE" "FORMAT" "=" ExplainFormatType stringLit
 	{
@@ -5978,6 +6230,22 @@ ExplainStmt:
 			Format:  $5,
 			Analyze: true,
 		}
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeFunction, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "FUNCTION" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeFunction, $8, true, getUint64FromNUM($11))
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall
+	{
+		$$ = newExplainRoutineStmt($5, true, ast.ExplainRoutineTypeProcedure, $8)
+	}
+|	ExplainSym "ANALYZE" "FORMAT" "=" stringLit "ROUTINE" "PROCEDURE" ProcedureCall "FOR" "STMT" NUM
+	{
+		$$ = newExplainRoutineStmtWithTarget($5, true, ast.ExplainRoutineTypeProcedure, $8, true, getUint64FromNUM($11))
 	}
 
 ExplainFormatType:
@@ -7211,6 +7479,7 @@ UnReservedKeyword:
 	"ACTION"
 |	"ADD_COLUMNAR_REPLICA_ON_DEMAND"
 |	"ADVISE"
+|	"AGGREGATE"
 |	"ASCII"
 |	"APPLY"
 |	"ATTRIBUTE"
@@ -7247,12 +7516,16 @@ UnReservedKeyword:
 |	"COMPRESSED"
 |	"CONSISTENCY"
 |	"CONSISTENT"
+|	"COMPONENT"
+|	"COMPONENTS"
+|	"CONTAINS"
 |	"CURRENT"
 |	"DATA"
 |	"DATE" %prec lowerThanStringLitToken
 |	"DATETIME"
 |	"DAY"
 |	"DEALLOCATE"
+|	"DETERMINISTIC"
 |	"DO"
 |	"DUPLICATE"
 |	"DYNAMIC"
@@ -7277,6 +7550,7 @@ UnReservedKeyword:
 |	"FIXED"
 |	"FLUSH"
 |	"FOLLOWING"
+|	"FOLLOWS"
 |	"FORMAT"
 |	"FULL"
 |	"GENERAL"
@@ -7285,6 +7559,7 @@ UnReservedKeyword:
 |	"HELP"
 |	"HOUR"
 |	"INSERT_METHOD"
+|	"LABEL"
 |	"LESS"
 |	"LOCAL"
 |	"LAST"
@@ -7294,10 +7569,12 @@ UnReservedKeyword:
 |	"PACK_KEYS"
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
+|	"PRECEDES"
 |	"PREPARE"
 |	"PRE_SPLIT_REGIONS"
 |	"PROXY"
 |	"QUICK"
+|	"READS"
 |	"REBUILD"
 |	"RECOMMEND"
 |	"REDUNDANT"
@@ -7305,17 +7582,22 @@ UnReservedKeyword:
 |	"REFRESH"
 |	"RESOURCE"
 |	"RESTART"
+|	"RETURNS"
 |	"ROLE"
 |	"ROLLBACK"
 |	"ROLLUP"
+|	"ROOT"
 |	"RULE"
 |	"SESSION"
 |	"SIGNED"
 |	"SHARD_ROW_ID_BITS"
 |	"SHUTDOWN"
 |	"SNAPSHOT"
+|	"SONAME"
 |	"START"
 |	"STATUS"
+|	"STMT"
+|	"STRING"
 |	"OPEN"
 |	"POINT"
 |	"SUBPARTITIONS"
@@ -7327,11 +7609,13 @@ UnReservedKeyword:
 |	"TIME" %prec lowerThanStringLitToken
 |	"TIMEOUT"
 |	"TIMESTAMP" %prec lowerThanStringLitToken
+|	"TREE"
 |	"TRACE"
 |	"TRANSACTION"
 |	"TRUNCATE"
 |	"TSO"
 |	"UNBOUNDED"
+|	"UNDER"
 |	"UNKNOWN"
 |	"UNSET"
 |	"VALUE" %prec lowerThanValueKeyword
@@ -7384,11 +7668,12 @@ UnReservedKeyword:
 |	"PRIVILEGES"
 |	"NO"
 |	"BINLOG"
-|	"FUNCTION"
+|	"FUNCTION" %prec lowerThanFunction
 |	"VIEW"
 |	"BINDING"
 |	"BINDINGS"
 |	"MODIFY"
+|	"MODIFIES"
 |	"EVENTS"
 |	"PARTITIONS"
 |	"NONE"
@@ -7425,7 +7710,7 @@ UnReservedKeyword:
 |	"SLAVE"
 |	"RELOAD"
 |	"TEMPORARY"
-|	"ROUTINE"
+|	"ROUTINE" %prec lowerThanFunction
 |	"EVENT"
 |	"ALGORITHM"
 |	"DEFINER"
@@ -7440,6 +7725,7 @@ UnReservedKeyword:
 |	"SUBJECT"
 |	"ISSUER"
 |	"X509"
+|	"XML"
 |	"NEVER"
 |	"EXPIRE"
 |	"ACCOUNT"
@@ -7456,6 +7742,10 @@ UnReservedKeyword:
 |	"IPC"
 |	"SWAPS"
 |	"SOURCE"
+|	"SOURCE_HOST"
+|	"SOURCE_PORT"
+|	"SOURCE_USER"
+|	"SOURCE_PASSWORD"
 |	"TRADITIONAL"
 |	"SQL_BUFFER_RESULT"
 |	"DIRECTORY"
@@ -7506,6 +7796,7 @@ UnReservedKeyword:
 |	"REPLICA"
 |	"LOCATION"
 |	"LABELS"
+|	"LBAC"
 |	"LOGS"
 |	"HOSTS"
 |	"AGAINST"
@@ -7563,7 +7854,6 @@ UnReservedKeyword:
 |	"OFF"
 |	"OPTIONAL"
 |	"REQUIRED"
-|	"PURGE"
 |	"SKIP"
 |	"LOCKED"
 |	"CLUSTER"
@@ -7578,10 +7868,10 @@ UnReservedKeyword:
 |	"PASSWORD_LOCK_TIME"
 |	"DIGEST"
 |	"REUSE" %prec lowerThanEq
-|	"DECLARE"
 |	"HANDLER"
 |	"FOUND"
 |	"CALIBRATE"
+|	"WORK"
 |	"WORKLOAD"
 |	"TPCC"
 |	"OLTP_READ_WRITE"
@@ -7606,9 +7896,33 @@ UnReservedKeyword:
 |	"PAGE_COMPRESSION_LEVEL"
 |	"TRANSACTIONAL"
 |	"IETF_QUOTES"
+|	"CLASS_ORIGIN"
+|	"CATALOG_NAME"
+|	"COLUMN_NAME"
+|	"CONSTRAINT_CATALOG"
+|	"CONSTRAINT_SCHEMA"
+|	"CONSTRAINT_NAME"
+|	"CURSOR_NAME"
+|	"MESSAGE_TEXT"
+|	"MYSQL_ERRNO"
+|	"SCHEMA_NAME"
+|	"SUBCLASS_ORIGIN"
+|	"TABLE_NAME"
+|	"DIAGNOSTICS"
+|	"NUMBER"
+|	"STACKED"
+|	"RETURNED_SQLSTATE"
+|	"ACCESS"
+|	"AUTHORIZED"
+|	"EXEMPTION"
+|	"LBACRULES"
+|	"OVERRIDE"
+|	"SECURED"
+|	"SECURITYLABEL"
 
 TiDBKeyword:
-	"ADMIN"
+	"ACTIVATE"
+|	"ADMIN"
 |	"BATCH"
 |	"BUCKETS"
 |	"BUILTINS"
@@ -7630,6 +7944,7 @@ TiDBKeyword:
 |	"SAMPLES"
 |	"SAMPLERATE"
 |	"SESSION_STATES"
+|	"STANDBY"
 |	"STATISTICS"
 |	"STATS"
 |	"STATS_BUCKETS"
@@ -7655,6 +7970,14 @@ TiDBKeyword:
 |	"RESET"
 |	"DRY"
 |	"RUN"
+|	"CLUSTER_ID"
+|	"SWITCHOVER"
+|	"MAXIMUM_AVAILABILITY"
+|	"MAXIMUM_PERFORMANCE"
+|	"MAXIMUM_PROTECTION"
+|	"PROTECTION_MODE"
+|	"DEGRADE_TIMEOUT"
+|	"DETACHED"
 
 NotKeywordToken:
 	"ADDDATE"
@@ -7736,6 +8059,7 @@ NotKeywordToken:
 |	"STALENESS"
 |	"STRONG"
 |	"FLASHBACK"
+|	"FORCE_COMMIT"
 |	"JSON_OBJECTAGG"
 |	"JSON_ARRAYAGG"
 |	"JSON_SUM_CRC32"
@@ -9247,6 +9571,14 @@ TimeUnit:
 	{
 		$$ = ast.TimeUnitYearMonth
 	}
+|	"YEAR" "TO" "MONTH"
+	{
+		$$ = ast.TimeUnitYearMonth
+	}
+|	"DAY" "TO" "SECOND"
+	{
+		$$ = ast.TimeUnitDaySecond
+	}
 
 TimestampUnit:
 	"MICROSECOND"
@@ -9694,6 +10026,10 @@ RollbackStmt:
 	{
 		$$ = &ast.RollbackStmt{}
 	}
+|	"ROLLBACK" "WORK"
+	{
+		$$ = &ast.RollbackStmt{}
+	}
 |	"ROLLBACK" CompletionTypeWithinTransaction
 	{
 		$$ = &ast.RollbackStmt{CompletionType: $2.(ast.CompletionType)}
@@ -9908,7 +10244,35 @@ SelectStmt:
 		}
 		$$ = st
 	}
-|	SelectStmtFromDualTable SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOption
+|	SelectStmtBasic SelectStmtIntoVars WhereClauseOptional SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := $1.(*ast.SelectStmt)
+		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
+		if lastField.Expr != nil && lastField.AsName.O == "" {
+			lastEnd := parser.endOffset(&yyS[yypt-5])
+			lastField.SetText(parser.lexer.client, parser.src[lastField.Offset:lastEnd])
+		}
+		if $2 != nil {
+			st.SelectIntoOpt = $2.(*ast.SelectIntoOption)
+		}
+		if $3 != nil {
+			st.Where = $3.(ast.ExprNode)
+		}
+		if $4 != nil {
+			st.GroupBy = $4.(*ast.GroupByClause)
+		}
+		if $5 != nil {
+			st.OrderBy = $5.(*ast.OrderByClause)
+		}
+		if $6 != nil {
+			st.Limit = $6.(*ast.Limit)
+		}
+		if $7 != nil {
+			st.LockInfo = $7.(*ast.SelectLockInfo)
+		}
+		$$ = st
+	}
+|	SelectStmtFromDualTable SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOptionAfterFrom
 	{
 		st := $1.(*ast.SelectStmt)
 		if $2 != nil {
@@ -9928,7 +10292,35 @@ SelectStmt:
 		}
 		$$ = st
 	}
-|	SelectStmtFromTable OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOption
+|	SelectStmtBasic SelectStmtIntoVars FromDual WhereClauseOptional SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := $1.(*ast.SelectStmt)
+		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
+		if lastField.Expr != nil && lastField.AsName.O == "" {
+			lastEnd := parser.endOffset(&yyS[yypt-6])
+			lastField.SetText(parser.lexer.client, parser.src[lastField.Offset:lastEnd])
+		}
+		if $2 != nil {
+			st.SelectIntoOpt = $2.(*ast.SelectIntoOption)
+		}
+		if $4 != nil {
+			st.Where = $4.(ast.ExprNode)
+		}
+		if $5 != nil {
+			st.GroupBy = $5.(*ast.GroupByClause)
+		}
+		if $6 != nil {
+			st.OrderBy = $6.(*ast.OrderByClause)
+		}
+		if $7 != nil {
+			st.Limit = $7.(*ast.Limit)
+		}
+		if $8 != nil {
+			st.LockInfo = $8.(*ast.SelectLockInfo)
+		}
+		$$ = st
+	}
+|	SelectStmtFromTable OrderByOptional SelectStmtLimitOpt SelectLockOpt SelectStmtIntoOptionAfterFrom
 	{
 		st := $1.(*ast.SelectStmt)
 		if $4 != nil {
@@ -9942,6 +10334,43 @@ SelectStmt:
 		}
 		if $5 != nil {
 			st.SelectIntoOpt = $5.(*ast.SelectIntoOption)
+		}
+		$$ = st
+	}
+|	SelectStmtBasic SelectStmtIntoVars "FROM" TableRefsClause WhereClauseOptional SelectStmtGroup HavingClause WindowClauseOptional OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := $1.(*ast.SelectStmt)
+		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
+		if lastField.Expr != nil && lastField.AsName.O == "" {
+			lastEnd := parser.endOffset(&yyS[yypt-8])
+			lastField.SetText(parser.lexer.client, parser.src[lastField.Offset:lastEnd])
+		}
+		if $2 != nil {
+			st.SelectIntoOpt = $2.(*ast.SelectIntoOption)
+		}
+		if $4 != nil {
+			st.From = $4.(*ast.TableRefsClause)
+		}
+		if $5 != nil {
+			st.Where = $5.(ast.ExprNode)
+		}
+		if $6 != nil {
+			st.GroupBy = $6.(*ast.GroupByClause)
+		}
+		if $7 != nil {
+			st.Having = $7.(*ast.HavingClause)
+		}
+		if $8 != nil {
+			st.WindowSpecs = ($8.([]ast.WindowSpec))
+		}
+		if $9 != nil {
+			st.OrderBy = $9.(*ast.OrderByClause)
+		}
+		if $10 != nil {
+			st.Limit = $10.(*ast.Limit)
+		}
+		if $11 != nil {
+			st.LockInfo = $11.(*ast.SelectLockInfo)
 		}
 		$$ = st
 	}
@@ -10389,7 +10818,7 @@ TableRef:
 |	JoinTable
 
 TableFactor:
-	TableName PartitionNameListOpt TableAsNameOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt
+	TableName PartitionNameListOpt TableAsNameOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt TableSplitOpt
 	{
 		tn := $1.(*ast.TableName)
 		tn.PartitionNames = $2.([]ast.CIStr)
@@ -10399,6 +10828,9 @@ TableFactor:
 		}
 		if $4 != nil {
 			tn.AsOf = $4.(*ast.AsOfClause)
+		}
+		if $7 != nil {
+			tn.TableSplit = $7.(*ast.TableSplit)
 		}
 		$$ = &ast.TableSource{Source: tn, AsName: $3.(ast.CIStr)}
 	}
@@ -10430,6 +10862,19 @@ PartitionNameListOpt:
 |	"PARTITION" '(' PartitionNameList ')'
 	{
 		$$ = $3
+	}
+
+TableSplitOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"TABLESPLIT" '(' stringLit ',' stringLit ')'
+	{
+		$$ = &ast.TableSplit{
+			Start: $3,
+			End:   $5,
+		}
 	}
 
 TableAsNameOpt:
@@ -10610,6 +11055,10 @@ LimitOption:
 |	paramMarker
 	{
 		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
+	}
+|	Identifier
+	{
+		$$ = &ast.ProcedureVar{Name: ast.NewCIStr($1)}
 	}
 
 RowOrRows:
@@ -10821,19 +11270,64 @@ SelectStmtIntoOption:
 	{
 		$$ = nil
 	}
-|	"INTO" "OUTFILE" stringLit Fields Lines
+|	intoOutfile stringLit Fields Lines
 	{
 		x := &ast.SelectIntoOption{
 			Tp:       ast.SelectIntoOutfile,
-			FileName: $3,
+			FileName: $2,
+		}
+		if $3 != nil {
+			x.FieldsInfo = $3.(*ast.FieldsClause)
 		}
 		if $4 != nil {
-			x.FieldsInfo = $4.(*ast.FieldsClause)
-		}
-		if $5 != nil {
-			x.LinesInfo = $5.(*ast.LinesClause)
+			x.LinesInfo = $4.(*ast.LinesClause)
 		}
 
+		$$ = x
+	}
+
+SelectStmtIntoOptionAfterFrom:
+	SelectStmtIntoOption
+|	SelectStmtIntoVars
+	{
+		$$ = $1
+	}
+
+SelectIntoProcedureVarIdentifier:
+	Identifier
+	{
+		idf := &ast.ColumnNameExpr{
+			Name: &ast.ColumnName{
+				Name: ast.NewCIStr($1),
+			},
+		}
+		$$ = []ast.ExprNode{idf}
+	}
+|	SelectIntoProcedureVarIdentifier ',' Identifier
+	{
+		idf := &ast.ColumnNameExpr{
+			Name: &ast.ColumnName{
+				Name: ast.NewCIStr($3),
+			},
+		}
+		$$ = append($1.([]ast.ExprNode), idf)
+	}
+
+SelectStmtIntoVars:
+	"INTO" UserVariableList
+	{
+		x := &ast.SelectIntoOption{
+			Tp: ast.SelectIntoVars,
+		}
+		x.VarList = $2.([]ast.ExprNode)
+		$$ = x
+	}
+|	"INTO" SelectIntoProcedureVarIdentifier
+	{
+		x := &ast.SelectIntoOption{
+			Tp: ast.SelectIntoVars,
+		}
+		x.ProcedureVarList = $2.([]ast.ExprNode)
 		$$ = x
 	}
 
@@ -10847,6 +11341,9 @@ SubSelect:
 		src := parser.src
 		// See the implementation of yyParse function
 		rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+		if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+			return 1
+		}
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
 |	'(' SetOprStmt ')'
@@ -10854,6 +11351,9 @@ SubSelect:
 		rs := $2.(*ast.SetOprStmt)
 		src := parser.src
 		rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+		if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+			return 1
+		}
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
 |	'(' SelectStmtWithClause ')'
@@ -10865,10 +11365,16 @@ SubSelect:
 			src := parser.src
 			// See the implementation of yyParse function
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		case *ast.SetOprStmt:
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		}
 	}
@@ -10888,10 +11394,16 @@ SubSelect:
 			parser.setLastSelectFieldText(rs, endOffset)
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		case *ast.SetOprStmt:
 			src := parser.src
 			rs.SetText(parser.lexer.client, src[yyS[yypt-1].offset:yyS[yypt].offset])
+			if parser.rejectSelectIntoInSubquery(yylex, parser.startOffset(&yyS[yypt-1]), rs) != 0 {
+				return 1
+			}
 			$$ = &ast.SubqueryExpr{Query: rs}
 		}
 	}
@@ -11287,13 +11799,13 @@ SetStmt:
 	}
 
 SetRoleStmt:
-	"SET" "ROLE" SetRoleOpt
+	"SET" RoleOrGroup SetRoleOpt
 	{
 		$$ = $3.(*ast.SetRoleStmt)
 	}
 
 SetDefaultRoleStmt:
-	"SET" "DEFAULT" "ROLE" SetDefaultRoleOpt "TO" UsernameList
+	"SET" "DEFAULT" RoleOrGroup SetDefaultRoleOpt "TO" UsernameList
 	{
 		tmp := $4.(*ast.SetRoleStmt)
 		$$ = &ast.SetDefaultRoleStmt{
@@ -11433,7 +11945,11 @@ ConfigItemName:
 VariableAssignment:
 	VariableName EqOrAssignmentEq SetExpr
 	{
-		$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true}
+		if parser.inProcedure {
+			$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true, CanSPVariable: true}
+		} else {
+			$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true}
+		}
 	}
 |	"GLOBAL" VariableName EqOrAssignmentEq SetExpr
 	{
@@ -11849,6 +12365,12 @@ AdminStmt:
 			Plugins: $4.([]string),
 		}
 	}
+|	"ADMIN" "LBAC" "ENABLE"
+	{
+		$$ = &ast.AdminStmt{
+			Tp: ast.AdminLBACEnable,
+		}
+	}
 |	"ADMIN" "PLUGINS" "DISABLE" PluginNameList
 	{
 		$$ = &ast.AdminStmt{
@@ -11943,6 +12465,62 @@ AdminStmt:
 			Tp:              ast.AdminAlterDDLJob,
 			JobNumber:       $5.(int64),
 			AlterJobOptions: $6.([]*ast.AlterJobOption),
+		}
+	}
+|	"ADMIN" AdminCreateLogReplication
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                   ast.AdminCreateLogReplication,
+			CreateLogReplication: $2.(*ast.CreateLogReplication),
+		}
+	}
+|	"ADMIN" AdminAlterLogReplication
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                  ast.AdminAlterLogReplication,
+			AlterLogReplication: $2.(*ast.AlterLogReplication),
+		}
+	}
+|	"ADMIN" AdminPauseLogReplication
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                  ast.AdminPauseLogReplication,
+			PauseLogReplication: $2.(*ast.PauseLogReplication),
+		}
+	}
+|	"ADMIN" AdminResumeLogReplication
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                   ast.AdminResumeLogReplication,
+			ResumeLogReplication: $2.(*ast.ResumeLogReplication),
+		}
+	}
+|	"ADMIN" AdminDropLogReplication
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                 ast.AdminDropLogReplication,
+			DropLogReplication: $2.(*ast.DropLogReplication),
+		}
+	}
+|	"ADMIN" AdminSwitchOverPrimary
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                ast.AdminSwitchOverPrimary,
+			SwitchOverPrimary: $2.(*ast.SwitchOverPrimary),
+		}
+	}
+|	"ADMIN" AdminSwitchOverAsPrimary
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                  ast.AdminSwitchOverAsPrimary,
+			SwitchOverAsPrimary: $2.(*ast.SwitchOverAsPrimary),
+		}
+	}
+|	"ADMIN" AdminActivateStandby
+	{
+		$$ = &ast.AdminStmt{
+			Tp:              ast.AdminActivateStandby,
+			ActivateStandby: $2.(*ast.ActivateStandby),
 		}
 	}
 
@@ -12087,6 +12665,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:   ast.ShowCreateUser,
 			User: $4.(*auth.UserIdentity),
+		}
+	}
+|	"SHOW" "CREATE" "TRIGGER" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:      ast.ShowCreateTrigger,
+			Trigger: $4.(*ast.TableName),
 		}
 	}
 |	"SHOW" "MASKING" "POLICIES" "FOR" TableName WhereClauseOptional
@@ -12238,6 +12823,13 @@ ShowStmt:
 	{
 		$$ = &ast.ShowStmt{
 			Tp:        ast.ShowCreateProcedure,
+			Procedure: $4.(*ast.TableName),
+		}
+	}
+|	"SHOW" "CREATE" "FUNCTION" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:        ast.ShowCreateFunction,
 			Procedure: $4.(*ast.TableName),
 		}
 	}
@@ -12826,6 +13418,7 @@ Statement:
 |	AlterSequenceStmt
 |	AlterPolicyStmt
 |	AlterResourceGroupStmt
+|	AlterProcedureStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
 |	BinlogStmt
@@ -12846,7 +13439,19 @@ Statement:
 |	CreateBindingStmt
 |	CreatePolicyStmt
 |	CreateMaskingPolicyStmt
+|	CreateSecurityLabelComponentStmt
+|	CreateSecurityPolicyStmt
+|	CreateSecurityLabelStmt
+|	DropSecurityLabelComponentStmt
+|	DropSecurityPolicyStmt
+|	DropSecurityLabelStmt
+|	GrantSecurityLabelStmt
+|	RevokeSecurityLabelStmt
+|	GrantExemptionStmt
+|	RevokeExemptionStmt
 |	CreateProcedureStmt
+|	CreateTriggerStmt
+|	CreateStoredFunctionStmt
 |	CreateResourceGroupStmt
 |	AddQueryWatchStmt
 |	CreateSequenceStmt
@@ -12854,9 +13459,11 @@ Statement:
 |	DistributeTableStmt
 |	DoStmt
 |	DropDatabaseStmt
+|	DropFunctionStmt
 |	DropIndexStmt
 |	DropTableStmt
 |	DropProcedureStmt
+|	DropTriggerStmt
 |	DropPolicyStmt
 |	DropSequenceStmt
 |	DropViewStmt
@@ -12897,6 +13504,7 @@ Statement:
 |	SetOprStmt
 |	SelectStmt
 |	SelectStmtWithClause
+|	StartTransactionStmt
 |	SubSelect
 	{
 		var sel ast.StmtNode
@@ -12930,6 +13538,8 @@ Statement:
 |	OptimizeTableStmt
 |	CancelImportStmt
 |	TrafficStmt
+|	SignalStmt
+|	GetDiagnosticsStmt
 
 TraceableStmt:
 	DeleteFromStmt
@@ -12960,6 +13570,7 @@ TraceableStmt:
 |	RollbackStmt
 |	SetStmt
 |	AnalyzeTableStmt
+|	StartTransactionStmt
 
 ExplainableStmt:
 	DeleteFromStmt
@@ -13302,6 +13913,10 @@ TableOption:
 		$$ = &ast.TableOption{Tp: ast.TableOptionEncryption, StrValue: $3}
 		yylex.AppendError(yylex.Errorf("The ENCRYPTION option is parsed but ignored by all storage engines."))
 		parser.lastErrorAsWarn()
+	}
+|	"SECURITY" "POLICY" Identifier
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionSecurityPolicy, StrValue: $3}
 	}
 |	"TTL" EqOpt Identifier '+' "INTERVAL" Literal TimeUnit
 	{
@@ -13707,7 +14322,7 @@ BitValueType:
 	}
 
 StringType:
-	Char FieldLen OptBinary
+	Char FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetFlen($2.(int))
@@ -13717,7 +14332,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	Char OptBinary
+|	Char OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetCharset($2.(*ast.OptBinary).Charset)
@@ -13726,7 +14341,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NChar FieldLen OptBinary
+|	NChar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetFlen($2.(int))
@@ -13736,7 +14351,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NChar OptBinary
+|	NChar OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeString)
 		tp.SetCharset($2.(*ast.OptBinary).Charset)
@@ -13745,7 +14360,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	Varchar FieldLen OptBinary
+|	Varchar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeVarchar)
 		tp.SetFlen($2.(int))
@@ -13755,7 +14370,7 @@ StringType:
 		}
 		$$ = tp
 	}
-|	NVarchar FieldLen OptBinary
+|	NVarchar FieldLen OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeVarchar)
 		tp.SetFlen($2.(int))
@@ -13852,6 +14467,57 @@ StringType:
 		tp.SetCollate(charset.CollationBin)
 		$$ = tp
 	}
+|	"ARRAY"
+	{
+		tp := types.NewFieldType(mysql.TypeJSON)
+		tp.SetDecimal(0)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSubType(mysql.SubTypeArray)
+		$$ = tp
+	}
+|	"XML"
+	{
+		tp := types.NewFieldType(mysql.TypeLongBlob)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSubType(mysql.SubTypeXML)
+		$$ = tp
+	}
+|	"INTERVAL" "YEAR" OptFieldLen "TO" "MONTH"
+	{
+		p := $3.(int)
+		if p == types.UnspecifiedLength {
+			p = 2
+		}
+		if p < 1 || p > 9 {
+			yylex.AppendError(ErrTooBigPrecision.GenWithStackByArgs(p, "INTERVAL YEAR", 9))
+			return -1
+		}
+		tp := types.NewFieldType(mysql.TypeLong)
+		tp.SetFlen(p)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSubType(mysql.SubTypeIntervalYearToMonth)
+		$$ = tp
+	}
+|	"INTERVAL" "DAY" OptFieldLen "TO" "SECOND"
+	{
+		p := $3.(int)
+		if p == types.UnspecifiedLength {
+			p = 2
+		}
+		if p < 1 || p > 9 {
+			yylex.AppendError(ErrTooBigPrecision.GenWithStackByArgs(p, "INTERVAL DAY", 9))
+			return -1
+		}
+		tp := types.NewFieldType(mysql.TypeLong)
+		tp.SetFlen(p)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSubType(mysql.SubTypeIntervalDayToSecond)
+		$$ = tp
+	}
 |	"LONG" Varchar OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeMediumBlob)
@@ -13876,6 +14542,14 @@ StringType:
 		if $2.(*ast.OptBinary).IsBinary {
 			tp.AddFlag(mysql.BinaryFlag)
 		}
+		$$ = tp
+	}
+|	"SECURITYLABEL"
+	{
+		tp := types.NewFieldType(mysql.TypeLongBlob)
+		tp.SetCharset(charset.CharsetBin)
+		tp.SetCollate(charset.CollationBin)
+		tp.SetSecurityLabel()
 		$$ = tp
 	}
 |	"VECTOR" OptVectorElementType OptFieldLen
@@ -14055,6 +14729,7 @@ FieldLen:
 	}
 
 OptFieldLen:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = types.UnspecifiedLength
 	}
@@ -14084,6 +14759,7 @@ FieldOpts:
 	}
 
 FloatOpt:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.FloatOpt{Flen: types.UnspecifiedLength, Decimal: types.UnspecifiedLength}
 	}
@@ -14128,6 +14804,7 @@ OptVectorElementType:
 	}
 
 OptBinary:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.OptBinary{
 			IsBinary: false,
@@ -14318,7 +14995,7 @@ CreateUserStmt:
 	}
 
 CreateRoleStmt:
-	"CREATE" "ROLE" IfNotExists RoleSpecList
+	"CREATE" RoleOrGroup IfNotExists RoleSpecList
 	{
 		// See https://dev.mysql.com/doc/refman/8.0/en/create-role.html
 		$$ = &ast.CreateUserStmt{
@@ -15720,11 +16397,11 @@ LoadDataOptionList:
 	}
 
 LoadDataOption:
-	identifier
+	Identifier
 	{
 		$$ = &ast.LoadDataOpt{Name: strings.ToLower($1)}
 	}
-|	identifier "=" SignedLiteral
+|	Identifier "=" SignedLiteral
 	{
 		$$ = &ast.LoadDataOpt{Name: strings.ToLower($1), Value: $3.(ast.ExprNode)}
 	}
@@ -16209,14 +16886,14 @@ CreateMaskingPolicyStmt:
 		}
 		state := $15.(*ast.MaskingPolicyState)
 		$$ = &ast.CreateMaskingPolicyStmt{
-			OrReplace:           $2.(bool),
-			IfNotExists:         $5.(bool),
-			PolicyName:          ast.NewCIStr($6),
-			Table:               $8.(*ast.TableName),
-			Column:              &ast.ColumnName{Name: ast.NewCIStr($10)},
-			Expr:                $13,
-			RestrictOps:         $14.(ast.MaskingPolicyRestrictOps),
-			MaskingPolicyState:  *state,
+			OrReplace:          $2.(bool),
+			IfNotExists:        $5.(bool),
+			PolicyName:         ast.NewCIStr($6),
+			Table:              $8.(*ast.TableName),
+			Column:             &ast.ColumnName{Name: ast.NewCIStr($10)},
+			Expr:               $13,
+			RestrictOps:        $14.(ast.MaskingPolicyRestrictOps),
+			MaskingPolicyState: *state,
 		}
 	}
 
@@ -16228,6 +16905,263 @@ AlterPolicyStmt:
 			PolicyName:       ast.NewCIStr($5),
 			PlacementOptions: $6.([]*ast.PlacementOption),
 		}
+	}
+
+CreateSecurityLabelComponentStmt:
+	"CREATE" "SECURITY" "LABEL" "COMPONENT" Identifier LBACComponentDef
+	{
+		def := $6.(*ast.LBACComponentDef)
+		$$ = &ast.CreateSecurityLabelComponentStmt{
+			Name:             ast.NewCIStr($5),
+			LBACComponentDef: *def,
+		}
+	}
+
+LBACComponentDef:
+	"ARRAY" '(' StringList ')'
+	{
+		$$ = &ast.LBACComponentDef{
+			Type:     ast.LBACComponentTypeArray,
+			Elements: $3.([]string),
+		}
+	}
+|	"SET" '(' StringList ')'
+	{
+		$$ = &ast.LBACComponentDef{
+			Type:     ast.LBACComponentTypeSet,
+			Elements: $3.([]string),
+		}
+	}
+|	"TREE" LBACTreeDefOpt
+	{
+		$$ = &ast.LBACComponentDef{
+			Type: ast.LBACComponentTypeTree,
+			Tree: $2.(*ast.LBACTreeDef),
+		}
+	}
+
+LBACTreeDefOpt:
+	'(' LBACTreeDef ')'
+	{
+		$$ = $2.(*ast.LBACTreeDef)
+	}
+
+LBACTreeDef:
+	LBACTreeNodeDef
+	{
+		treeDef, _ := $1.(*ast.LBACTreeNode)
+		$$ = &ast.LBACTreeDef{
+			Nodes: []*ast.LBACTreeNode{treeDef},
+		}
+	}
+|	LBACTreeDef ',' LBACTreeNodeDef
+	{
+		treeDef, _ := $1.(*ast.LBACTreeDef)
+		treeDef.Nodes = append(treeDef.Nodes, $3.(*ast.LBACTreeNode))
+		$$ = treeDef
+	}
+
+LBACTreeNodeDef:
+	stringLit "ROOT"
+	{
+		$$ = &ast.LBACTreeNode{
+			Name:   $1,
+			IsRoot: true,
+		}
+	}
+|	stringLit "UNDER" stringLit
+	{
+		$$ = &ast.LBACTreeNode{
+			Name:   $1,
+			Parent: $3,
+			IsRoot: false,
+		}
+	}
+
+CreateSecurityPolicyStmt:
+	"CREATE" "SECURITY" "POLICY" Identifier "COMPONENTS" ComponentNameList SecurityPolicyRuleOpt SecurityPolicyOpt
+	{
+		$$ = &ast.CreateSecurityPolicyStmt{
+			Name:       ast.NewCIStr($4),
+			Components: $6.([]ast.CIStr),
+			Rule:       $7.(ast.SecurityPolicyRuleOption),
+			Option:     $8.(ast.SecurityPolicyOption),
+		}
+	}
+
+CreateSecurityLabelStmt:
+	"CREATE" "SECURITY" "LABEL" Identifier '.' Identifier SecurityComponentSpecList
+	{
+		$$ = &ast.CreateSecurityLabelStmt{
+			PolicyName: ast.NewCIStr($4),
+			LabelName:  ast.NewCIStr($6),
+			Components: $7.([]*ast.SecurityLabelComponentSpec),
+		}
+	}
+
+DropSecurityLabelComponentStmt:
+	"DROP" "SECURITY" "LABEL" "COMPONENT" Identifier
+	{
+		$$ = &ast.DropSecurityLabelComponentStmt{
+			Name: ast.NewCIStr($5),
+		}
+	}
+
+DropSecurityPolicyStmt:
+	"DROP" "SECURITY" "POLICY" Identifier
+	{
+		$$ = &ast.DropSecurityPolicyStmt{
+			Name: ast.NewCIStr($4),
+		}
+	}
+
+DropSecurityLabelStmt:
+	"DROP" "SECURITY" "LABEL" Identifier '.' Identifier
+	{
+		$$ = &ast.DropSecurityLabelStmt{
+			PolicyName: ast.NewCIStr($4),
+			LabelName:  ast.NewCIStr($6),
+		}
+	}
+
+GrantSecurityLabelStmt:
+	"GRANT" "SECURITY" "LABEL" Identifier '.' Identifier "TO" SecurityLabelUserList "FOR" GrantSecurityLabelAccessList
+	{
+		$$ = &ast.GrantSecurityLabelStmt{
+			PolicyName:  ast.NewCIStr($4),
+			LabelName:   ast.NewCIStr($6),
+			Users:       $8.([]*ast.UserSpec),
+			AccessTypes: $10.([]ast.SecurityLabelAccessType),
+		}
+	}
+
+RevokeSecurityLabelStmt:
+	"REVOKE" "SECURITY" "LABEL" Identifier '.' Identifier "FROM" SecurityLabelUserList
+	{
+		$$ = &ast.RevokeSecurityLabelStmt{
+			PolicyName: ast.NewCIStr($4),
+			LabelName:  ast.NewCIStr($6),
+			Users:      $8.([]*ast.UserSpec),
+		}
+	}
+
+GrantExemptionStmt:
+	"GRANT" "EXEMPTION" "ON" "RULE" ExemptionRule "FOR" Identifier "TO" SecurityLabelUserList
+	{
+		$$ = &ast.GrantExemptionStmt{
+			Rule:       $5.(ast.ExemptionRule),
+			PolicyName: ast.NewCIStr($7),
+			Users:      $9.([]*ast.UserSpec),
+		}
+	}
+
+RevokeExemptionStmt:
+	"REVOKE" "EXEMPTION" "ON" "RULE" ExemptionRule "FOR" Identifier "FROM" SecurityLabelUserList
+	{
+		$$ = &ast.RevokeExemptionStmt{
+			Rule:       $5.(ast.ExemptionRule),
+			PolicyName: ast.NewCIStr($7),
+			Users:      $9.([]*ast.UserSpec),
+		}
+	}
+
+SecurityComponentSpec:
+	"COMPONENT" Identifier StringList
+	{
+		$$ = &ast.SecurityLabelComponentSpec{
+			ComponentName: ast.NewCIStr($2),
+			Values:        $3.([]string),
+		}
+	}
+
+SecurityComponentSpecList:
+	SecurityComponentSpec
+	{
+		$$ = []*ast.SecurityLabelComponentSpec{$1.(*ast.SecurityLabelComponentSpec)}
+	}
+|	SecurityComponentSpecList SecurityComponentSpec
+	{
+		$$ = append($1.([]*ast.SecurityLabelComponentSpec), $2.(*ast.SecurityLabelComponentSpec))
+	}
+
+ComponentNameList:
+	Identifier
+	{
+		$$ = []ast.CIStr{ast.NewCIStr($1)}
+	}
+|	ComponentNameList ',' Identifier
+	{
+		$$ = append($1.([]ast.CIStr), ast.NewCIStr($3))
+	}
+
+SecurityPolicyRuleOpt:
+	{
+		$$ = ast.SecurityPolicyRuleNone
+	}
+|	"WITH" "LBACRULES"
+	{
+		$$ = ast.SecurityPolicyRuleLBACRules
+	}
+
+SecurityPolicyOpt:
+	{
+		$$ = ast.SecurityPolicyNone
+	}
+|	"OVERRIDE" "NOT" "AUTHORIZED" "WRITE" "SECURITY" "LABEL"
+	{
+		$$ = ast.SecurityPolicyOverride
+	}
+|	"RESTRICT" "NOT" "AUTHORIZED" "WRITE" "SECURITY" "LABEL"
+	{
+		$$ = ast.SecurityPolicyRestrict
+	}
+
+ExemptionRule:
+	"ALL"
+	{
+		$$ = ast.ExemptionRuleAll
+	}
+
+SecurityLabelUserList:
+	SecurityLabelUser
+	{
+		$$ = []*ast.UserSpec{$1.(*ast.UserSpec)}
+	}
+|	SecurityLabelUserList ',' SecurityLabelUser
+	{
+		$$ = append($1.([]*ast.UserSpec), $3.(*ast.UserSpec))
+	}
+
+SecurityLabelUser:
+	"USER" Username
+	{
+		$$ = &ast.UserSpec{
+			User: $2.(*auth.UserIdentity),
+		}
+	}
+
+GrantSecurityLabelAccessList:
+	GrantSecurityLabelAccess
+	{
+		$$ = []ast.SecurityLabelAccessType{$1.(ast.SecurityLabelAccessType)}
+	}
+|	GrantSecurityLabelAccessList ',' GrantSecurityLabelAccess
+	{
+		$$ = append($1.([]ast.SecurityLabelAccessType), $3.(ast.SecurityLabelAccessType))
+	}
+
+GrantSecurityLabelAccess:
+	"READ" "ACCESS"
+	{
+		$$ = ast.SecurityLabelAccessTypeRead
+	}
+|	"WRITE" "ACCESS"
+	{
+		$$ = ast.SecurityLabelAccessTypeWrite
+	}
+|	"ALL" "ACCESS"
+	{
+		$$ = ast.SecurityLabelAccessTypeAll
 	}
 
 /********************************************************************************************
@@ -16784,36 +17718,48 @@ SpPdparams:
 	}
 
 SpPdparam:
-	SpOptInout Identifier Type
+	Identifier Type OptCollate
+	{
+		x := &ast.StoreParameter{
+			Paramstatus:     ast.ModeIn,
+			ParamType:       $2.(*types.FieldType),
+			ParamName:       $1,
+			OmitParamStatus: true,
+		}
+		x.ParamType.SetCollate($3)
+		$$ = x
+	}
+|	ProcedureInOut Identifier Type OptCollate
 	{
 		x := &ast.StoreParameter{
 			Paramstatus: $1.(int),
 			ParamType:   $3.(*types.FieldType),
 			ParamName:   $2,
 		}
+		x.ParamType.SetCollate($4)
 		$$ = x
 	}
 
-SpOptInout:
-	/* Empty */
+ProcedureInOut:
+	"IN"
 	{
-		$$ = ast.MODE_IN
-	}
-|	"IN"
-	{
-		$$ = ast.MODE_IN
+		$$ = ast.ModeIn
 	}
 |	"OUT"
 	{
-		$$ = ast.MODE_OUT
+		$$ = ast.ModeOut
 	}
 |	"INOUT"
 	{
-		$$ = ast.MODE_INOUT
+		$$ = ast.ModeInOut
 	}
 
 ProcedureStatementStmt:
-	SelectStmt
+	AlterTableStmt
+|	CallStmt
+|	CreateTableStmt
+|	DropTableStmt
+|	SelectStmt
 |	SelectStmtWithClause
 |	SubSelect
 	{
@@ -16840,6 +17786,14 @@ ProcedureStatementStmt:
 |	DeleteFromStmt
 |	AnalyzeTableStmt
 |	TruncateTableStmt
+|	StartTransactionStmt
+|	PreparedStmt
+|	DeallocateStmt
+|	ExecuteStmt
+|	ShowStmt
+|	SignalStmt
+|	GetDiagnosticsStmt
+|	DoStmt
 
 ProcedureCursorSelectStmt:
 	SelectStmt
@@ -16877,6 +17831,12 @@ ProcedureDeclIdents:
 		$$ = l
 	}
 
+ProcedureCursorName:
+	Identifier
+	{
+		$$ = $1
+	}
+
 ProcedureOptDefault:
 	/* Empty */
 	{
@@ -16884,24 +17844,29 @@ ProcedureOptDefault:
 	}
 |	"DEFAULT" Expression
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
 		$$ = $2
 	}
 
 ProcedureDecl:
-	"DECLARE" ProcedureDeclIdents Type ProcedureOptDefault
+	"DECLARE" ProcedureDeclIdents Type OptCollate ProcedureOptDefault
 	{
 		x := &ast.ProcedureDecl{
 			DeclNames: $2.([]string),
 			DeclType:  $3.(*types.FieldType),
 		}
-		if $4 != nil {
-			x.DeclDefault = $4.(ast.ExprNode)
+		if $4 != "" {
+			x.DeclType.SetCollate($4)
+		}
+		if $5 != nil {
+			x.DeclDefault = $5.(ast.ExprNode)
 		}
 		$$ = x
 	}
-|	"DECLARE" identifier "CURSOR" "FOR" ProcedureCursorSelectStmt
+|	"DECLARE" ProcedureCursorName "CURSOR" "FOR" ProcedureCursorSelectStmt
 	{
 		name := strings.ToLower($2)
+		$5.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
 		$$ = &ast.ProcedureCursor{
 			CurName:      name,
 			Selectstring: $5.(ast.StmtNode),
@@ -16916,14 +17881,22 @@ ProcedureDecl:
 		}
 	}
 
+SQLStateText:
+	"SQLSTATE" optValue stringLit
+	{
+		$$ = &ast.ProcedureErrorState{
+			CodeStatus: $3,
+		}
+	}
+
 ProcedureHandlerType:
 	"CONTINUE"
 	{
-		$$ = ast.PROCEDUR_CONTINUE
+		$$ = ast.ProcedureContinue
 	}
 |	"EXIT"
 	{
-		$$ = ast.PROCEDUR_EXIT
+		$$ = ast.ProcedureExit
 	}
 
 ProcedureHcondList:
@@ -16947,21 +17920,21 @@ ProcedureHcond:
 	/* SQLSTATEs 01??? */
 	{
 		$$ = &ast.ProcedureErrorCon{
-			ErrorCon: ast.PROCEDUR_SQLWARNING,
+			ErrorCon: ast.ProcedureSQLWarning,
 		}
 	}
 |	"NOT" "FOUND"
 	/* SQLSTATEs 02??? */
 	{
 		$$ = &ast.ProcedureErrorCon{
-			ErrorCon: ast.PROCEDUR_NOT_FOUND,
+			ErrorCon: ast.ProcedureNotFound,
 		}
 	}
 |	"SQLEXCEPTION"
 	/* All other SQLSTATEs */
 	{
 		$$ = &ast.ProcedureErrorCon{
-			ErrorCon: ast.PROCEDUR_SQLEXCEPTION,
+			ErrorCon: ast.ProcedureSQLException,
 		}
 	}
 
@@ -16972,11 +17945,9 @@ ProcedurceCond:
 			ErrorNum: getUint64FromNUM($1),
 		}
 	}
-|	"SQLSTATE" optValue stringLit
+|	SQLStateText
 	{
-		$$ = &ast.ProcedureErrorState{
-			CodeStatus: $3,
-		}
+		$$ = $1.(*ast.ProcedureErrorState)
 	}
 
 optValue:
@@ -16984,7 +17955,7 @@ optValue:
 |	"VALUE"
 
 ProcedureOpenCur:
-	"OPEN" identifier
+	"OPEN" ProcedureCursorName
 	{
 		name := strings.ToLower($2)
 		$$ = &ast.ProcedureOpenCur{
@@ -16993,7 +17964,15 @@ ProcedureOpenCur:
 	}
 
 ProcedureFetchInto:
-	"FETCH" ProcedureOptFetchNo identifier "INTO" ProcedureFetchList
+	"FETCH" ProcedureCursorName "INTO" ProcedureFetchList
+	{
+		name := strings.ToLower($2)
+		$$ = &ast.ProcedureFetchInto{
+			CurName:   name,
+			Variables: $4.([]string),
+		}
+	}
+|	"FETCH" "FROM" ProcedureCursorName "INTO" ProcedureFetchList
 	{
 		name := strings.ToLower($3)
 		$$ = &ast.ProcedureFetchInto{
@@ -17001,21 +17980,23 @@ ProcedureFetchInto:
 			Variables: $5.([]string),
 		}
 	}
+|	"FETCH" "NEXT" "FROM" ProcedureCursorName "INTO" ProcedureFetchList
+	{
+		name := strings.ToLower($4)
+		$$ = &ast.ProcedureFetchInto{
+			CurName:   name,
+			Variables: $6.([]string),
+		}
+	}
 
 ProcedureCloseCur:
-	"CLOSE" identifier
+	"CLOSE" ProcedureCursorName
 	{
 		name := strings.ToLower($2)
 		$$ = &ast.ProcedureCloseCur{
 			CurName: name,
 		}
 	}
-
-ProcedureOptFetchNo:
-
-/* Empty */
-|	"NEXT" "FROM"
-|	"FROM"
 
 ProcedureFetchList:
 	identifier
@@ -17085,6 +18066,14 @@ ProcedureBlockContent:
 		$$ = x
 	}
 
+ProcedureReturnStmt:
+	"RETURN" Expression
+	{
+		$$ = &ast.ProcedureReturnStmt{
+			ReturnExpr: $2.(ast.ExprNode),
+		}
+	}
+
 ProcedureIfstmt:
 	"IF" ProcedureIf "END" "IF"
 	{
@@ -17096,6 +18085,7 @@ ProcedureIfstmt:
 ProcedureIf:
 	Expression "THEN" ProcedureProcStmt1s procedurceElseIfs
 	{
+		$1.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-3]):parser.startOffset(&yyS[yypt-2])]))
 		ifBlock := &ast.ProcedureIfBlock{
 			IfExpr:           $1.(ast.ExprNode),
 			ProcedureIfStmts: $3.([]ast.StmtNode),
@@ -17160,6 +18150,7 @@ SearchedWhenThenList:
 SimpleWhenThen:
 	"WHEN" Expression "THEN" ProcedureProcStmt1s
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.SimpleWhenThenStmt{
 			Expr:           $2.(ast.ExprNode),
 			ProcedureStmts: $4.([]ast.StmtNode),
@@ -17169,6 +18160,7 @@ SimpleWhenThen:
 SearchWhenThen:
 	"WHEN" Expression "THEN" ProcedureProcStmt1s
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.SearchWhenThenStmt{
 			Expr:           $2.(ast.ExprNode),
 			ProcedureStmts: $4.([]ast.StmtNode),
@@ -17187,6 +18179,7 @@ ElseCaseOpt:
 ProcedureSimpleCase:
 	"CASE" Expression SimpleWhenThenList ElseCaseOpt "END" "CASE"
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-4]):parser.startOffset(&yyS[yypt-3])]))
 		caseStmt := &ast.SimpleCaseStmt{
 			Condition: $2.(ast.ExprNode),
 			WhenCases: $3.([]*ast.SimpleWhenThenStmt),
@@ -17218,6 +18211,7 @@ ProcedureUnlabelLoopBlock:
 ProcedureUnlabelLoopStmt:
 	"WHILE" Expression "DO" ProcedureProcStmt1s "END" "WHILE"
 	{
+		$2.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-4]):parser.startOffset(&yyS[yypt-3])]))
 		$$ = &ast.ProcedureWhileStmt{
 			Condition: $2.(ast.ExprNode),
 			Body:      $4.([]ast.StmtNode),
@@ -17225,9 +18219,16 @@ ProcedureUnlabelLoopStmt:
 	}
 |	"REPEAT" ProcedureProcStmt1s "UNTIL" Expression "END" "REPEAT"
 	{
+		$4.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt-2]):parser.startOffset(&yyS[yypt-1])]))
 		$$ = &ast.ProcedureRepeatStmt{
 			Body:      $2.([]ast.StmtNode),
 			Condition: $4.(ast.ExprNode),
+		}
+	}
+|	"LOOP" ProcedureProcStmt1s "END" "LOOP"
+	{
+		$$ = &ast.ProcedureLoopStmt{
+			Body: $2.([]ast.StmtNode),
 		}
 	}
 
@@ -17289,7 +18290,12 @@ ProcedureLeave:
 
 ProcedureProcStmt:
 	ProcedureStatementStmt
+	{
+		$1.SetText(parser.lexer.client, strings.TrimSpace(parser.src[parser.startOffset(&yyS[yypt]):parser.yylval.offset]))
+		$$ = $1
+	}
 |	ProcedureUnlabeledBlock
+|	ProcedureReturnStmt
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
 |	ProcedureUnlabelLoopBlock
@@ -17300,6 +18306,129 @@ ProcedureProcStmt:
 |	ProcedurelabeledLoopStmt
 |	ProcedureIterate
 |	ProcedureLeave
+
+ProcedureCreateChistics:
+	{
+		$$ = []ast.ProcedureCharacteristic{}
+	}
+|	ProcedureCreateChistics ProcedureCreateChistic
+	{
+		l := $1.([]ast.ProcedureCharacteristic)
+		if $2 != nil {
+			l = append(l, $2.(ast.ProcedureCharacteristic))
+		}
+		$$ = l
+	}
+
+ProcedureCreateChistic:
+	ProcedureChistic
+	{
+		$$ = $1
+	}
+
+ProcedureChistic:
+	"COMMENT" stringLit
+	{
+		$$ = &ast.ProcedureComment{
+			Type:    ast.ProcedureCommentType,
+			Comment: $2,
+		}
+	}
+|	"SQL" "SECURITY" "DEFINER"
+	{
+		$$ = &ast.ProcedureSecurity{
+			Type:     ast.ProcedureSecurityType,
+			Security: ast.SecurityDefiner,
+		}
+	}
+|	"SQL" "SECURITY" "INVOKER"
+	{
+		$$ = &ast.ProcedureSecurity{
+			Type:     ast.ProcedureSecurityType,
+			Security: ast.SecurityInvoker,
+		}
+	}
+|	"DETERMINISTIC"
+	{
+		$$ = &ast.ProcedureDeterministic{
+			Type:          ast.ProcedureDeterministicType,
+			Deterministic: true,
+		}
+	}
+|	"NOT" "DETERMINISTIC"
+	{
+		$$ = &ast.ProcedureDeterministic{
+			Type:          ast.ProcedureDeterministicType,
+			Deterministic: false,
+		}
+	}
+|	"NO" "SQL"
+	{
+		$$ = &ast.ProcedureSQLDataAccess{
+			Type:          ast.ProcedureSQLDataAccessType,
+			SQLDataAccess: ast.RoutineNoSQL,
+		}
+	}
+|	"READS" "SQL" "DATA"
+	{
+		$$ = &ast.ProcedureSQLDataAccess{
+			Type:          ast.ProcedureSQLDataAccessType,
+			SQLDataAccess: ast.RoutineReadsSQLData,
+		}
+	}
+|	"MODIFIES" "SQL" "DATA"
+	{
+		$$ = &ast.ProcedureSQLDataAccess{
+			Type:          ast.ProcedureSQLDataAccessType,
+			SQLDataAccess: ast.RoutineModifiesSQLData,
+		}
+	}
+|	"CONTAINS" "SQL"
+	{
+		$$ = &ast.ProcedureSQLDataAccess{
+			Type:          ast.ProcedureSQLDataAccessType,
+			SQLDataAccess: ast.RoutineContainsSQL,
+		}
+	}
+|	"LANGUAGE" "SQL"
+	{
+		// Parse and ignore it. Just for compatibility.
+		$$ = nil
+	}
+
+ProcedureAlterChistics:
+	{
+		$$ = []ast.ProcedureCharacteristic{}
+	}
+|	ProcedureAlterChistics ProcedureChistic
+	{
+		l := $1.([]ast.ProcedureCharacteristic)
+		if $2 != nil {
+			l = append(l, $2.(ast.ProcedureCharacteristic))
+		}
+		$$ = l
+	}
+
+ProcedureName:
+	TableName
+
+RoutineDefiner:
+	ViewDefiner
+	{
+		parser.inProcedure = true
+		$$ = $1
+	}
+
+CreateFunctionStmtPrefix:
+	"CREATE" OrReplace ViewAlgorithm RoutineDefiner "FUNCTION" IfNotExists
+	{
+		$$ = &createFunctionPrefix{
+			orReplace:     $2.(bool),
+			viewAlgorithm: $3.(ast.ViewAlgorithm),
+			definer:       $4.(*auth.UserIdentity),
+			ifNotExists:   $6.(bool),
+		}
+	}
 
 /********************************************************************************************
  *
@@ -17320,35 +18449,306 @@ ProcedureProcStmt:
  *  Valid SQL routine statement
  ********************************************************************************************/
 CreateProcedureStmt:
-	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureProcStmt
+	"CREATE" OrReplace ViewAlgorithm RoutineDefiner "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureCreateChistics ProcedureProcStmt
 	{
-		x := &ast.ProcedureInfo{
-			IfNotExists:    $3.(bool),
-			ProcedureName:  $4.(*ast.TableName),
-			ProcedureParam: $6.([]*ast.StoreParameter),
-			ProcedureBody:  $8,
+		if $2.(bool) {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
 		}
+		if $3.(ast.ViewAlgorithm) != ast.AlgorithmUndefined {
+			v := $3.(ast.ViewAlgorithm)
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:     $6.(bool),
+			Definer:         $4.(*auth.UserIdentity),
+			ProcedureName:   $7.(*ast.TableName),
+			ProcedureParam:  $9.([]*ast.StoreParameter),
+			Characteristics: $11.([]ast.ProcedureCharacteristic),
+			ProcedureBody:   $12,
+		}
+		parser.inProcedure = false
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $8
+		originStmt := $12
 		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
-		startOffset = parser.startOffset(&yyS[yypt-3])
-		if parser.src[startOffset] == '(' {
-			startOffset++
-		}
-		endOffset := parser.startOffset(&yyS[yypt-1])
-		x.ProcedureParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
 		$$ = x
+	}
+
+/* Stored FUNCTION parameter declaration list */
+OptStoredFunctionParams:
+	/* Empty */
+	{
+		$$ = []*ast.StoreParameter{}
+	}
+|	StoredFunctionParams
+	{
+		$$ = $1
+	}
+
+StoredFunctionParams:
+	StoredFunctionParams ',' StoredFunctionParam
+	{
+		l := $1.([]*ast.StoreParameter)
+		l = append(l, $3.(*ast.StoreParameter))
+		$$ = l
+	}
+|	StoredFunctionParam
+	{
+		$$ = []*ast.StoreParameter{$1.(*ast.StoreParameter)}
+	}
+
+StoredFunctionParam:
+	Identifier Type OptCollate
+	{
+		x := &ast.StoreParameter{
+			Paramstatus:     ast.ModeIn,
+			ParamType:       $2.(*types.FieldType),
+			ParamName:       $1,
+			OmitParamStatus: true,
+		}
+		x.ParamType.SetCollate($3)
+		$$ = x
+	}
+
+CreateStoredFunctionStmt:
+	CreateFunctionStmtPrefix TableName '(' OptStoredFunctionParams ')' "RETURNS" Type ProcedureCreateChistics ProcedureProcStmt
+	{
+		prefix := $1.(*createFunctionPrefix)
+		if prefix.orReplace {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if prefix.viewAlgorithm != ast.AlgorithmUndefined {
+			v := prefix.viewAlgorithm
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:     prefix.ifNotExists,
+			Definer:         prefix.definer,
+			ProcedureName:   $2.(*ast.TableName),
+			ProcedureParam:  $4.([]*ast.StoreParameter),
+			Characteristics: $8.([]ast.ProcedureCharacteristic),
+			ProcedureBody:   $9,
+		}
+		parser.inProcedure = false
+		startOffset := parser.startOffset(&yyS[yypt])
+		originStmt := $9
+		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
+		x.FunctionInfo.RetType = $7.(*types.FieldType)
+		$$ = x
+	}
+|	CreateFunctionStmtPrefix Identifier "RETURNS" LoadableFunctionReturnType LoadableFunctionSoname
+	{
+		prefix := $1.(*createFunctionPrefix)
+		if prefix.orReplace {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if prefix.viewAlgorithm != ast.AlgorithmUndefined {
+			v := prefix.viewAlgorithm
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:   prefix.ifNotExists,
+			ProcedureName: &ast.TableName{Name: ast.NewCIStr($2)},
+		}
+		x.FunctionInfo.IsLoadable = true
+		x.FunctionInfo.LoadableReturnType = $4.(types.EvalType)
+		x.FunctionInfo.SoName = $5
+		parser.inProcedure = false
+		$$ = x
+	}
+|	"CREATE" "AGGREGATE" "FUNCTION" IfNotExists Identifier "RETURNS" LoadableFunctionReturnType LoadableFunctionSoname
+	{
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:   $4.(bool),
+			ProcedureName: &ast.TableName{Name: ast.NewCIStr($5)},
+		}
+		x.FunctionInfo.IsLoadable = true
+		x.FunctionInfo.Aggregate = true
+		x.FunctionInfo.LoadableReturnType = $7.(types.EvalType)
+		x.FunctionInfo.SoName = $8
+		parser.inProcedure = false
+		$$ = x
+	}
+
+/********************************************************************************************
+*  ALTER PROCEDURE sp_name [characteristic ...]
+********************************************************************************************/
+AlterProcedureStmt:
+	"ALTER" "PROCEDURE" ProcedureName ProcedureAlterChistics
+	{
+		$$ = &ast.AlterProcedureStmt{
+			ProcedureName:   $3.(*ast.TableName),
+			Characteristics: $4.([]ast.ProcedureCharacteristic),
+		}
+	}
+|	"ALTER" "FUNCTION" ProcedureName ProcedureAlterChistics
+	{
+		$$ = &ast.AlterProcedureStmt{
+			ProcedureName:   $3.(*ast.TableName),
+			Characteristics: $4.([]ast.ProcedureCharacteristic),
+			IsFunction:      true,
+		}
 	}
 
 /********************************************************************************************
 *  DROP PROCEDURE  [IF EXISTS] sp_name
 ********************************************************************************************/
 DropProcedureStmt:
-	"DROP" "PROCEDURE" IfExists TableName
+	"DROP" "PROCEDURE" IfExists ProcedureName
 	{
 		$$ = &ast.DropProcedureStmt{
-			IfExists:      $3.(bool),
-			ProcedureName: $4.(*ast.TableName),
+			IfExists: $3.(bool),
+			Name:     $4.(*ast.TableName),
+		}
+	}
+
+/********************************************************************************************
+* https://dev.mysql.com/doc/refman/8.4/en/create-trigger.html
+*   CREATE
+*     [DEFINER = user]
+*     TRIGGER [IF NOT EXISTS] trigger_name
+*     trigger_time trigger_event
+*     ON tbl_name FOR EACH ROW
+*     [trigger_order]
+*     trigger_body
+*
+* trigger_time: { BEFORE | AFTER }
+*
+* trigger_event: { INSERT | UPDATE | DELETE }
+*
+* trigger_order: { FOLLOWS | PRECEDES } other_trigger_name
+********************************************************************************************/
+CreateTriggerStmt:
+	"CREATE" OrReplace ViewAlgorithm TriggerDefiner "TRIGGER" IfNotExists TableName TriggerTiming TriggerEvent "ON" TableName "FOR" "EACH" "ROW" TriggerOrder ProcedureProcStmt
+	{
+		if $2.(bool) {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if $3.(ast.ViewAlgorithm) != ast.AlgorithmUndefined {
+			v := $3.(ast.ViewAlgorithm)
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		parser.inProcedure = false
+		$$ = &ast.CreateTriggerStmt{
+			IfNotExists: $6.(bool),
+			Definer:     $4.(*auth.UserIdentity),
+			TriggerName: $7.(*ast.TableName),
+			Timing:      $8.(ast.TriggerTiming),
+			Event:       $9.(ast.TriggerEvent),
+			TableName:   $11.(*ast.TableName),
+			Order:       $15.(ast.TriggerOrder),
+			TriggerBody: $16.(ast.StmtNode),
+		}
+	}
+
+TriggerDefiner:
+	ViewDefiner
+	{
+		parser.inProcedure = true
+		$$ = $1
+	}
+
+TriggerTiming:
+	"BEFORE"
+	{
+		$$ = ast.TriggerTimingBefore
+	}
+|	"AFTER"
+	{
+		$$ = ast.TriggerTimingAfter
+	}
+
+TriggerEvent:
+	"INSERT"
+	{
+		$$ = ast.TriggerEventInsert
+	}
+|	"UPDATE"
+	{
+		$$ = ast.TriggerEventUpdate
+	}
+|	"DELETE"
+	{
+		$$ = ast.TriggerEventDelete
+	}
+
+TriggerOrder:
+	/* EMPTY */
+	{
+		$$ = ast.TriggerOrder{}
+	}
+|	"FOLLOWS" Identifier
+	{
+		$$ = ast.TriggerOrder{
+			OrderType:        ast.TriggerOrderFollows,
+			OtherTriggerName: ast.NewCIStr($2),
+		}
+	}
+|	"PRECEDES" Identifier
+	{
+		$$ = ast.TriggerOrder{
+			OrderType:        ast.TriggerOrderPrecedes,
+			OtherTriggerName: ast.NewCIStr($2),
+		}
+	}
+
+/********************************************************************************************
+* https://dev.mysql.com/doc/refman/8.4/en/drop-trigger.html
+********************************************************************************************/
+DropTriggerStmt:
+	"DROP" "TRIGGER" IfExists TableName
+	{
+		$$ = &ast.DropTriggerStmt{
+			IfExists:    $3.(bool),
+			TriggerName: $4.(*ast.TableName),
+		}
+	}
+
+LoadableFunctionReturnType:
+	"INTEGER"
+	{
+		$$ = types.ETInt
+	}
+|	"INT"
+	{
+		$$ = types.ETInt
+	}
+|	"REAL"
+	{
+		$$ = types.ETReal
+	}
+|	"DECIMAL"
+	{
+		$$ = types.ETDecimal
+	}
+|	"STRING"
+	{
+		$$ = types.ETString
+	}
+
+LoadableFunctionSoname:
+	"SONAME" stringLit
+	{
+		$$ = $2
+	}
+
+/********************************************************************
+ * DROP FUNCTION [IF EXISTS] function_name
+ *******************************************************************/
+DropFunctionStmt:
+	"DROP" "FUNCTION" IfExists TableName
+	{
+		$$ = &ast.DropProcedureStmt{
+			IfExists:   $3.(bool),
+			Name:       $4.(*ast.TableName),
+			IsFunction: true,
 		}
 	}
 
@@ -17562,5 +18962,432 @@ DropQueryWatchStmt:
 		$$ = &ast.DropQueryWatchStmt{
 			GroupNameExpr: $6.(ast.ExprNode),
 		}
+	}
+
+/*******************************************************************
+ *
+ * signal Statement
+ *
+ *  Example:
+ *      SIGNAL condition_value
+ *  [SET signal_information_item
+ *  [, signal_information_item] ...]
+ *******************************************************************/
+SignalStmt:
+	"SIGNAL" SignalValue SetSignalInformationOpt
+	{
+		s := &ast.Signal{
+			ErrorCon: $2.(ast.ErrNode),
+		}
+		if $3 != nil {
+			s.SignalCons = $3.([]*ast.SignalInfo)
+		}
+		$$ = s
+	}
+
+SignalValue:
+	SQLStateText
+
+SetSignalInformationOpt:
+	{
+		$$ = []*ast.SignalInfo{}
+	}
+|	"SET" SignalInformationItemList
+	{
+		$$ = $2
+	}
+
+SignalInformationItemList:
+	SignalInformationItemName eq SignalAllowedExpr
+	{
+		$$ = []*ast.SignalInfo{{Name: $1.(int), Value: $3}}
+	}
+|	SignalInformationItemList ',' SignalInformationItemName eq SignalAllowedExpr
+	{
+		l := $1.([]*ast.SignalInfo)
+		l = append(l, &ast.SignalInfo{Name: $3.(int), Value: $5})
+		$$ = l
+	}
+
+SignalAllowedExpr:
+	Literal
+|	Variable
+|	SimpleIdent
+
+SignalInformationItemName:
+	"CLASS_ORIGIN"
+	{
+		$$ = ast.TICLASSORIGIN
+	}
+|	"SUBCLASS_ORIGIN"
+	{
+		$$ = ast.TISUBCLASSORIGIN
+	}
+|	"CONSTRAINT_CATALOG"
+	{
+		$$ = ast.TICONSTRAINTCATALOG
+	}
+|	"CONSTRAINT_SCHEMA"
+	{
+		$$ = ast.TICONSTRAINTSCHEMA
+	}
+|	"CONSTRAINT_NAME"
+	{
+		$$ = ast.TICONSTRAINTNAME
+	}
+|	"CATALOG_NAME"
+	{
+		$$ = ast.TICATALOGNAME
+	}
+|	"SCHEMA_NAME"
+	{
+		$$ = ast.TISCHEMANAME
+	}
+|	"TABLE_NAME"
+	{
+		$$ = ast.TITABLENAME
+	}
+|	"COLUMN_NAME"
+	{
+		$$ = ast.TICOLUMNNAME
+	}
+|	"CURSOR_NAME"
+	{
+		$$ = ast.TICURSORNAME
+	}
+|	"MESSAGE_TEXT"
+	{
+		$$ = ast.TIMESSAGETEXT
+	}
+|	"MYSQL_ERRNO"
+	{
+		$$ = ast.TIMYSQLERRNO
+	}
+
+GetDiagnosticsStmt:
+	"GET" DiagnosticsArea "DIAGNOSTICS" DiagnosticsInformation
+	{
+		$$ = &ast.GetDiagnosticsStmt{
+			Area:   $2.(int),
+			Infors: $4.([]ast.DiagnosticsInformation),
+		}
+	}
+
+DiagnosticsInformation:
+	StatementInformationList
+	{
+		$$ = $1.([]ast.DiagnosticsInformation)
+	}
+|	"CONDITION" ConditionNumber ConditionInformationList
+	{
+		$$ = []ast.DiagnosticsInformation{&ast.DiagnosticsConds{
+			Num:   $2.(ast.ExprNode),
+			Conds: $3.([]*ast.ConditionInfoItem)},
+		}
+	}
+
+StatementInformationList:
+	StatementInformation
+	{
+		$$ = []ast.DiagnosticsInformation{$1.(ast.DiagnosticsInformation)}
+	}
+|	StatementInformationList ',' StatementInformation
+	{
+		l := $1.([]ast.DiagnosticsInformation)
+		$$ = append(l, $3.(ast.DiagnosticsInformation))
+	}
+
+StatementInformation:
+	singleAtIdentifier eq StatementInformationItemName
+	{
+		$$ = &ast.StatementInfoItem{
+			Name:       strings.ToLower(strings.TrimPrefix($1, "@")),
+			IsVariable: true,
+			Condition:  $3.(int),
+		}
+	}
+|	Identifier eq StatementInformationItemName
+	{
+		$$ = &ast.StatementInfoItem{
+			Name:       strings.ToLower($1),
+			IsVariable: false,
+			Condition:  $3.(int),
+		}
+	}
+
+ConditionInformationList:
+	ConditionInformation
+	{
+		$$ = []*ast.ConditionInfoItem{$1.(*ast.ConditionInfoItem)}
+	}
+|	ConditionInformationList ',' ConditionInformation
+	{
+		l := $1.([]*ast.ConditionInfoItem)
+		$$ = append(l, $3.(*ast.ConditionInfoItem))
+	}
+
+ConditionInformation:
+	singleAtIdentifier eq DiagnosticsInformationItemName
+	{
+		$$ = &ast.ConditionInfoItem{
+			Name:       strings.ToLower(strings.TrimPrefix($1, "@")),
+			IsVariable: true,
+			Condition:  $3.(int),
+		}
+	}
+|	Identifier eq DiagnosticsInformationItemName
+	{
+		$$ = &ast.ConditionInfoItem{
+			Name:       strings.ToLower($1),
+			IsVariable: false,
+			Condition:  $3.(int),
+		}
+	}
+
+StatementInformationItemName:
+	"NUMBER"
+	{
+		$$ = ast.TINUMBER
+	}
+|	"ROW_COUNT"
+	{
+		$$ = ast.TIROWCOUNT
+	}
+
+ConditionNumber:
+	SignalAllowedExpr
+
+DiagnosticsArea:
+	{
+		$$ = ast.TICURRENT
+	}
+|	"CURRENT"
+	{
+		$$ = ast.TICURRENT
+	}
+|	"STACKED"
+	{
+		$$ = ast.TISTACKED
+	}
+
+DiagnosticsInformationItemName:
+	"CLASS_ORIGIN"
+	{
+		$$ = ast.TICLASSORIGIN
+	}
+|	"SUBCLASS_ORIGIN"
+	{
+		$$ = ast.TISUBCLASSORIGIN
+	}
+|	"CONSTRAINT_CATALOG"
+	{
+		$$ = ast.TICONSTRAINTCATALOG
+	}
+|	"CONSTRAINT_SCHEMA"
+	{
+		$$ = ast.TICONSTRAINTSCHEMA
+	}
+|	"CONSTRAINT_NAME"
+	{
+		$$ = ast.TICONSTRAINTNAME
+	}
+|	"CATALOG_NAME"
+	{
+		$$ = ast.TICATALOGNAME
+	}
+|	"SCHEMA_NAME"
+	{
+		$$ = ast.TISCHEMANAME
+	}
+|	"TABLE_NAME"
+	{
+		$$ = ast.TITABLENAME
+	}
+|	"COLUMN_NAME"
+	{
+		$$ = ast.TICOLUMNNAME
+	}
+|	"CURSOR_NAME"
+	{
+		$$ = ast.TICURSORNAME
+	}
+|	"MESSAGE_TEXT"
+	{
+		$$ = ast.TIMESSAGETEXT
+	}
+|	"MYSQL_ERRNO"
+	{
+		$$ = ast.TIMYSQLERRNO
+	}
+|	"RETURNED_SQLSTATE"
+	{
+		$$ = ast.TIRETURNEDSQLSTATE
+	}
+
+AdminCreateLogReplication:
+	"CREATE" "LOG" "REPLICATION" Identifier LogReplicationOptList
+	{
+		$$ = &ast.CreateLogReplication{
+			Name: ast.NewCIStr($4),
+			Opts: $5.([]*ast.LogReplicationOpt),
+		}
+	}
+
+AdminAlterLogReplication:
+	"ALTER" "LOG" "REPLICATION" Identifier LogReplicationOptList
+	{
+		$$ = &ast.AlterLogReplication{
+			Name: ast.NewCIStr($4),
+			Opts: $5.([]*ast.LogReplicationOpt),
+		}
+	}
+|	"ALTER" "LOG" "REPLICATION" Identifier "CHANGE" "SOURCE" "TO" LengthNum
+	{
+		v := $8.(uint64)
+		$$ = &ast.AlterLogReplication{
+			Name:               ast.NewCIStr($4),
+			NewSourceClusterID: &v,
+		}
+	}
+|	"ALTER" "LOG" "REPLICATION" Identifier "RENAME" "TO" Identifier
+	{
+		$$ = &ast.AlterLogReplication{
+			Name:    ast.NewCIStr($4),
+			NewName: ast.NewCIStr($7),
+		}
+	}
+
+AdminPauseLogReplication:
+	"PAUSE" "LOG" "REPLICATION" Identifier
+	{
+		$$ = &ast.PauseLogReplication{
+			Name: ast.NewCIStr($4),
+		}
+	}
+
+AdminResumeLogReplication:
+	"RESUME" "LOG" "REPLICATION" Identifier
+	{
+		$$ = &ast.ResumeLogReplication{
+			Name: ast.NewCIStr($4),
+		}
+	}
+
+AdminDropLogReplication:
+	"DROP" "LOG" "REPLICATION" Identifier
+	{
+		$$ = &ast.DropLogReplication{
+			Name: ast.NewCIStr($4),
+		}
+	}
+
+AdminSwitchOverPrimary:
+	"SWITCHOVER" "PRIMARY" "TO" LengthNum
+	{
+		$$ = &ast.SwitchOverPrimary{
+			NewPrimaryClusterID: $4.(uint64),
+		}
+	}
+
+AdminSwitchOverAsPrimary:
+	"SWITCHOVER" "AS" "PRIMARY"
+	{
+		$$ = &ast.SwitchOverAsPrimary{}
+	}
+
+AdminActivateStandby:
+	"ACTIVATE" "STANDBY" "MODE" "=" ActivateStandbyMode
+	{
+		$$ = &ast.ActivateStandby{
+			Mode: $5.(ast.ActivateStandbyMode),
+		}
+	}
+
+ActivateStandbyMode:
+	"FLASHBACK"
+	{
+		$$ = ast.ActivateStandbyModeFlashback
+	}
+|	"FORCE_COMMIT"
+	{
+		$$ = ast.ActivateStandbyModeForceCommit
+	}
+
+LogReplicationOptList:
+	LogReplicationOpt
+	{
+		$$ = []*ast.LogReplicationOpt{$1.(*ast.LogReplicationOpt)}
+	}
+|	LogReplicationOptList LogReplicationOpt
+	{
+		$$ = append($1.([]*ast.LogReplicationOpt), $2.(*ast.LogReplicationOpt))
+	}
+
+LogReplicationOpt:
+	"SOURCE_HOST" EqOpt stringLit
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:    ast.LogReplicationOptSourceHost,
+			Value: $3,
+		}
+	}
+|	"SOURCE_PORT" EqOpt LengthNum
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:        ast.LogReplicationOptSourcePort,
+			UintValue: $3.(uint64),
+		}
+	}
+|	"SOURCE_USER" EqOpt stringLit
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:    ast.LogReplicationOptSourceUser,
+			Value: $3,
+		}
+	}
+|	"SOURCE_PASSWORD" EqOpt stringLit
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:    ast.LogReplicationOptSourcePassword,
+			Value: $3,
+		}
+	}
+|	"PROTECTION_MODE" EqOpt ProtectionMode
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:        ast.LogReplicationOptProtectionMode,
+			UintValue: uint64($3.(ast.ProtectionMode)),
+		}
+	}
+|	"DEGRADE_TIMEOUT" EqOpt stringLit
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp:    ast.LogReplicationOptDegradeTimeout,
+			Value: $3,
+		}
+	}
+|	"DETACHED"
+	{
+		$$ = &ast.LogReplicationOpt{
+			Tp: ast.LogReplicationOptDetached,
+		}
+	}
+
+ProtectionMode:
+	"MAXIMUM_AVAILABILITY"
+	{
+		$$ = ast.ProtectionModeMaximumAvailability
+	}
+|	"MAXIMUM_PERFORMANCE"
+	{
+		$$ = ast.ProtectionModeMaximumPerformance
+	}
+|	"MAXIMUM_PROTECTION"
+	{
+		$$ = ast.ProtectionModeMaximumProtection
+	}
+|	LengthNum
+	{
+		$$ = ast.ProtectionMode($1.(uint64))
 	}
 %%

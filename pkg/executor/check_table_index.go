@@ -896,6 +896,7 @@ func getCheckSum(ctx context.Context, se sessionctx.Context, sql string) ([]grou
 
 func getGlobalCheckSum(ctx context.Context, se sessionctx.Context, sql string) (checksum uint64, count int64, err error) {
 	ctx = kv.WithInternalSourceType(ctx, kv.InternalTxnAdmin)
+	ctx = execdetails.ContextWithInitializedExecDetails(ctx)
 	rs, err := se.GetSQLExecutor().ExecuteInternal(ctx, sql)
 	if err != nil {
 		return 0, 0, err

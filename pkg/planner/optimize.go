@@ -503,6 +503,9 @@ func buildAndOptimizeLogicalPlanRound(
 			if err := core.CheckPrivilege(sctx.GetSessionVars().ActiveRoles, pm, visitInfo); err != nil {
 				return nil, nil, false, err
 			}
+			if err := core.CheckLBACColumnAccess(sctx, pm, builder.GetLBACVisitInfo()); err != nil {
+				return nil, nil, false, err
+			}
 		}
 
 		if err := core.CheckTableLock(sctx, is, builder.GetVisitInfo()); err != nil {
