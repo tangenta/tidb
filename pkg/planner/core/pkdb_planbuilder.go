@@ -90,6 +90,13 @@ type ActivateStandby struct {
 	Mode ast.ActivateStandbyMode
 }
 
+// CancelLogReplicationWorkflow represents an ADMIN CANCEL LOG REPLICATION WORKFLOW plan.
+type CancelLogReplicationWorkflow struct {
+	physicalop.SimpleSchemaProducer
+
+	WorkflowID uint64
+}
+
 func (b *PlanBuilder) pkdbBuildAdmin(ctx context.Context, as *ast.AdminStmt) (base.Plan, error) {
 	switch as.Tp {
 	case ast.AdminCreateLogReplication:
@@ -108,6 +115,8 @@ func (b *PlanBuilder) pkdbBuildAdmin(ctx context.Context, as *ast.AdminStmt) (ba
 		return b.buildAdminSwitchOverAsPrimary(ctx, as.SwitchOverAsPrimary)
 	case ast.AdminActivateStandby:
 		return b.buildAdminActivateStandby(ctx, as.ActivateStandby)
+	case ast.AdminCancelLogReplicationWorkflow:
+		return b.buildAdminCancelLogReplicationWorkflow(ctx, as.CancelLogReplicationWorkflow)
 	default:
 		return nil, plannererrors.ErrUnsupportedType.GenWithStack("Unsupported ast.AdminStmt(%T) for buildAdmin", as)
 	}
@@ -256,6 +265,16 @@ func (*PlanBuilder) buildAdminSwitchOverAsPrimary(_ context.Context, _ *ast.Swit
 
 func (*PlanBuilder) buildAdminActivateStandby(_ context.Context, a *ast.ActivateStandby) (base.Plan, error) {
 	p := &ActivateStandby{Mode: a.Mode}
+	return p, nil
+}
+
+func (*PlanBuilder) buildAdminCancelLogReplicationWorkflow(
+	_ context.Context,
+	as *ast.CancelLogReplicationWorkflow,
+) (base.Plan, error) {
+	p := &CancelLogReplicationWorkflow{
+		WorkflowID: as.WorkflowID,
+	}
 	return p, nil
 }
 

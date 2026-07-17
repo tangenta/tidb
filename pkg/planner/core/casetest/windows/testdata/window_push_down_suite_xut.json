@@ -170,7 +170,7 @@
       {
         "SQL": "explain format = 'plan_tree' select a, row_number() over(partition by a) as rn from ordered_window_t",
         "Plan": [
-          "OrderedWindow root  row_number()->Column#7 over(partition by test.ordered_window_t.a rows between current row and current row)",
+          "OrderedWindow root  row_number()->Column over(partition by test.ordered_window_t.a rows between current row and current row)",
           "└─IndexReader root  index:IndexFullScan",
           "  └─IndexFullScan cop[tikv] table:ordered_window_t, index:idx_ab(a, b) keep order:true, stats:pseudo"
         ],
@@ -179,7 +179,7 @@
       {
         "SQL": "explain format = 'plan_tree' select a, b, row_number() over(partition by a order by b) as rn from ordered_window_t",
         "Plan": [
-          "OrderedWindow root  row_number()->Column#7 over(partition by test.ordered_window_t.a order by test.ordered_window_t.b rows between current row and current row)",
+          "OrderedWindow root  row_number()->Column over(partition by test.ordered_window_t.a order by test.ordered_window_t.b rows between current row and current row)",
           "└─IndexReader root  index:IndexFullScan",
           "  └─IndexFullScan cop[tikv] table:ordered_window_t, index:idx_ab(a, b) keep order:true, stats:pseudo"
         ],
@@ -198,7 +198,7 @@
       {
         "SQL": "explain format = 'plan_tree' select a, b, rank() over(partition by a order by b) as rk from ordered_window_t",
         "Plan": [
-          "Window root  rank()->Column#7 over(partition by test.ordered_window_t.a order by test.ordered_window_t.b)",
+          "Window root  rank()->Column over(partition by test.ordered_window_t.a order by test.ordered_window_t.b)",
           "└─IndexReader root  index:IndexFullScan",
           "  └─IndexFullScan cop[tikv] table:ordered_window_t, index:idx_ab(a, b) keep order:true, stats:pseudo"
         ],
@@ -208,7 +208,7 @@
         "SQL": "explain format = 'plan_tree' select a, c, row_number() over(partition by a order by c) as rn from ordered_window_t",
         "Plan": [
           "Shuffle root  execution info: concurrency:5, data sources:[TableReader]",
-          "└─Window root  row_number()->Column#7 over(partition by test.ordered_window_t.a order by test.ordered_window_t.c rows between current row and current row)",
+          "└─Window root  row_number()->Column over(partition by test.ordered_window_t.a order by test.ordered_window_t.c rows between current row and current row)",
           "  └─Sort root  test.ordered_window_t.a, test.ordered_window_t.c",
           "    └─ShuffleReceiver root  ",
           "      └─TableReader root  data:TableFullScan",

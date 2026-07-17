@@ -350,7 +350,7 @@ func RunTiDBServer(args []string) {
 			close(exited)
 		}
 	}
-	topsql.SetupTopProfiling(keyspace.GetKeyspaceNameBytesBySettings(), svr)
+	topsql.SetupTopProfiling(keyspace.GetKeyspaceNameBytesBySettings(), svr, dom)
 	terror.MustNil(svr.Run(dom))
 	<-exited
 	syncLog()

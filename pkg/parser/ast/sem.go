@@ -355,6 +355,8 @@ const (
 	AdminSwitchOverAsPrimaryCommand = "ADMIN SWITCHOVER AS PRIMARY"
 	// AdminActivateStandbyCommand represents ADMIN ACTIVATE STANDBY statement
 	AdminActivateStandbyCommand = "ADMIN ACTIVATE STANDBY"
+	// AdminCancelLogReplicationWorkflowCommand represents ADMIN CANCEL LOG REPLICATION WORKFLOW statement
+	AdminCancelLogReplicationWorkflowCommand = "ADMIN CANCEL LOG REPLICATION WORKFLOW"
 )
 
 // BRIE Commands
@@ -1027,6 +1029,8 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminSwitchOverAsPrimaryCommand
 	case AdminActivateStandby:
 		return AdminActivateStandbyCommand
+	case AdminCancelLogReplicationWorkflow:
+		return AdminCancelLogReplicationWorkflowCommand
 	default:
 		return UnknownCommand
 	}
