@@ -67,7 +67,7 @@ const (
 	DefPKDBEnableEAL                 = false
 	DefPKDBExtraDataType             = false
 	DefTiDBEnableLBAC                = false
-	DefPKDBCommentByteLengthLimit      = int64(0)
+	DefPKDBCommentByteLengthLimit    = int64(0)
 )
 
 // UnspecifiedServerID indicates the unspecified server id.
@@ -80,5 +80,5 @@ var (
 	EnableWhitelist                         = atomic.NewBool(DefPKDBEnableWhitelist)
 	EnableEAL                               = atomic.NewBool(DefPKDBEnableEAL)
 	EnableLBAC                              = atomic.NewBool(DefTiDBEnableLBAC)
-	CommentByteLengthLimit     = atomic.NewInt64(DefPKDBCommentByteLengthLimit)
+	CommentByteLengthLimit                  = atomic.NewInt64(DefPKDBCommentByteLengthLimit)
 )
