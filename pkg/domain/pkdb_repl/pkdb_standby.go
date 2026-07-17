@@ -47,8 +47,11 @@ var (
 	// StandbyUnsafeDestroyTickCh will be sent after standby mode is enabled, to
 	// trigger unsafe destroy range check.
 	StandbyUnsafeDestroyTickCh = make(chan struct{}, 1)
-	standbyTickWg              sync.WaitGroup
-	standbyTickDone            chan struct{}
+	// StandbyTiFlashPlacementSyncTickCh will be sent after standby mode is enabled,
+	// to trigger TiFlash placement rule sync from infoschema to PD.
+	StandbyTiFlashPlacementSyncTickCh = make(chan struct{}, 1)
+	standbyTickWg                     sync.WaitGroup
+	standbyTickDone                   chan struct{}
 )
 
 // enableStandbyMode should not be concurrently called with disableStandbyMode.
@@ -68,6 +71,8 @@ func enableStandbyMode() {
 		defer infoSchemaTicker.Stop()
 		unsafeDestroyTicker := time.NewTicker(50 * time.Second)
 		defer unsafeDestroyTicker.Stop()
+		tiflashSyncTicker := time.NewTicker(30 * time.Second)
+		defer tiflashSyncTicker.Stop()
 
 		for {
 			select {
@@ -81,6 +86,11 @@ func enableStandbyMode() {
 			case <-unsafeDestroyTicker.C:
 				select {
 				case StandbyUnsafeDestroyTickCh <- struct{}{}:
+				default:
+				}
+			case <-tiflashSyncTicker.C:
+				select {
+				case StandbyTiFlashPlacementSyncTickCh <- struct{}{}:
 				default:
 				}
 			}
