@@ -42,4 +42,6 @@ pkg/store/gcworker TestTickGCSysTable
 tests/realtikvtest/txntest TestValidateReadOnlyInStalenessTransaction
 pkg/owner TestAcquireDistributedLock
 pkg/util/gctuner TestIssue48741
+pkg/util/gctuner TestGlobalMemoryTuner
 tests/realtikvtest/txntest TestStaleReadKVRequest
+tests/realtikvtest/txntest TestStalenessAndHistoryRead

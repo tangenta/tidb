@@ -43,5 +43,5 @@ func TestLogReplication(t *testing.T) {
 		{"ADMIN ACTIVATE STANDBY", false, ""},
 		{"ADMIN ACTIVATE STANDBY MODE = UNKNOWN", false, ""},
 	}
-	RunTest(t, table, false)
+	RunTest(t, table, false, false)
 }

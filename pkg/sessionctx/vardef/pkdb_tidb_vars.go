@@ -58,6 +58,7 @@ const (
 	DefTiDBEnableUDVSubstitute         = false
 	DefTiDBEnableSPParamSubstitute     = false
 	DefTiDBCreateFromSelectUsingImport = false
+	DefLowerCaseTableNames             = "2"
 
 	// fusion mode related variables
 

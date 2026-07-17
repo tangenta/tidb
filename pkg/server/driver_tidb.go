@@ -151,6 +151,7 @@ func (ts *TiDBStatement) Reset() error {
 	}
 	ts.hasActiveCursor = false
 
+	resultset.ReportCursorRUV2Delta(ts.rs, 0)
 	if ts.rs != nil && ts.rs.GetRowIterator() != nil {
 		ts.rs.GetRowIterator().Close()
 	}
@@ -174,6 +175,7 @@ func (ts *TiDBStatement) Reset() error {
 
 // Close implements PreparedStatement Close method.
 func (ts *TiDBStatement) Close() error {
+	resultset.ReportCursorRUV2Delta(ts.rs, 0)
 	if ts.rs != nil && ts.rs.GetRowIterator() != nil {
 		ts.rs.GetRowIterator().Close()
 	}

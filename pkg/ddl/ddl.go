@@ -95,6 +95,7 @@ const (
 
 var (
 	jobV2FirstVer        = *semver.New("8.4.0")
+	globalIdxV1FirstVer  = *semver.New("8.5.6")
 	detectJobVerInterval = 10 * time.Second
 	eeVersions           = map[string]string{
 		"7.1.8-5": "8.5",
@@ -913,6 +914,8 @@ func (d *ddl) newDeleteRangeManager(mock bool) delRangeManager {
 func (d *ddl) Start(startMode StartMode, ctxPool *pools.ResourcePool) error {
 	if kerneltype.IsClassic() {
 		d.detectAndUpdateJobVersion()
+	} else {
+		d.detectAndUpdateGlobalIndexV1Support()
 	}
 	campaignOwner := config.GetGlobalConfig().Instance.TiDBEnableDDL.Load()
 	if startMode == Upgrade {
@@ -1017,9 +1020,10 @@ func (d *ddl) detectAndUpdateJobVersion() {
 	if d.etcdCli == nil {
 		if testargsv1.ForceV1 {
 			model.SetJobVerInUse(model.JobVersion1)
-			return
+		} else {
+			model.SetJobVerInUse(model.JobVersion2)
 		}
-		model.SetJobVerInUse(model.JobVersion2)
+		model.SetGlobalIndexV1Supported(true)
 		return
 	}
 
@@ -1028,12 +1032,13 @@ func (d *ddl) detectAndUpdateJobVersion() {
 		logutil.DDLLogger().Warn("detect job version failed", zap.String("err", err.Error()))
 	}
 
-	if model.GetJobVerInUse() == model.JobVersion2 {
+	if model.GetJobVerInUse() == model.JobVersion2 && model.GetGlobalIndexV1Supported() {
 		return
 	}
 
-	logutil.DDLLogger().Info("job version in use is not v2, maybe in upgrade, start detecting",
-		zap.Stringer("current", model.GetJobVerInUse()))
+	logutil.DDLLogger().Info("job version in use is not v2 or global index v1 not supported, maybe in upgrade, start detecting",
+		zap.Stringer("current", model.GetJobVerInUse()),
+		zap.Bool("globalIndexV1Supported", model.GetGlobalIndexV1Supported()))
 	d.wg.RunWithLog(func() {
 		ticker := time.NewTicker(detectJobVerInterval)
 		defer ticker.Stop()
@@ -1048,8 +1053,8 @@ func (d *ddl) detectAndUpdateJobVersion() {
 				logutil.SampleLogger().Warn("detect job version failed", zap.String("err", err.Error()))
 			}
 			failpoint.InjectCall("afterDetectAndUpdateJobVersionOnce")
-			if model.GetJobVerInUse() == model.JobVersion2 {
-				logutil.DDLLogger().Info("job version in use is v2 now, stop detecting")
+			if model.GetJobVerInUse() == model.JobVersion2 && model.GetGlobalIndexV1Supported() {
+				logutil.DDLLogger().Info("job version in use is v2 and global index v1 supported now, stop detecting")
 				return
 			}
 		}
@@ -1058,12 +1063,14 @@ func (d *ddl) detectAndUpdateJobVersion() {
 
 // when all TiDB instances have version >= 8.4.0, we can use job version 2, otherwise
 // we should use job version 1 to keep compatibility.
+// Also checks whether all instances support global index V1 key format (>= 8.5.6).
 func (d *ddl) detectAndUpdateJobVersionOnce() error {
 	infos, err := infosync.GetAllServerInfo(d.ctx)
 	if err != nil {
 		return err
 	}
 	allSupportV2 := true
+	allSupportGlobalIdxV1 := true
 	for _, info := range infos {
 		// we don't store TiDB version directly, but concatenated with a MySQL version,
 		// separated by mysql.VersionSeparator.
@@ -1071,6 +1078,7 @@ func (d *ddl) detectAndUpdateJobVersionOnce() error {
 		idx := strings.Index(tidbVer, mysql.VersionSeparator)
 		if idx < 0 {
 			allSupportV2 = false
+			allSupportGlobalIdxV1 = false
 			// see https://github.com/pingcap/tidb/issues/31823
 			logutil.SampleLogger().Warn("unknown server version, might be changed directly in config",
 				zap.String("version", tidbVer))
@@ -1081,6 +1089,7 @@ func (d *ddl) detectAndUpdateJobVersionOnce() error {
 		ver, err2 := semver.NewVersion(tidbVer)
 		if err2 != nil {
 			allSupportV2 = false
+			allSupportGlobalIdxV1 = false
 			logutil.SampleLogger().Warn("parse server version failed", zap.String("version", info.Version),
 				zap.String("err", err2.Error()))
 			break
@@ -1093,6 +1102,11 @@ func (d *ddl) detectAndUpdateJobVersionOnce() error {
 		ver.PreRelease = ""
 		if ver.LessThan(jobV2FirstVer) {
 			allSupportV2 = false
+		}
+		if ver.LessThan(globalIdxV1FirstVer) {
+			allSupportGlobalIdxV1 = false
+		}
+		if !allSupportV2 && !allSupportGlobalIdxV1 {
 			break
 		}
 	}
@@ -1106,7 +1120,48 @@ func (d *ddl) detectAndUpdateJobVersionOnce() error {
 			zap.Stringer("new", targetVer))
 		model.SetJobVerInUse(targetVer)
 	}
+	if model.GetGlobalIndexV1Supported() != allSupportGlobalIdxV1 {
+		logutil.DDLLogger().Info("change global index V1 support",
+			zap.Bool("old", model.GetGlobalIndexV1Supported()),
+			zap.Bool("new", allSupportGlobalIdxV1))
+		model.SetGlobalIndexV1Supported(allSupportGlobalIdxV1)
+	}
 	return nil
+}
+
+// detectAndUpdateGlobalIndexV1Support is used in NextGen mode where
+// detectAndUpdateJobVersion is not called. It only handles the global
+// index V1 support flag.
+func (d *ddl) detectAndUpdateGlobalIndexV1Support() {
+	if d.etcdCli == nil {
+		model.SetGlobalIndexV1Supported(true)
+		return
+	}
+	// In production NextGen with etcd, run the same detection logic.
+	if err := d.detectAndUpdateJobVersionOnce(); err != nil {
+		logutil.DDLLogger().Warn("detect global index V1 support failed", zap.String("err", err.Error()))
+	}
+	if model.GetGlobalIndexV1Supported() {
+		return
+	}
+	d.wg.RunWithLog(func() {
+		ticker := time.NewTicker(detectJobVerInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+			case <-d.ctx.Done():
+				return
+			}
+			if err := d.detectAndUpdateJobVersionOnce(); err != nil {
+				logutil.SampleLogger().Warn("detect global index V1 support failed", zap.String("err", err.Error()))
+			}
+			if model.GetGlobalIndexV1Supported() {
+				logutil.DDLLogger().Info("global index V1 supported now, stop detecting")
+				return
+			}
+		}
+	})
 }
 
 func (d *ddl) CleanUpTempDirLoop(ctx context.Context, path string) {

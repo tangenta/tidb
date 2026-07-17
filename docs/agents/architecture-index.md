@@ -87,5 +87,9 @@ Hard requirements remain in the repository root `AGENTS.md`.
 - Store/KV/DistSQL -> Executor for distributed execution behavior.
 
 ## Notes and Runbooks
+- Planner notes: `docs/agents/planner/rule/rule_ai_notes.md`
+- Notes guide: `docs/agents/notes-guide.md`
+- Testing runbook: `docs/agents/testing-flow.md`
+- AGENTS review guide: `docs/agents/agents-review-guide.md`
 - Root execution contract: `AGENTS.md`
 - Writing a subsystem `MAINTAINER_GUIDE.md`: `docs/agents/maintainer-guide.md`

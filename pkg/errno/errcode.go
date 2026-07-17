@@ -1187,6 +1187,8 @@ const (
 	// 8805 ~ 8809 are reserved for tablegroup errors.
 	ErrProcedureDisabled = 8810
 
+	// [8800, 8900) are reserved for a downstream fork
+
 	// TiKV/PD/TiFlash errors.
 	ErrPDServerTimeout           = 9001
 	ErrTiKVServerTimeout         = 9002

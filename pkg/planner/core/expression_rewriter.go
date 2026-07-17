@@ -46,7 +46,6 @@ import (
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/collate"
-	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/hint"
 	"github.com/pingcap/tidb/pkg/util/intest"
@@ -791,11 +790,14 @@ func (er *expressionRewriter) handleCompareSubquery(ctx context.Context, planCtx
 	b := planCtx.builder
 	ci := b.prepareCTECheckForSubQuery()
 	defer resetCTECheckForSubQuery(ci)
+	asScalar := er.asScalar
+	er.asScalar = true
 	v.L.Accept(er)
 	if er.err != nil {
 		return v, true
 	}
 	lexpr := er.ctxStack[len(er.ctxStack)-1]
+	er.asScalar = asScalar
 	subq, ok := v.R.(*ast.SubqueryExpr)
 	if !ok {
 		er.err = errors.Errorf("Unknown compare type %T", v.R)
@@ -877,10 +879,11 @@ func (er *expressionRewriter) handleCompareSubquery(ctx context.Context, planCtx
 		useMin := ((v.Op == opcode.LT || v.Op == opcode.LE) && v.All) || ((v.Op == opcode.GT || v.Op == opcode.GE) && !v.All)
 		er.handleOtherComparableSubq(planCtx, lexpr, rexpr, np, useMin, v.Op.String(), v.All, noDecorrelate)
 	}
+	er.ctxStackPop(1)
 	if er.asScalar {
 		// The parent expression only use the last column in schema, which represents whether the condition is matched.
-		er.ctxStack[len(er.ctxStack)-1] = planCtx.plan.Schema().Columns[planCtx.plan.Schema().Len()-1]
-		er.ctxNameStk[len(er.ctxNameStk)-1] = planCtx.plan.OutputNames()[planCtx.plan.Schema().Len()-1]
+		col := planCtx.plan.Schema().Columns[planCtx.plan.Schema().Len()-1]
+		er.ctxStackAppend(col, planCtx.plan.OutputNames()[planCtx.plan.Schema().Len()-1])
 	}
 	return v, true
 }
@@ -1327,8 +1330,52 @@ func (er *expressionRewriter) handleInSubquery(ctx context.Context, planCtx *exp
 		planCtx.builder.optFlag |= rule.FlagEliminateProjection
 		planCtx.builder.optFlag |= rule.FlagJoinReOrder
 		planCtx.builder.optFlag |= rule.FlagEmptySelectionEliminator
+		distinctChild := np
+		distinctLen := np.Schema().Len()
+		joinCondition := checkCondition
+		// IN-subquery rewrite turns:
+		//   outer_col IN (SELECT inner_col ...)
+		// into:
+		//   outer JOIN DISTINCT(inner_col) ON outer_col = inner_col
+		//
+		// DISTINCT must be applied on the same comparison domain as the join predicate.
+		// If "=" injects an implicit cast on the RHS (e.g. blob/string -> number), deduplicating
+		// raw inner values is insufficient: different raw values may become equal after cast and
+		// multiply outer rows in the rewritten inner join.
+		//
+		// To keep semantics equivalent to IN, we project the RHS comparison expression first,
+		// then distinct on that projected key.
+		if lLen == 1 {
+			if eqCond, ok := checkCondition.(*expression.ScalarFunction); ok && eqCond.FuncName.L == ast.EQ {
+				rhs := eqCond.GetArgs()[1]
+				if expression.ExprFromSchema(rhs, np.Schema()) {
+					if _, isCol := rhs.(*expression.Column); !isCol {
+						// rhs is computed from inner columns (typically with an implicit cast generated
+						// by type coercion rules). Materialize it as an inner projection column so both
+						// DISTINCT and JOIN use exactly this coerced key.
+						proj := logicalop.LogicalProjection{Exprs: []expression.Expression{rhs}}.Init(planCtx.builder.ctx, planCtx.builder.getSelectOffset())
+						projCol := &expression.Column{
+							UniqueID: planCtx.builder.ctx.GetSessionVars().AllocPlanColumnID(),
+							RetType:  rhs.GetType(er.sctx.GetEvalCtx()).Clone(),
+						}
+						proj.SetChildren(np)
+						proj.SetSchema(expression.NewSchema(projCol))
+						proj.SetOutputNames([]*types.FieldName{types.EmptyName})
+						distinctChild = proj
+						distinctLen = 1
+						// Rebuild join condition against the projected key; this preserves
+						// the same coercion behavior while preventing duplicate matches.
+						joinCondition, err = er.constructBinaryOpFunction(lexpr, projCol, ast.EQ)
+						if err != nil {
+							er.err = err
+							return v, true
+						}
+					}
+				}
+			}
+		}
 		// Build distinct for the inner query.
-		agg, err := planCtx.builder.buildDistinct(np, np.Schema().Len())
+		agg, err := planCtx.builder.buildDistinct(distinctChild, distinctLen)
 		if err != nil {
 			er.err = err
 			return v, true
@@ -1340,7 +1387,7 @@ func (er *expressionRewriter) handleInSubquery(ctx context.Context, planCtx *exp
 		join.SetOutputNames(make([]*types.FieldName, planCtx.plan.Schema().Len()+agg.Schema().Len()))
 		copy(join.OutputNames(), planCtx.plan.OutputNames())
 		copy(join.OutputNames()[planCtx.plan.Schema().Len():], agg.OutputNames())
-		join.AttachOnConds(expression.SplitCNFItems(checkCondition))
+		join.AttachOnConds(expression.SplitCNFItems(joinCondition))
 		// set FullSchema and FullNames for this join
 		if left, ok := planCtx.plan.(*logicalop.LogicalJoin); ok && left.FullSchema != nil {
 			join.FullSchema = left.FullSchema
@@ -2656,56 +2703,19 @@ func (er *expressionRewriter) clause() clauseCode {
 	return expressionClause
 }
 
-func tryRewriteTriggerPseudoColumn(er *expressionRewriter, v *ast.ColumnName) bool {
-	if !v.IsTriggerPseudoRecord() || er.planCtx == nil {
+func shouldRemapRedundantBaseColumn(planCtx *exprRewriterPlanCtx, clause clauseCode, name *types.FieldName) bool {
+	if planCtx == nil || planCtx.builder == nil || name == nil {
 		return false
 	}
-	trigCtx := er.planCtx.builder.ctx.GetSessionVars().StmtCtx.TriggerCtx
-	if !trigCtx.InTrigger {
+	if clause != whereClause && clause != havingClause {
 		return false
 	}
-	colIdx := -1
-	var retType *types.FieldType
-	for i, col := range trigCtx.TableInfo.Columns {
-		if col.Name.L == v.Name.L {
-			colIdx = i
-			retType = &col.FieldType
-			break
-		}
+	// UPDATE/DELETE build JOIN schema/output names in merged (non-coalesced) order.
+	// Skip redundant-column remap in DML to avoid mixing coalesced mapping semantics.
+	if planCtx.builder.inUpdateStmt || planCtx.builder.inDeleteStmt {
+		return false
 	}
-	if colIdx == -1 {
-		er.err = plannererrors.ErrUnknownColumn.GenWithStackByArgs(v.Name, clauseMsg[er.clause()])
-		return true
-	}
-	var d types.Datum
-	switch v.Table.L {
-	case "new":
-		if len(trigCtx.NewData) == 0 {
-			er.err = dbterror.ErrTrgNoSuchRowInTrg.FastGenByArgs("NEW", "")
-			return true
-		}
-		if colIdx >= len(trigCtx.NewData) {
-			er.err = plannererrors.ErrInternal.GenWithStack("trigger pseudo record NEW index out of range: colIdx=%d, newLen=%d", colIdx, len(trigCtx.NewData))
-			return true
-		}
-		d = trigCtx.NewData[colIdx]
-	case "old":
-		if len(trigCtx.OldData) == 0 {
-			er.err = dbterror.ErrTrgNoSuchRowInTrg.FastGenByArgs("OLD", "")
-			return true
-		}
-		if colIdx >= len(trigCtx.OldData) {
-			er.err = plannererrors.ErrInternal.GenWithStack("trigger pseudo record OLD index out of range: colIdx=%d, oldLen=%d", colIdx, len(trigCtx.OldData))
-			return true
-		}
-		d = trigCtx.OldData[colIdx]
-	default:
-		er.err = plannererrors.ErrInternal.GenWithStack("unknown trigger pseudo record: %s", v.Table.O)
-		return true
-	}
-	expr := er.assembleConstant(d, retType)
-	er.ctxStackAppend(expr, types.EmptyName)
-	return true
+	return name.Redundant && name.OrigTblName.L != ""
 }
 
 func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
@@ -2728,6 +2738,7 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 			er.appendColumnVisited(columnVisited)
 		}
 	}()
+	planCtx := er.planCtx
 	idx, err := expression.FindFieldName(er.names, v)
 	if err != nil {
 		er.err = plannererrors.ErrAmbiguous.GenWithStackByArgs(v.Name, clauseMsg[fieldList])
@@ -2735,15 +2746,26 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 	}
 	if idx >= 0 {
 		column := er.schema.Columns[idx]
+		name := er.names[idx]
 		if column.IsHidden {
 			er.err = plannererrors.ErrUnknownColumn.GenWithStackByArgs(v.Name, clauseMsg[er.clause()])
 			return
 		}
+		if shouldRemapRedundantBaseColumn(planCtx, er.clause(), name) {
+			// JOIN ... USING/NATURAL keeps redundant side in FullSchema for name-resolution,
+			// but the executable Join.Schema() only keeps canonical visible columns.
+			// For qualified base-table references (OrigTblName != ""), remap redundant
+			// column to canonical output to avoid carrying an unresolvable redundant column
+			// into later physical ResolveIndices.
+			if mappedCol, mappedName := resolveRedundantColumnFromNaturalUsingJoinPlan(planCtx.plan, column); mappedCol != nil {
+				column, name = mappedCol, mappedName
+			}
+		}
 		if er.planCtx != nil && er.planCtx.builder != nil {
 			er.planCtx.builder.appendPartitionRowIDWarningByFieldName(er.names[idx])
 		}
-		er.ctxStackAppend(column, er.names[idx])
-		columnVisited = er.names[idx]
+		er.ctxStackAppend(column, name)
+		columnVisited = name
 		return
 	} else if er.planCtx == nil && er.sourceTable != nil &&
 		(v.Table.L == "" || er.sourceTable.Name.L == v.Table.L) {
@@ -2762,7 +2784,6 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 		return
 	}
 
-	planCtx := er.planCtx
 	if planCtx == nil {
 		er.err = plannererrors.ErrUnknownColumn.GenWithStackByArgs(v.String(), clauseMsg[er.clause()])
 		return
@@ -2773,6 +2794,13 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 		er.err = err
 		return
 	} else if col != nil {
+		if shouldRemapRedundantBaseColumn(planCtx, er.clause(), name) {
+			// Keep behavior consistent with direct-name hit above: only remap redundant
+			// base-table names from natural/using join to canonical visible output.
+			if mappedCol, mappedName := resolveRedundantColumnFromNaturalUsingJoinPlan(planCtx.plan, col); mappedCol != nil {
+				col, name = mappedCol, mappedName
+			}
+		}
 		if er.planCtx != nil && er.planCtx.builder != nil {
 			er.planCtx.builder.appendPartitionRowIDWarningByFieldName(name)
 		}
@@ -2811,6 +2839,8 @@ func findFieldNameFromNaturalUsingJoin(p base.LogicalPlan, v *ast.ColumnName) (c
 	switch x := p.(type) {
 	case *logicalop.LogicalLimit, *logicalop.LogicalSelection, *logicalop.LogicalTopN, *logicalop.LogicalSort, *logicalop.LogicalMaxOneRow:
 		return findFieldNameFromNaturalUsingJoin(p.Children()[0], v)
+	case *logicalop.LogicalApply:
+		return findFieldNameFromNaturalUsingJoin(p.Children()[0], v)
 	case *logicalop.LogicalJoin:
 		if x.FullSchema != nil {
 			idx, err := expression.FindFieldName(x.FullNames, v)
@@ -2823,6 +2853,29 @@ func findFieldNameFromNaturalUsingJoin(p base.LogicalPlan, v *ast.ColumnName) (c
 		}
 	}
 	return nil, nil, nil
+}
+
+func resolveRedundantColumnFromNaturalUsingJoinPlan(p base.LogicalPlan, col *expression.Column) (*expression.Column, *types.FieldName) {
+	switch x := p.(type) {
+	case *logicalop.LogicalLimit, *logicalop.LogicalSelection, *logicalop.LogicalTopN, *logicalop.LogicalSort, *logicalop.LogicalMaxOneRow:
+		// These nodes preserve child's column identity; continue tracing down.
+		return resolveRedundantColumnFromNaturalUsingJoinPlan(p.Children()[0], col)
+	case *logicalop.LogicalJoin:
+		// Remapping is only defined for inner JOIN ... USING/NATURAL semantics.
+		// When an ancestor join contains this column but has no mapping, continue
+		// descending so child joins can provide the canonical output mapping.
+		if x.JoinType == base.InnerJoin && x.FullSchema != nil && x.FullSchema.Contains(col) {
+			if mappedCol, mappedName := x.ResolveRedundantColumn(col); mappedCol != nil {
+				return mappedCol, mappedName
+			}
+		}
+		for _, child := range x.Children() {
+			if mappedCol, mappedName := resolveRedundantColumnFromNaturalUsingJoinPlan(child, col); mappedCol != nil {
+				return mappedCol, mappedName
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (er *expressionRewriter) evalDefaultExprForTable(v *ast.DefaultExpr, tbl *model.TableInfo) {

@@ -123,6 +123,7 @@ const (
 	ActionCreateMaskingPolicy                   ActionType = 81
 	ActionAlterMaskingPolicy                    ActionType = 82
 	ActionDropMaskingPolicy                     ActionType = 83
+	ActionAlterTableSetRegionSplitPolicy        ActionType = 84
 
 	// 200 ~ 255 are reserved for pkdb usage.
 	// 200 ~ 204 are reserved for udf.
@@ -209,6 +210,7 @@ var ActionMap = map[ActionType]string{
 	ActionCreateMaskingPolicy:                   "create masking policy",
 	ActionAlterMaskingPolicy:                    "alter masking policy",
 	ActionDropMaskingPolicy:                     "drop masking policy",
+	ActionAlterTableSetRegionSplitPolicy:        "alter table set region split policy",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.

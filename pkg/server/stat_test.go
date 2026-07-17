@@ -20,12 +20,15 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/domain/infosync"
 	"github.com/pingcap/tidb/pkg/keyspace"
 	"github.com/pingcap/tidb/pkg/server/internal/util"
 	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestUptime(t *testing.T) {
@@ -62,6 +65,54 @@ func TestUptime(t *testing.T) {
 	stats, err := server.Stats(nil)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, stats[upTime].(int64), int64(time.Since(time.Unix(1282967700, 0)).Seconds()))
+}
+
+func TestInitStatsSessionBlockGC(t *testing.T) {
+	origConfig := config.GetGlobalConfig()
+	defer func() {
+		config.StoreGlobalConfig(origConfig)
+	}()
+	origStatsLease := vardef.GetStatsLease()
+	defer vardef.SetStatsLease(origStatsLease)
+	vardef.SetStatsLease(3 * time.Second)
+	newConfig := *origConfig
+	for _, lite := range []bool{false, true} {
+		require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/statistics/handle/beforeInitStats", "pause"))
+		require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/statistics/handle/beforeInitStatsLite", "pause"))
+		require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/pkg/session/syssession/ForceBlockGCInTest", "return(true)"))
+		newConfig.Performance.LiteInitStats = lite
+		config.StoreGlobalConfig(&newConfig)
+
+		store, err := mockstore.NewMockStore()
+		require.NoError(t, err)
+		dom, err := session.BootstrapSession(store)
+		require.NoError(t, err)
+
+		infoSyncer := dom.InfoSyncer()
+		sv := CreateMockServer(t, store)
+		sv.SetDomain(dom)
+		infoSyncer.SetSessionManager(sv)
+		time.Sleep(time.Second)
+		require.Eventually(t, func() bool {
+			now := time.Now()
+			startTSList := sv.GetInternalSessionStartTSList()
+			for _, startTs := range startTSList {
+				if startTs != 0 {
+					startTime := oracle.GetTimeFromTS(startTs)
+					// test pass if the min_start_ts is blocked over 1s.
+					if now.Sub(startTime) > time.Second {
+						return true
+					}
+				}
+			}
+			return false
+		}, 10*time.Second, 10*time.Millisecond, "min_start_ts is not blocked over 1s")
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/statistics/handle/beforeInitStats"))
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/statistics/handle/beforeInitStatsLite"))
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/session/syssession/ForceBlockGCInTest"))
+		dom.Close()
+		require.NoError(t, store.Close())
+	}
 }
 
 func TestInitStatsSessionBlockGCCanBeCanceled(t *testing.T) {

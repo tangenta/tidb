@@ -35,10 +35,26 @@ func init() {
 	buildVersion = runtime.Version()
 }
 
+func getReleaseVersionsForDisplay() (releaseVersion string, componentVersion string) {
+	releaseVersion = mysql.TiDBReleaseVersion
+	if !kerneltype.IsNextGen() {
+		return releaseVersion, ""
+	}
+	normalizedReleaseVersion := mysql.NormalizeTiDBReleaseVersionForNextGen(mysql.TiDBReleaseVersion)
+	tidbXReleaseVersion, err := mysql.BuildTiDBXReleaseVersion(normalizedReleaseVersion)
+	if err != nil {
+		// Startup validates this value in nextgen. Keep this fallback to avoid
+		// panics when helper is called outside the normal startup flow.
+		return releaseVersion, ""
+	}
+	return tidbXReleaseVersion, normalizedReleaseVersion
+}
+
 // PrintTiDBInfo prints the TiDB version information.
 func PrintTiDBInfo() {
+	releaseVersion, componentVersion := getReleaseVersionsForDisplay()
 	fields := []zap.Field{
-		zap.String("Release Version", mysql.TiDBReleaseVersion),
+		zap.String("Release Version", releaseVersion),
 		zap.String("Edition", versioninfo.TiDBEdition),
 		zap.String("Git Commit Hash", versioninfo.TiDBGitHash),
 		zap.String("Git Branch", versioninfo.TiDBGitBranch),
@@ -47,6 +63,9 @@ func PrintTiDBInfo() {
 		zap.Bool("Fusion", versioninfo.TiDBXMode),
 		zap.Bool("Race Enabled", israce.RaceEnabled),
 		zap.Bool("Check Table Before Drop", config.CheckTableBeforeDrop),
+	}
+	if componentVersion != "" {
+		fields = append(fields, zap.String("TiDB Component Version", componentVersion))
 	}
 	fields = append(fields, zap.String("Kernel Type", kerneltype.Name()))
 	if versioninfo.TiDBEnterpriseExtensionGitHash != "" {
@@ -65,6 +84,7 @@ func GetTiDBInfo() string {
 	if versioninfo.TiDBXMode {
 		return versioninfo.GetTiDBXInfo()
 	}
+	releaseVersion, _ := getReleaseVersionsForDisplay()
 	enterpriseVersion := ""
 	if versioninfo.TiDBEnterpriseExtensionGitHash != "" {
 		enterpriseVersion = fmt.Sprintf("\nEnterprise Extension Commit Hash: %s", versioninfo.TiDBEnterpriseExtensionGitHash)
@@ -80,7 +100,7 @@ func GetTiDBInfo() string {
 		"Check Table Before Drop: %v\n"+
 		"Store: %s"+
 		"%s",
-		mysql.TiDBReleaseVersion,
+		releaseVersion,
 		versioninfo.TiDBEdition,
 		versioninfo.TiDBCoreVersion,
 		versioninfo.TiDBGitHash,
