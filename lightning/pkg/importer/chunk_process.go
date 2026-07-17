@@ -112,6 +112,11 @@ func openParser(
 		if err != nil {
 			return nil, err
 		}
+	case mydump.SourceTypeORC:
+		parser, err = mydump.NewORCParser(log.L(), reader, chunk.FileMeta.Path)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	default:
 		return nil, errors.Errorf("file '%s' with unknown source type '%s'", chunk.Key.Path, chunk.FileMeta.Type.String())
 	}
@@ -349,7 +354,9 @@ func (cr *chunkProcessor) encodeLoop(
 			err = cr.parser.ReadRow()
 			columnNames := cr.parser.Columns()
 			newOffset, rowID = cr.parser.Pos()
-			if cr.chunk.FileMeta.Compression != mydump.CompressionNone || cr.chunk.FileMeta.Type == mydump.SourceTypeParquet {
+			if cr.chunk.FileMeta.Compression != mydump.CompressionNone ||
+				cr.chunk.FileMeta.Type == mydump.SourceTypeParquet ||
+				cr.chunk.FileMeta.Type == mydump.SourceTypeORC {
 				newScannedOffset, scannedOffsetErr = cr.parser.ScannedPos()
 				if scannedOffsetErr != nil {
 					logger.Warn("fail to get data engine ScannedPos, progress may not be accurate",
@@ -499,7 +506,7 @@ func (cr *chunkProcessor) encodeLoop(
 		if m, ok := metric.FromContext(ctx); ok {
 			m.RowEncodeSecondsHistogram.Observe(encodeDur.Seconds())
 			m.RowReadSecondsHistogram.Observe(readDur.Seconds())
-			if cr.chunk.FileMeta.Type == mydump.SourceTypeParquet {
+			if cr.chunk.FileMeta.Type == mydump.SourceTypeParquet || cr.chunk.FileMeta.Type == mydump.SourceTypeORC {
 				m.RowReadBytesHistogram.Observe(float64(newScannedOffset - scannedOffset))
 			} else {
 				m.RowReadBytesHistogram.Observe(float64(newOffset - offset))
@@ -716,7 +723,7 @@ func (cr *chunkProcessor) deliverLoop(
 			}
 			delta := highOffset - lowOffset
 			if delta >= 0 {
-				if cr.chunk.FileMeta.Type == mydump.SourceTypeParquet {
+				if cr.chunk.FileMeta.Type == mydump.SourceTypeParquet || cr.chunk.FileMeta.Type == mydump.SourceTypeORC {
 					if currRealOffset > startRealOffset {
 						m.BytesCounter.WithLabelValues(metric.StateRestored).Add(float64(currRealOffset - startRealOffset))
 					}

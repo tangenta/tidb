@@ -42,6 +42,12 @@ const (
 	CreatePlacementPolicyCommand = "CREATE PLACEMENT POLICY"
 	// CreateMaskingPolicyCommand represents CREATE MASKING POLICY statement
 	CreateMaskingPolicyCommand = "CREATE MASKING POLICY"
+	// CreateSecurityLabelComponentCommand represents CREATE SECURITY LABEL COMPONENT statement
+	CreateSecurityLabelComponentCommand = "CREATE SECURITY LABEL COMPONENT"
+	// CreateSecurityPolicyCommand represents CREATE SECURITY POLICY statement
+	CreateSecurityPolicyCommand = "CREATE SECURITY POLICY"
+	// CreateSecurityLabelCommand represents CREATE SECURITY LABEL statement
+	CreateSecurityLabelCommand = "CREATE SECURITY LABEL"
 	// CreateResourceGroupCommand represents CREATE RESOURCE GROUP statement
 	CreateResourceGroupCommand = "CREATE RESOURCE GROUP"
 	// CreateSequenceCommand represents CREATE SEQUENCE statement
@@ -58,6 +64,12 @@ const (
 	DropIndexCommand = "DROP INDEX"
 	// DropPlacementPolicyCommand represents DROP PLACEMENT POLICY statement
 	DropPlacementPolicyCommand = "DROP PLACEMENT POLICY"
+	// DropSecurityLabelComponentCommand represents DROP SECURITY LABEL COMPONENT statement
+	DropSecurityLabelComponentCommand = "DROP SECURITY LABEL COMPONENT"
+	// DropSecurityPolicyCommand represents DROP SECURITY POLICY statement
+	DropSecurityPolicyCommand = "DROP SECURITY POLICY"
+	// DropSecurityLabelCommand represents DROP SECURITY LABEL statement
+	DropSecurityLabelCommand = "DROP SECURITY LABEL"
 	// DropResourceGroupCommand represents DROP RESOURCE GROUP statement
 	DropResourceGroupCommand = "DROP RESOURCE GROUP"
 	// DropSequenceCommand represents DROP SEQUENCE statement
@@ -142,6 +154,8 @@ const (
 	ShowCreateResourceGroupCommand = "SHOW CREATE RESOURCE GROUP"
 	// ShowCreateProcedureCommand represents SHOW CREATE PROCEDURE statement
 	ShowCreateProcedureCommand = "SHOW CREATE PROCEDURE"
+	// ShowCreateFunctionCommand represents SHOW CREATE FUNCTION statement
+	ShowCreateFunctionCommand = "SHOW CREATE FUNCTION"
 	// ShowDatabasesCommand represents SHOW DATABASES statement
 	ShowDatabasesCommand = "SHOW DATABASES"
 	// ShowTableCommand represents SHOW TABLES statement
@@ -174,6 +188,8 @@ const (
 	ShowPrivilegesCommand = "SHOW PRIVILEGES"
 	// ShowTriggersCommand represents SHOW TRIGGERS statement
 	ShowTriggersCommand = "SHOW TRIGGERS"
+	// ShowCreateTriggerCommand represents SHOW CREATE TRIGGER statement
+	ShowCreateTriggerCommand = "SHOW CREATE TRIGGER"
 	// ShowProcedureStatusCommand represents SHOW PROCEDURE STATUS statement
 	ShowProcedureStatusCommand = "SHOW PROCEDURE STATUS"
 	// ShowFunctionStatusCommand represents SHOW FUNCTION STATUS statement
@@ -321,6 +337,24 @@ const (
 	AdminCreateWorkloadSnapshotCommand = "ADMIN CREATE WORKLOAD SNAPSHOT"
 	// AdminReloadClusterBindingsCommand represents ADMIN RELOAD CLUSTER BINDINGS statement
 	AdminReloadClusterBindingsCommand = "ADMIN RELOAD CLUSTER BINDINGS"
+	// AdminLBACEnableCommand represents ADMIN LBAC ENABLE statement
+	AdminLBACEnableCommand = "ADMIN LBAC ENABLE"
+	// AdminCreateLogReplicationCommand represents ADMIN CREATE LOG REPLICATION statement
+	AdminCreateLogReplicationCommand = "ADMIN CREATE LOG REPLICATION"
+	// AdminAlterLogReplicationCommand represents ADMIN ALTER LOG REPLICATION statement
+	AdminAlterLogReplicationCommand = "ADMIN ALTER LOG REPLICATION"
+	// AdminPauseLogReplicationCommand represents ADMIN PAUSE LOG REPLICATION statement
+	AdminPauseLogReplicationCommand = "ADMIN PAUSE LOG REPLICATION"
+	// AdminResumeLogReplicationCommand represents ADMIN RESUME LOG REPLICATION statement
+	AdminResumeLogReplicationCommand = "ADMIN RESUME LOG REPLICATION"
+	// AdminDropLogReplicationCommand represents ADMIN DROP LOG REPLICATION statement
+	AdminDropLogReplicationCommand = "ADMIN DROP LOG REPLICATION"
+	// AdminSwitchOverPrimaryCommand represents ADMIN SWITCHOVER PRIMARY statement
+	AdminSwitchOverPrimaryCommand = "ADMIN SWITCHOVER PRIMARY"
+	// AdminSwitchOverAsPrimaryCommand represents ADMIN SWITCHOVER AS PRIMARY statement
+	AdminSwitchOverAsPrimaryCommand = "ADMIN SWITCHOVER AS PRIMARY"
+	// AdminActivateStandbyCommand represents ADMIN ACTIVATE STANDBY statement
+	AdminActivateStandbyCommand = "ADMIN ACTIVATE STANDBY"
 )
 
 // BRIE Commands
@@ -401,6 +435,10 @@ const (
 	FlushCommand = "FLUSH"
 	// GrantCommand represents GRANT statement
 	GrantCommand = "GRANT"
+	// GrantSecurityLabelCommand represents GRANT SECURITY LABEL statement
+	GrantSecurityLabelCommand = "GRANT SECURITY LABEL"
+	// GrantExemptionCommand represents GRANT EXEMPTION statement
+	GrantExemptionCommand = "GRANT EXEMPTION"
 	// GrantProxyCommand represents GRANT PROXY statement
 	GrantProxyCommand = "GRANT PROXY"
 	// GrantRoleCommand represents GRANT ROLE statement
@@ -421,6 +459,10 @@ const (
 	RestartCommand = "RESTART"
 	// RevokeCommand represents REVOKE statement
 	RevokeCommand = "REVOKE"
+	// RevokeSecurityLabelCommand represents REVOKE SECURITY LABEL statement
+	RevokeSecurityLabelCommand = "REVOKE SECURITY LABEL"
+	// RevokeExemptionCommand represents REVOKE EXEMPTION statement
+	RevokeExemptionCommand = "REVOKE EXEMPTION"
 	// RevokeRoleCommand represents REVOKE ROLE statement
 	RevokeRoleCommand = "REVOKE ROLE"
 	// RollbackCommand represents ROLLBACK statement
@@ -466,6 +508,12 @@ const (
 	// ProcedureCommand represents all statements in procedure. It's too rough
 	// but still fine for now.
 	ProcedureCommand = "PROCEDURE"
+	// TriggerCommand represents TRIGGER statement.
+	TriggerCommand = "TRIGGER"
+	// SignalCommand represents SIGNAL statement
+	SignalCommand = "SIGNAL"
+	// GetDiagnosticsCommand represents GET DIAGNOSTICS statement
+	GetDiagnosticsCommand = "GET DIAGNOSTICS"
 	// UnknownCommand represents unknown statements
 	UnknownCommand = "UNKNOWN"
 	// SetOprCommand represents UNION/INTERSECT/EXCEPT statement
@@ -538,6 +586,21 @@ func (n *CreateMaskingPolicyStmt) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
+func (n *CreateSecurityLabelComponentStmt) SEMCommand() string {
+	return CreateSecurityLabelComponentCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateSecurityPolicyStmt) SEMCommand() string {
+	return CreateSecurityPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateSecurityLabelStmt) SEMCommand() string {
+	return CreateSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
 func (n *CreateResourceGroupStmt) SEMCommand() string {
 	return CreateResourceGroupCommand
 }
@@ -575,6 +638,21 @@ func (n *DropIndexStmt) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *DropPlacementPolicyStmt) SEMCommand() string {
 	return DropPlacementPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityLabelComponentStmt) SEMCommand() string {
+	return DropSecurityLabelComponentCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityPolicyStmt) SEMCommand() string {
+	return DropSecurityPolicyCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropSecurityLabelStmt) SEMCommand() string {
+	return DropSecurityLabelCommand
 }
 
 // SEMCommand returns the command string for the statement.
@@ -726,12 +804,16 @@ func (n *ShowStmt) SEMCommand() string {
 		return ShowCreateResourceGroupCommand
 	case ShowCreateProcedure:
 		return ShowCreateProcedureCommand
+	case ShowCreateFunction:
+		return ShowCreateFunctionCommand
 	case ShowDatabases:
 		return ShowDatabasesCommand
 	case ShowTables:
 		return ShowTableCommand
 	case ShowTableStatus:
 		return ShowTableStatusCommand
+	case ShowCreateTrigger:
+		return ShowCreateTriggerCommand
 	case ShowColumns:
 		return ShowColumnsCommand
 	case ShowIndex:
@@ -927,6 +1009,24 @@ func (n *AdminStmt) SEMCommand() string {
 		return AdminCreateWorkloadSnapshotCommand
 	case AdminReloadClusterBindings:
 		return AdminReloadClusterBindingsCommand
+	case AdminLBACEnable:
+		return AdminLBACEnableCommand
+	case AdminCreateLogReplication:
+		return AdminCreateLogReplicationCommand
+	case AdminAlterLogReplication:
+		return AdminAlterLogReplicationCommand
+	case AdminPauseLogReplication:
+		return AdminPauseLogReplicationCommand
+	case AdminResumeLogReplication:
+		return AdminResumeLogReplicationCommand
+	case AdminDropLogReplication:
+		return AdminDropLogReplicationCommand
+	case AdminSwitchOverPrimary:
+		return AdminSwitchOverPrimaryCommand
+	case AdminSwitchOverAsPrimary:
+		return AdminSwitchOverAsPrimaryCommand
+	case AdminActivateStandby:
+		return AdminActivateStandbyCommand
 	default:
 		return UnknownCommand
 	}
@@ -1057,6 +1157,14 @@ func (n *ExplainStmt) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
+func (n *ExplainRoutineStmt) SEMCommand() string {
+	if n.Analyze {
+		return ExplainAnalyzeCommand
+	}
+	return ExplainCommand
+}
+
+// SEMCommand returns the command string for the statement.
 func (n *FlushStmt) SEMCommand() string {
 	return FlushCommand
 }
@@ -1064,6 +1172,16 @@ func (n *FlushStmt) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *GrantStmt) SEMCommand() string {
 	return GrantCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *GrantSecurityLabelStmt) SEMCommand() string {
+	return GrantSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *GrantExemptionStmt) SEMCommand() string {
+	return GrantExemptionCommand
 }
 
 // SEMCommand returns the command string for the statement.
@@ -1114,6 +1232,16 @@ func (n *RestartStmt) SEMCommand() string {
 // SEMCommand returns the command string for the statement.
 func (n *RevokeStmt) SEMCommand() string {
 	return RevokeCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *RevokeSecurityLabelStmt) SEMCommand() string {
+	return RevokeSecurityLabelCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *RevokeExemptionStmt) SEMCommand() string {
+	return RevokeExemptionCommand
 }
 
 // SEMCommand returns the command string for the statement.
@@ -1231,7 +1359,17 @@ func (n *ProcedureBlock) SEMCommand() string {
 }
 
 // SEMCommand returns the command string for the statement.
-func (n *ProcedureInfo) SEMCommand() string {
+func (n *CreateProcedureInfo) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureLoopStmt) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *AlterProcedureStmt) SEMCommand() string {
 	return ProcedureCommand
 }
 
@@ -1332,5 +1470,30 @@ func (n *ProcedureErrorVal) SEMCommand() string {
 
 // SEMCommand returns the command string for the statement.
 func (n *ProcedureErrorState) SEMCommand() string {
+	return ProcedureCommand
+}
+
+// SEMCommand implements StmtNode interface for Signal.
+func (n *Signal) SEMCommand() string {
+	return SignalCommand
+}
+
+// SEMCommand implements StmtNode interface for GetDiagnosticsStmt.
+func (stmt *GetDiagnosticsStmt) SEMCommand() string {
+	return GetDiagnosticsCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *CreateTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *DropTriggerStmt) SEMCommand() string {
+	return TriggerCommand
+}
+
+// SEMCommand returns the command string for the statement.
+func (n *ProcedureReturnStmt) SEMCommand() string {
 	return ProcedureCommand
 }

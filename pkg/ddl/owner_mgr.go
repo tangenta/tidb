@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/config"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/owner"
 	storepkg "github.com/pingcap/tidb/pkg/store"
@@ -53,6 +54,15 @@ func CloseOwnerManager(store kv.Storage) {
 	keyspace := store.GetKeyspace()
 	if mgr, ok := globalOwnerManagers[keyspace]; ok {
 		mgr.Close()
+	}
+}
+
+func init() {
+	// TODO(lance6716): maybe let owner cleanup stale KV when starts?
+	pkdbrepl.CloseDDLOwnerMgr = func() {
+		for _, mgr := range globalOwnerManagers {
+			mgr.Close()
+		}
 	}
 }
 

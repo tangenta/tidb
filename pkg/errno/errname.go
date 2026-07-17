@@ -866,6 +866,8 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrInvalidJSONPathArrayCell:                              mysql.Message("A path expression is not a path to a cell in an array.", nil),
 	ErrInvalidEncryptionOption:                               mysql.Message("Invalid encryption option.", nil),
 	ErrTooLongValueForType:                                   mysql.Message("Too long enumeration/set value for column %s.", nil),
+	ErrTooLongRoutineComment:                                 mysql.Message("Comment for routine '%-.64s' is too long (max = %d).", nil),
+	ErrGetStackedDaWithoutActiveHandler:                      mysql.Message("GET STACKED DIAGNOSTICS when handler not active", nil),
 	ErrPKIndexCantBeInvisible:                                mysql.Message("A primary key index cannot be invisible", nil),
 	ErrWindowNoSuchWindow:                                    mysql.Message("Window name '%s' is not defined.", nil),
 	ErrWindowCircularityInWindowGraph:                        mysql.Message("There is a circularity in the window dependency graph.", nil),
@@ -946,7 +948,9 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrDependentByCheckConstraint:                            mysql.Message("Check constraint '%s' uses column '%s', hence column cannot be dropped or renamed.", nil),
 	ErrEngineAttributeNotSupported:                           mysql.Message("Storage engine does not support ENGINE_ATTRIBUTE.", nil),
 	ErrJSONInBooleanContext:                                  mysql.Message("Evaluating a JSON value in SQL boolean context does an implicit comparison against JSON integer 0; if this is not what you want, consider converting JSON to a SQL numeric type with JSON_VALUE RETURNING", nil),
+	ErrForeignKeyWithCreateAsSelect:                          mysql.Message("Foreign key creation is not allowed with CREATE TABLE as SELECT and CREATE TABLE with START TRANSACTION statement.", nil),
 	// MariaDB errors.
+	ErrSPvarNonintegerType:                  mysql.Message("The variable \"%s\" has a non-integer based type", nil),
 	ErrOnlyOneDefaultPartionAllowed:         mysql.Message("Only one DEFAULT partition allowed", nil),
 	ErrWrongPartitionTypeExpectedSystemTime: mysql.Message("Wrong partitioning type, expected type: `SYSTEM_TIME`", nil),
 	ErrSystemVersioningWrongPartitions:      mysql.Message("Wrong Partitions: must have at least one HISTORY and exactly one last CURRENT", nil),
@@ -1085,6 +1089,7 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrProtectedTableMode:               mysql.Message("Table %s is in mode %s", nil),
 	ErrInvalidTableModeSet:              mysql.Message("Invalid mode set from (or by default) %s to %s for table %s", nil),
 	ErrForbiddenDDL:                     mysql.Message("%s is forbidden", nil),
+	ErrCTASDistTask:                     mysql.Message("CREATE TABLE ... SELECT dist task failed: %s", nil),
 
 	ErrHTTPServiceError: mysql.Message("HTTP request failed with status %s", nil),
 
@@ -1117,6 +1122,10 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrMixOfGroupFuncAndFieldsIncompatible: mysql.Message("In aggregated query without GROUP BY, expression #%d of SELECT list contains nonaggregated column '%s'; this is incompatible with sql_mode=only_full_group_by", nil),
 	ErrUnsupportedSecondArgumentType:       mysql.Message("JSON_OBJECTAGG: unsupported second argument type %v", nil),
 	ErrColumnNotMatched:                    mysql.Message("Load data: unmatched columns", nil),
+	ErrRowLabelUnAccessible:                mysql.Message("This row has a unaccessible label, row label [%s], user label [%s]", nil),
+	ErrLBACInvalid:                         mysql.Message("%s", nil),
+	ErrLBACNotFound:                        mysql.Message("%s not found", nil),
+	ErrLBACAlreadyExists:                   mysql.Message("%s already exists", nil),
 	ErrLockExpire:                          mysql.Message("TTL manager has timed out, pessimistic locks may expire, please commit or rollback this transaction", nil),
 	ErrTableOptionUnionUnsupported:         mysql.Message("CREATE/ALTER table with union option is not supported", nil),
 	ErrTableOptionInsertMethodUnsupported:  mysql.Message("CREATE/ALTER table with insert method option is not supported", nil),
@@ -1168,6 +1177,12 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrStorageClassInvalidSpec:                  mysql.Message("Invalid storage class: %s", nil),
 	ErrModifyColumnReferencedByPartialCondition: mysql.Message("Cannot drop, change or modify column '%s': it is referenced in partial index '%s'", nil),
 	ErrCheckPartialIndexWithoutFastCheck:        mysql.Message("Validation of partial indexes requires tidb_enable_fast_table_check=ON", nil),
+
+	// Enterprise Edit errors.
+	ErrProcedureDisabled: mysql.Message("Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`", nil),
+
+	// Enterprise Edit errors.
+	ErrInvalidValueOfType: mysql.Message("Invalid %s value", nil),
 
 	// TiKV/PD errors.
 	ErrPDServerTimeout:      mysql.Message("PD server timeout: %s", nil),

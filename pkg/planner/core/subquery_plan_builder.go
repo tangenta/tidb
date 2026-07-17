@@ -113,7 +113,7 @@ func (b *PlanBuilder) appendAuxiliaryFieldsForSubqueries(ctx context.Context, p 
 			// so subqueries inside deferred window expressions can still resolve against this query block.
 			// TODO: Reuse the rewritten expression/plan from the pre-build phase instead of rebuilding it
 			// only for correlated outer-column discovery.
-			_, np, err := b.rewrite(ctx, expr, p, nil, true)
+			_, np, err := b.rewrite(ctx, expr, p, nil, true, requireColumnPriv)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}

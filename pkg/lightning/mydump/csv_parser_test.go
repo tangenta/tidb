@@ -1275,6 +1275,28 @@ func TestNULL(t *testing.T) {
 		},
 	}
 	runTestCasesCSV(t, &cfg, 1, testCases)
+
+	cfg = config.MydumperRuntime{
+		CSV: config.CSVConfig{
+			FieldsTerminatedBy: ",",
+			FieldsEnclosedBy:   `"`,
+			LinesTerminatedBy:  "\n",
+			FieldNullDefinedBy: []string{`NULL`, `null`},
+			FieldsEscapedBy:    ``,
+			QuotedNullIsText:   true,
+		},
+	}
+	testCases = []testCase{
+		{
+			input: `null,"null"
+NULL,"NULL"`,
+			expected: [][]types.Datum{
+				{nullDatum, types.NewStringDatum(`null`)},
+				{nullDatum, types.NewStringDatum(`NULL`)},
+			},
+		},
+	}
+	runTestCasesCSV(t, &cfg, 1, testCases)
 }
 
 func TestStartingBy(t *testing.T) {

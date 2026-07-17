@@ -44,6 +44,8 @@ import (
 	"github.com/tikv/client-go/v2/txnkv/txnlock"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -411,6 +413,8 @@ type Client struct {
 
 	tableRange   bool
 	skipChecksum bool
+
+	expectPackedFiles bool
 }
 
 // NewBackupClient returns a new backup client.
@@ -442,6 +446,10 @@ func (bc *Client) SetCipher(cipher *backuppb.CipherInfo) {
 
 func (bc *Client) SetSkipChecksum(skipChecksum bool) {
 	bc.skipChecksum = skipChecksum
+}
+
+func (bc *Client) SetExpectPackedFiles(expectPackedFiles bool) {
+	bc.expectPackedFiles = expectPackedFiles
 }
 
 // GetCurrentTS gets a new timestamp from PD.
@@ -480,11 +488,30 @@ func (bc *Client) GetTS(ctx context.Context, duration time.Duration, ts uint64) 
 				currentTS, oracle.GetTimeFromTS(currentTS))
 		}
 	} else {
-		p, l, err := bc.mgr.GetPDClient().GetTS(ctx)
+		pdCli := bc.mgr.GetPDClient()
+
+		var isStandby bool
+		logReplStatus, err := pdCli.GetLogReplLocalStatus(ctx)
 		if err != nil {
-			return 0, errors.Trace(err)
+			s, ok := status.FromError(err)
+			isUnimplemented := ok && s.Code() == codes.Unimplemented
+			if !isUnimplemented {
+				return 0, errors.Trace(err)
+			}
+		} else {
+			isStandby = logReplStatus.GetStatus().GetSourceClusterId() > 0
 		}
-		backupTS = oracle.ComposeTS(p, l)
+
+		if isStandby {
+			backupTS = logReplStatus.GetStatus().GetCheckpointTs()
+		} else {
+			p, l, err := pdCli.GetTS(ctx)
+			if err != nil {
+				return 0, errors.Trace(err)
+			}
+			backupTS = oracle.ComposeTS(p, l)
+		}
+		l := oracle.ExtractLogical(backupTS)
 
 		switch {
 		case duration < 0:
@@ -1229,6 +1256,10 @@ func (bc *Client) OnBackupResponse(
 	resp := r.GetResponse()
 	storeID := r.GetStoreID()
 	if resp.GetError() == nil {
+		if err := bc.checkPackedBackupResponse(storeID, resp); err != nil {
+			return nil, err
+		}
+
 		start := time.Now()
 		pr, err := globalProgressTree.FindContained(resp.StartKey, resp.EndKey)
 		logutil.CL(ctx).Debug("find the range tree contains response ranges", zap.Duration("take", time.Since(start)))
@@ -1277,4 +1308,34 @@ func (bc *Client) OnBackupResponse(
 		}
 	}
 	return nil, nil
+}
+
+func (bc *Client) checkPackedBackupResponse(
+	storeID uint64,
+	resp *backuppb.BackupResponse,
+) error {
+	if !bc.expectPackedFiles {
+		return nil
+	}
+
+	for _, file := range resp.GetFiles() {
+		if file.GetPackageFileName() != "" {
+			continue
+		}
+
+		logutil.WarnTerm(
+			"backup received an unexpected direct SST file while packed backup was requested; this usually indicates that the TiKV version is too old to support packed backup. Please remove any partially written backup data from the target directory before retrying",
+			zap.Uint64("storeID", storeID),
+			zap.String("directSSTFile", file.GetName()),
+		)
+
+		return errors.Annotatef(
+			berrors.ErrVersionMismatch,
+			"TiKV store %d returned an unexpected direct SST file %s while packed backup was requested; this TiKV version does not support packed backup. Please upgrade TiKV, remove any partially written backup data from the target directory, and retry",
+			storeID,
+			file.GetName(),
+		)
+	}
+
+	return nil
 }

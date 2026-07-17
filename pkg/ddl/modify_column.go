@@ -264,7 +264,7 @@ func (w *worker) onModifyColumn(jobCtx *jobContext, job *model.Job) (ver int64, 
 		// Previously, the second DDL will be submitted successfully (VARCHAR(255) utf8 -> VARCHAR(100) utf8 is OK)
 		// but fail during execution, since the columnID has changed. However, as we now may reuse the old column,
 		// we must check the type again here as utf8mb4->utf8 is an invalid change.
-		if err = checkModifyTypes(oldCol, args.Column, isColumnWithIndex(oldCol.Name.L, tblInfo.Indices)); err != nil {
+		if err = checkModifyTypes(tblInfo, oldCol, args.Column, isColumnWithIndex(oldCol.Name.L, tblInfo.Indices)); err != nil {
 			job.State = model.JobStateCancelled
 			return ver, errors.Trace(err)
 		}
@@ -305,7 +305,7 @@ func (w *worker) onModifyColumn(jobCtx *jobContext, job *model.Job) (ver int64, 
 		return ver, errors.Trace(err)
 	}
 
-	if err = checkModifyTypes(oldCol, args.Column, isColumnWithIndex(oldCol.Name.L, tblInfo.Indices)); err != nil {
+	if err = checkModifyTypes(tblInfo, oldCol, args.Column, isColumnWithIndex(oldCol.Name.L, tblInfo.Indices)); err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
 	}
@@ -340,9 +340,9 @@ func (w *worker) onModifyColumn(jobCtx *jobContext, job *model.Job) (ver int64, 
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("columnar indexes on the column"))
 	}
-	if mysql.HasPriKeyFlag(oldCol.GetFlag()) {
+	if mysql.HasPriKeyFlag(oldCol.GetFlag()) && tblInfo.HasClusteredIndex() {
 		job.State = model.JobStateCancelled
-		return ver, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't modify column in primary key")
+		return ver, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't modify column in clustered primary key")
 	}
 
 	if job.SchemaState == model.StateNone {
@@ -529,6 +529,13 @@ func finishModifyColumnWithoutReorg(
 
 	childTableInfos, err := adjustForeignKeyChildTableInfoAfterModifyColumn(jobCtx.infoCache, jobCtx.metaMut, job, tblInfo, newCol, oldCol)
 	if err != nil {
+		return ver, errors.Trace(err)
+	}
+
+	// If we're enabling AUTO_INCREMENT on an existing column, make sure the allocator is rebased
+	// to be >= max(col)+1 (and >= next global).
+	if err := maybeRebaseAutoIncrementIDForModifyColumn(jobCtx, job, tblInfo, newCol, oldCol); err != nil {
+		job.State = model.JobStateRollingback
 		return ver, errors.Trace(err)
 	}
 	ver, err = updateVersionAndTableInfoWithCheck(jobCtx, job, tblInfo, true, childTableInfos...)
@@ -736,7 +743,7 @@ func adjustForeignKeyChildTableInfoAfterModifyColumn(infoCache *infoschema.InfoC
 		return nil, nil
 	}
 	is := infoCache.GetLatest()
-	referredFKs := is.GetTableReferredForeignKeys(job.SchemaName, tblInfo.Name.L)
+	referredFKs := is.GetTableReferredForeignKeys(job.GetSchemaName(), tblInfo.Name)
 	if len(referredFKs) == 0 {
 		return nil, nil
 	}
@@ -1654,7 +1661,7 @@ func GetModifiableColumnJob(
 		return nil, err
 	}
 
-	if err = checkModifyColumnWithForeignKeyConstraint(is, schema.Name.L, t.Meta(), col.ColumnInfo, newCol.ColumnInfo); err != nil {
+	if err = checkModifyColumnWithForeignKeyConstraint(is, schema.Name, t.Meta(), col.ColumnInfo, newCol.ColumnInfo); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -1670,7 +1677,7 @@ func GetModifiableColumnJob(
 		return nil, errors.Trace(err)
 	}
 
-	if err = checkModifyTypes(col.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(col.Name.L, t.Meta().Indices)); err != nil {
+	if err = checkModifyTypes(t.Meta(), col.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(col.Name.L, t.Meta().Indices)); err != nil {
 		return nil, errors.Trace(err)
 	}
 	mayNeedChangeColData := !noReorgDataStrict(t.Meta(), col.ColumnInfo, newCol.ColumnInfo)
@@ -1698,7 +1705,9 @@ func GetModifiableColumnJob(
 
 	// We don't support modifying column from not_auto_increment to auto_increment.
 	if !mysql.HasAutoIncrementFlag(col.GetFlag()) && mysql.HasAutoIncrementFlag(newCol.GetFlag()) {
-		return nil, dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs("can't set auto_increment")
+		if err := pkdbCheckModifyColumnEnableAutoIncrement(sctx, t, originalColName, newCol); err != nil {
+			return nil, err
+		}
 	}
 	// Not support auto id with default value.
 	if mysql.HasAutoIncrementFlag(newCol.GetFlag()) && newCol.GetDefaultValue() != nil {
@@ -1736,6 +1745,10 @@ func GetModifiableColumnJob(
 		if t.Meta().TTLInfo.ColumnName.L == originalColName.L && !types.IsTypeTime(newCol.ColumnInfo.FieldType.GetType()) {
 			return nil, errors.Trace(dbterror.ErrUnsupportedColumnInTTLConfig.GenWithStackByArgs(newCol.ColumnInfo.Name.O))
 		}
+	}
+
+	if err = validateColumnSecurityLabelForTable(ctx, sctx, t.Meta(), newCol.ColumnInfo); err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	var newAutoRandBits uint64
@@ -2003,8 +2016,9 @@ func checkIndexInModifiableColumns(columns []*model.ColumnInfo, idxInfo *model.I
 
 // checkModifyTypes checks if the 'origin' type can be modified to 'to' type no matter directly change
 // or change by reorg. It returns error if the two types are incompatible and correlated change are not
-// supported. However, even the two types can be change, if the "origin" type contains primary key, error will be returned.
-func checkModifyTypes(from, to *model.ColumnInfo, needRewriteCollationData bool) error {
+// supported. However, even the two types can be changed, an error will be returned if the "origin" column is part of a
+// clustered primary key because changing it requires rewriting the row handle.
+func checkModifyTypes(tbInfo *model.TableInfo, from, to *model.ColumnInfo, needRewriteCollationData bool) error {
 	fromFt := &from.FieldType
 	toFt := &to.FieldType
 	canReorg, err := types.CheckModifyTypeCompatible(fromFt, toFt)
@@ -2012,7 +2026,7 @@ func checkModifyTypes(from, to *model.ColumnInfo, needRewriteCollationData bool)
 		if !canReorg {
 			return errors.Trace(dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs(err.Error()))
 		}
-		if mysql.HasPriKeyFlag(fromFt.GetFlag()) {
+		if mysql.HasPriKeyFlag(fromFt.GetFlag()) && tbInfo.HasClusteredIndex() {
 			msg := "this column has primary key flag"
 			return dbterror.ErrUnsupportedModifyColumn.GenWithStackByArgs(msg)
 		}
@@ -2060,13 +2074,17 @@ func ProcessModifyColumnOptions(ctx sessionctx.Context, col *table.Column, optio
 			if err != nil {
 				return errors.Trace(err)
 			}
+		case ast.ColumnOptionSecuredWith:
+			label := ast.NewCIStr(opt.StrValue)
+			col.SecurityLabel = &label
 		case ast.ColumnOptionNotNull:
 			col.AddFlag(mysql.NotNullFlag)
 		case ast.ColumnOptionNull:
 			hasNullFlag = true
 			col.DelFlag(mysql.NotNullFlag)
 		case ast.ColumnOptionAutoIncrement:
-			col.AddFlag(mysql.AutoIncrementFlag)
+			// MySQL treats AUTO_INCREMENT columns as NOT NULL.
+			col.AddFlag(mysql.AutoIncrementFlag | mysql.NotNullFlag)
 		case ast.ColumnOptionPrimaryKey:
 			return errors.Trace(dbterror.ErrUnsupportedModifyColumn.GenWithStack("can't change column constraint (PRIMARY KEY)"))
 		case ast.ColumnOptionUniqKey:

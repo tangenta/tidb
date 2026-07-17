@@ -32,6 +32,7 @@ import (
 	us "github.com/pingcap/tidb/pkg/store/mockstore/unistore/tikv"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"github.com/tikv/pd/client/clients/pkdb"
 	"github.com/tikv/pd/client/clients/router"
 	"github.com/tikv/pd/client/clients/tso"
 	"github.com/tikv/pd/client/constants"
@@ -46,6 +47,7 @@ var _ pd.Client = new(pdClient)
 type pdClient struct {
 	*us.MockPD
 	pd.ResourceManagerClient
+	pkdb.LogReplClient
 	*mockKeyspaceManager
 
 	globalConfig      map[string]string
@@ -233,6 +235,8 @@ func (c *mockPDServiceDiscovery) GetAllServiceClients() []sd.ServiceClient {
 func (c *mockPDServiceDiscovery) GetOrCreateGRPCConn(addr string) (*grpc.ClientConn, error) {
 	return nil, nil
 }
+
+func (c *mockPDServiceDiscovery) RemoveClientConn(string) {}
 
 func (c *mockPDServiceDiscovery) ScheduleCheckMemberChanged() {}
 
@@ -423,6 +427,20 @@ func (m *mockKeyspaceManager) LoadKeyspace(ctx context.Context, name string) (*k
 		if !exists {
 			panic(fmt.Sprintf("keyspace meta list and name map mismatches, id: %v, keyspace meta list: %v, keyspace name map: %v", id, m.keyspaces, m.keyspaceNamesMap))
 		}
+		return m.keyspaces[index], nil
+	}
+
+	return nil, errors.New(pdpb.ErrorType_ENTRY_NOT_FOUND.String())
+}
+
+func (m *mockKeyspaceManager) LoadKeyspaceByID(ctx context.Context, id uint32) (*keyspacepb.KeyspaceMeta, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	index, exists := slices.BinarySearchFunc(m.keyspaces, id, func(k *keyspacepb.KeyspaceMeta, idToSearch uint32) int {
+		return int(k.Id) - int(idToSearch)
+	})
+	if exists {
 		return m.keyspaces[index], nil
 	}
 

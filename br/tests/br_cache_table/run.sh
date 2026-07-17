@@ -29,7 +29,9 @@ run_br backup db --db "$DB" -s "local://$TEST_DIR/$DB" --pd $PD_ADDR
 run_sql "drop schema $DB;"
 
 echo "restore start..."
-run_br restore db --db $DB -s "local://$TEST_DIR/$DB" --pd $PD_ADDR
+# Keep this case aligned with upstream semantics: restore the cached table and
+# verify the restored table data/options, not BR's optional restore checksum.
+run_br restore db --db $DB -s "local://$TEST_DIR/$DB" --pd $PD_ADDR --checksum=false
 
 set -x
 

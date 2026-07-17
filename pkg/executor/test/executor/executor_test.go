@@ -1958,20 +1958,20 @@ func TestAdmin(t *testing.T) {
 			JSON_UNQUOTE(JSON_EXTRACT(cast(cast(job_meta as char) as json), "$.table_name")) as table_name,
 			JSON_UNQUOTE(JSON_EXTRACT(cast(cast(job_meta as char) as json), "$.query")) as query,
 			session_id,
-			cluster_tidb_trx.start_time,
+			CLUSTER_TIDB_TRX.start_time,
 			tidb_decode_sql_digests(all_sql_digests, 4096) AS SQL_DIGESTS
 		FROM mysql.tidb_ddl_job,
 			mysql.tidb_mdl_info,
-			information_schema.cluster_tidb_trx
+			INFORMATION_SCHEMA.CLUSTER_TIDB_TRX
 		WHERE tidb_ddl_job.job_id=tidb_mdl_info.job_id
-			AND CONCAT(',', tidb_mdl_info.table_ids, ',') REGEXP CONCAT(',(', REPLACE(cluster_tidb_trx.related_table_ids, ',', '|'), '),') != 0
+			AND CONCAT(',', tidb_mdl_info.table_ids, ',') REGEXP CONCAT(',(', REPLACE(CLUSTER_TIDB_TRX.related_table_ids, ',', '|'), '),') != 0
 	);`
 		job4Expected := `CREATE OR REPLACE VIEW sys.schema_unused_indexes AS
 		SELECT
 			table_schema as object_schema,
 			table_name as object_name,
 			index_name
-		FROM information_schema.cluster_tidb_index_usage
+		FROM INFORMATION_SCHEMA.CLUSTER_TIDB_INDEX_USAGE
 		WHERE
 			table_schema not in ('sys', 'mysql', 'INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA') and
 			index_name != 'PRIMARY'
@@ -2617,6 +2617,34 @@ func TestQueryWithKill(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+func TestUUIDShort(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	originConfig := config.GetGlobalConfig()
+	originConfig.Instance.ServerID = 1
+	config.StoreGlobalConfig(originConfig)
+	defer func() {
+		config.StoreGlobalConfig(originConfig)
+	}()
+	count := 10
+	values := make(map[uint64]struct{}, count)
+	for i := 0; i < count; i++ {
+		rows := tk.MustQuery("select uuid_short()").Rows()
+		require.Equal(t, 1, len(rows))
+		require.Equal(t, 1, len(rows[0]))
+		v, err := strconv.ParseUint(rows[0][0].(string), 10, 64)
+		require.NoError(t, err)
+		values[v] = struct{}{}
+	}
+	require.Equal(t, count, len(values))
+	tk.MustExec("use test;")
+	tk.MustExec("create table t (a int);")
+	tk.MustExec("insert into t values (1),(2);")
+	tk.MustExec("create table t1 (id bigint primary key, b int);")
+	tk.MustExec("insert into t1 select uuid_short(), a from t;")
+	tk.MustQuery("select count(distinct id), count(distinct b) from t1;").Check(testkit.Rows("2 2"))
 }
 
 func TestIssue63329(t *testing.T) {

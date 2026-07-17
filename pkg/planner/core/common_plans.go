@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/property"
 	"github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/planner/util/costusage"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/statistics"
 	"github.com/pingcap/tidb/pkg/table"
@@ -230,12 +232,21 @@ type Execute struct {
 // Because GetVar use String to represent BinaryLiteral, here we need to convert string back to BinaryLiteral.
 func isGetVarBinaryLiteral(sctx base.PlanContext, expr expression.Expression) (res bool) {
 	scalarFunc, ok := expr.(*expression.ScalarFunction)
-	if ok && scalarFunc.FuncName.L == ast.GetVar {
-		name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
-		if err != nil || isNull {
-			res = false
-		} else if dt, ok2 := sctx.GetSessionVars().GetUserVarVal(name); ok2 {
-			res = dt.Kind() == types.KindBinaryLiteral
+	if ok {
+		if scalarFunc.FuncName.L == ast.GetVar {
+			name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
+			if err != nil || isNull {
+				res = false
+			} else if dt, ok2 := sctx.GetSessionVars().GetUserVarVal(name); ok2 {
+				res = dt.Kind() == types.KindBinaryLiteral
+			}
+		} else if scalarFunc.FuncName.L == ast.GetProcedureVar {
+			name, isNull, err := scalarFunc.GetArgs()[0].EvalString(sctx.GetExprCtx().GetEvalCtx(), chunk.Row{})
+			if err != nil || isNull {
+				res = false
+			} else if _, dt, notFind := sctx.GetSessionVars().GetProcedureVariable(name); !notFind {
+				res = dt.Kind() == types.KindBinaryLiteral
+			}
 		}
 	}
 	return res
@@ -789,6 +800,42 @@ func (e *Explain) renderResultForExplore() error {
 	return nil
 }
 
+// RenderFlatResult renders the explain result for a pre-flattened plan.
+func (e *Explain) RenderFlatResult(flat *FlatPhysicalPlan) error {
+	sctx := e.SCtx()
+	if sctx != nil && sctx.GetSessionVars() != nil {
+		sctx.GetSessionVars().StmtCtx.InExplainStmt = true
+	}
+	switch strings.ToLower(e.Format) {
+	case types.ExplainFormatROW, types.ExplainFormatBrief, types.ExplainFormatVerbose, types.ExplainFormatTrueCardCost, types.ExplainFormatCostTrace, types.ExplainFormatPlanCache, types.ExplainFormatPlanTree:
+		e.Rows = ExplainFlatPlanInRowFormat(flat, e.Format, e.Analyze, e.RuntimeStatsColl)
+		if e.Analyze && len(e.Rows) > 0 && len(e.Rows[0]) > 7 && sctx != nil && sctx.GetSessionVars() != nil &&
+			sctx.GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
+			sctx.GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
+			row := e.Rows[0]
+			tracker := sctx.GetSessionVars().MemTracker
+			row[7] = row[7] + "(Total: " + tracker.FormatBytes(tracker.MaxConsumed()) + ")"
+		}
+	case types.ExplainFormatTiDBJSON:
+		encodes := e.explainFlatPlanInJSONFormat(flat)
+		if e.Analyze && len(encodes) > 0 && sctx != nil && sctx.GetSessionVars() != nil &&
+			sctx.GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
+			sctx.GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
+			encodeRoot := encodes[0]
+			tracker := sctx.GetSessionVars().MemTracker
+			encodeRoot.TotalMemoryConsumed = tracker.FormatBytes(tracker.MaxConsumed())
+		}
+		str, err := JSONToString(encodes)
+		if err != nil {
+			return err
+		}
+		e.Rows = append(e.Rows, []string{str})
+	default:
+		return errors.Errorf("explain format '%s' is not supported now", e.Format)
+	}
+	return nil
+}
+
 // RenderResult renders the explain result as specified format.
 func (e *Explain) RenderResult() error {
 	if e.Explore {
@@ -861,13 +908,8 @@ func (e *Explain) RenderResult() error {
 	case types.ExplainFormatROW, types.ExplainFormatBrief, types.ExplainFormatVerbose, types.ExplainFormatTrueCardCost, types.ExplainFormatCostTrace, types.ExplainFormatPlanCache, types.ExplainFormatPlanTree:
 		if e.Rows == nil || e.Analyze {
 			flat := FlattenPhysicalPlan(e.TargetPlan, true)
-			e.Rows = ExplainFlatPlanInRowFormat(flat, e.Format, e.Analyze, e.RuntimeStatsColl)
-			if e.Analyze &&
-				e.SCtx().GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
-				e.SCtx().GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
-				row := e.Rows[0]
-				tracker := e.SCtx().GetSessionVars().MemTracker
-				row[7] = row[7] + "(Total: " + tracker.FormatBytes(tracker.MaxConsumed()) + ")"
+			if err := e.RenderFlatResult(flat); err != nil {
+				return err
 			}
 		}
 	case types.ExplainFormatDOT:
@@ -885,19 +927,9 @@ func (e *Explain) RenderResult() error {
 		e.Rows = append(e.Rows, []string{str})
 	case types.ExplainFormatTiDBJSON:
 		flat := FlattenPhysicalPlan(e.TargetPlan, true)
-		encodes := e.explainFlatPlanInJSONFormat(flat)
-		if e.Analyze && len(encodes) > 0 &&
-			e.SCtx().GetSessionVars().MemoryDebugModeMinHeapInUse != 0 &&
-			e.SCtx().GetSessionVars().MemoryDebugModeAlarmRatio > 0 {
-			encodeRoot := encodes[0]
-			tracker := e.SCtx().GetSessionVars().MemTracker
-			encodeRoot.TotalMemoryConsumed = tracker.FormatBytes(tracker.MaxConsumed())
-		}
-		str, err := JSONToString(encodes)
-		if err != nil {
+		if err := e.RenderFlatResult(flat); err != nil {
 			return err
 		}
-		e.Rows = append(e.Rows, []string{str})
 	default:
 		return errors.Errorf("explain format '%s' is not supported now", e.Format)
 	}
@@ -907,7 +939,7 @@ func (e *Explain) RenderResult() error {
 // ExplainFlatPlanInRowFormat returns the explain result in row format.
 func ExplainFlatPlanInRowFormat(flat *FlatPhysicalPlan, format string, analyze bool,
 	runtimeStatsColl *execdetails.RuntimeStatsColl) (rows [][]string) {
-	if flat == nil || len(flat.Main) == 0 || flat.InExplain {
+	if flat == nil || flat.InExplain {
 		return
 	}
 	for _, flatOp := range flat.Main {
@@ -930,16 +962,24 @@ func ExplainFlatPlanInRowFormat(flat *FlatPhysicalPlan, format string, analyze b
 }
 
 func (e *Explain) explainFlatPlanInJSONFormat(flat *FlatPhysicalPlan) (encodes []*ExplainInfoForEncode) {
-	if flat == nil || len(flat.Main) == 0 || flat.InExplain {
+	if flat == nil || flat.InExplain {
 		return
 	}
 	// flat.Main[0] must be the root node of tree
-	encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(flat.Main[0], flat.Main))
+	if len(flat.Main) > 0 {
+		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(flat.Main[0], flat.Main))
+	}
 
 	for _, cte := range flat.CTEs {
+		if len(cte) == 0 {
+			continue
+		}
 		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(cte[0], cte))
 	}
 	for _, subQ := range flat.ScalarSubQueries {
+		if len(subQ) == 0 {
+			continue
+		}
 		encodes = append(encodes, e.explainOpRecursivelyInJSONFormat(subQ[0], subQ))
 	}
 	return
@@ -1441,4 +1481,70 @@ func IsAutoCommitTxn(vars *variable.SessionVars) bool {
 // AdminShowBDRRole represents a show bdr role plan.
 type AdminShowBDRRole struct {
 	physicalop.SimpleSchemaProducer
+}
+
+// CallStmt call plan
+type CallStmt struct {
+	physicalop.SimpleSchemaProducer
+	Callstmt        *ast.CallStmt
+	Is              infoschema.InfoSchema
+	ProcedureSQLMod string
+	// Whether the operating environment is in strict mode
+	IsStrictMode        bool
+	Plan                *ProcedurePlan
+	CachedProcedurePlan *RoutineCacahe
+}
+
+// TriggerProcedure trigger procedure plan.
+type TriggerProcedure struct {
+	physicalop.SimpleSchemaProducer
+	Plan *ProcedurePlan
+}
+
+// SignalInfo record signal information item
+type SignalInfo struct {
+	Name int
+	Expr expression.Expression
+}
+
+// Signal create procedure plan
+type Signal struct {
+	physicalop.SimpleSchemaProducer
+	SQLState   string
+	SignalCons []*SignalInfo
+}
+
+// DiagnosticsStatement records the object of reading variables
+type DiagnosticsStatement struct {
+	Name       string
+	IsVariable bool
+	Con        int
+}
+
+// UpdateVariable saves the reading record
+func (state *DiagnosticsStatement) UpdateVariable(ctx sessionctx.Context, fd *types.FieldType, d types.Datum) error {
+	if state.IsVariable {
+		ctx.GetSessionVars().SetUserVarVal(state.Name, d)
+		ctx.GetSessionVars().SetUserVarType(state.Name, fd)
+	} else {
+		err := UpdateVariableVar(state.Name, d, ctx.GetSessionVars())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DiagnosticsCondition is condition information in get diagnostics statements
+type DiagnosticsCondition struct {
+	ConditionID expression.Expression
+	Cons        []*DiagnosticsStatement
+}
+
+// GetDiagnostics creates procedure plan
+type GetDiagnostics struct {
+	physicalop.SimpleSchemaProducer
+	Area       int
+	Statements []*DiagnosticsStatement
+	Con        *DiagnosticsCondition
 }

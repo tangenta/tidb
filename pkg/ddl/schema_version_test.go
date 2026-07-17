@@ -32,3 +32,39 @@ func TestShouldCheckAssumedServer(t *testing.T) {
 		require.True(t, shouldCheckAssumedServer(&model.Job{TableID: metadef.ReservedGlobalIDUpperBound}))
 	}
 }
+
+func TestSetSchemaDiffForCreateTableCTASRollback(t *testing.T) {
+	job := &model.Job{TableID: 42}
+	diff := &model.SchemaDiff{}
+	jobCtx := &jobContext{
+		jobArgs: &model.CreateTableArgs{
+			TableInfo: &model.TableInfo{State: model.StateNone},
+			CreateTableCTASArgs: model.CreateTableCTASArgs{
+				CTASSnapshotTS: 100,
+			},
+		},
+	}
+
+	err := SetSchemaDiffForCreateTable(diff, job, jobCtx)
+	require.NoError(t, err)
+	require.Zero(t, diff.TableID)
+	require.Equal(t, job.TableID, diff.OldTableID)
+}
+
+func TestSetSchemaDiffForCreateTableKeepsNormalShape(t *testing.T) {
+	job := &model.Job{TableID: 42}
+	diff := &model.SchemaDiff{}
+	jobCtx := &jobContext{
+		jobArgs: &model.CreateTableArgs{
+			TableInfo: &model.TableInfo{State: model.StateWriteReorganization},
+			CreateTableCTASArgs: model.CreateTableCTASArgs{
+				CTASSnapshotTS: 100,
+			},
+		},
+	}
+
+	err := SetSchemaDiffForCreateTable(diff, job, jobCtx)
+	require.NoError(t, err)
+	require.Equal(t, job.TableID, diff.TableID)
+	require.Zero(t, diff.OldTableID)
+}

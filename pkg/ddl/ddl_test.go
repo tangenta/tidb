@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/tidb/pkg/ddl/testargsv1"
 	"github.com/pingcap/tidb/pkg/domain/serverinfo"
 	"github.com/pingcap/tidb/pkg/infoschema"
@@ -145,7 +146,10 @@ func TestModifyColumn(t *testing.T) {
 	for _, tt := range tests {
 		colA := colDefStrToColInfo(t, tt.origin, ctx)
 		colB := colDefStrToColInfo(t, tt.to, ctx)
-		err := checkModifyTypes(colA, colB, false)
+		tblInfo := &model.TableInfo{
+			Columns: []*model.ColumnInfo{colA},
+		}
+		err := checkModifyTypes(tblInfo, colA, colB, false)
 		if err == nil {
 			require.NoErrorf(t, tt.err, "origin:%v, to:%v", tt.origin, tt.to)
 		} else {
@@ -164,6 +168,30 @@ func TestFieldCase(t *testing.T) {
 	}
 	err := checkDuplicateColumn(colObjects)
 	require.EqualError(t, err, infoschema.ErrColumnExists.GenWithStackByArgs("Field").Error())
+}
+
+func TestHandleTableOptionSecurityPolicy(t *testing.T) {
+	tbl := &model.TableInfo{}
+	opts := []*ast.TableOption{{Tp: ast.TableOptionSecurityPolicy, StrValue: "policy_a"}}
+	err := handleTableOptions(opts, tbl)
+	require.NoError(t, err)
+	require.NotNil(t, tbl.SecurityPolicy)
+	require.Equal(t, "policy_a", tbl.SecurityPolicy.O)
+}
+
+func TestColumnSecuredWithOption(t *testing.T) {
+	stmt, err := parser.New().ParseOneStmt("create table t (a int secured with label_a)", "", "")
+	require.NoError(t, err)
+
+	createStmt := stmt.(*ast.CreateTableStmt)
+	colDef := createStmt.Cols[0]
+	ctx := NewMetaBuildContextWithSctx(mock.NewContext())
+	chs, coll := charset.GetDefaultCharsetAndCollate()
+	col, _, err := buildColumnAndConstraint(ctx, 0, colDef, nil, chs, coll)
+	require.NoError(t, err)
+	require.NotNil(t, col.SecurityLabel)
+
+	require.Equal(t, "label_a", col.SecurityLabel.O)
 }
 
 func TestIgnorableSpec(t *testing.T) {
@@ -371,6 +399,28 @@ func TestMergeContinuousKeyRanges(t *testing.T) {
 	}
 }
 
+func TestMayConvertFromEEVersion(t *testing.T) {
+	testcases := []struct {
+		input    string
+		expected string
+	}{
+		{"7.1.8-5", "8.5.0"},
+		{"7.1.7-5", "7.5.0"},
+
+		{"7.1.8-5.0", "8.5.0"},
+		{"7.1.8-5.1", "8.5.1"},
+
+		{"7.1.8-5.0-alpha", "8.5.0-alpha"},
+		{"7.1.8-5.1-20300102", "8.5.1-20300102"},
+		{"7.1.8-5.0-20300102-abcdefg", "8.5.0-20300102-abcdefg"},
+	}
+	for _, tc := range testcases {
+		ver := semver.New(tc.input)
+		ver = mayConvertFromEEVersion(ver)
+		require.Equal(t, tc.expected, ver.String(), "input: %s, expected: %s, actual: %s", tc.input, tc.expected, ver.String())
+	}
+}
+
 func TestDetectAndUpdateJobVersion(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -423,7 +473,8 @@ func TestDetectAndUpdateJobVersion(t *testing.T) {
 
 	t.Run("all support v2 but not global index v1", func(t *testing.T) {
 		reset()
-		mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.5.5")
+		mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.5.5",
+			"8.0.11-TiDB-7.1.8-5.0", "8.0.11-TiDB-7.1.8-5.1", "8.0.11-TiDB-7.1.8-5.0-dirty", "8.0.11-TiDB-7.1.8-5.0-beta")
 		d.detectAndUpdateJobVersionOnce()
 		require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
 		require.False(t, model.GetGlobalIndexV1Supported())
@@ -459,14 +510,18 @@ func TestDetectAndUpdateJobVersion(t *testing.T) {
 			} else if iterateCnt == 4 {
 				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
 				require.False(t, model.GetGlobalIndexV1Supported())
-				// upgrade case
-				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.4.0")
+				// less than 8.4.0
+				mockGetAllServerInfo(t, "8.0.11-TiDB-7.1.7-5.3")
 			} else if iterateCnt == 5 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				// upgrade case
+				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v7.1.8-5.0")
+			} else if iterateCnt == 6 {
 				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
 				require.False(t, model.GetGlobalIndexV1Supported())
 				// all support job v2 but not global index v1
-				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0")
-			} else if iterateCnt == 6 {
+				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v7.1.8-5.0")
+			} else if iterateCnt == 7 {
 				require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
 				require.False(t, model.GetGlobalIndexV1Supported())
 				// upgrade to version supporting global index v1
@@ -478,7 +533,7 @@ func TestDetectAndUpdateJobVersion(t *testing.T) {
 		})
 		d.detectAndUpdateJobVersion()
 		d.wg.Wait()
-		require.EqualValues(t, 7, iterateCnt)
+		require.EqualValues(t, 8, iterateCnt)
 	})
 }
 

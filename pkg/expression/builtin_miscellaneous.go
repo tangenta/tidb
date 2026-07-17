@@ -22,11 +22,13 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/expression/expropt"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
@@ -34,8 +36,10 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/vitess"
 	"github.com/pingcap/tipb/go-tipb"
+	"github.com/twmb/murmur3"
 )
 
 var (
@@ -104,6 +108,7 @@ var (
 	_ builtinFunc = &builtinTimeAnyValueSig{}
 	_ builtinFunc = &builtinUsedLockSig{}
 	_ builtinFunc = &builtinUUIDSig{}
+	_ builtinFunc = &builtinUUIDShortSig{}
 	_ builtinFunc = &builtinUUIDTimestampSig{}
 	_ builtinFunc = &builtinUUIDToBinSig{}
 	_ builtinFunc = &builtinUUIDv4Sig{}
@@ -1734,14 +1739,72 @@ type uuidShortFunctionClass struct {
 }
 
 func (c *uuidShortFunctionClass) getFunction(ctx BuildContext, args []Expression) (builtinFunc, error) {
-	// This should be:
-	//
-	// (server_id & 255) << 56
-	// + (server_startup_time_in_seconds << 24)
-	// + incremented_variable++;
-	//
-	// But we have a noop server_id
-	return nil, ErrFunctionNotExists.GenWithStackByArgs("FUNCTION", "UUID_SHORT")
+	if err := c.verifyArgs(args); err != nil {
+		return nil, err
+	}
+	bf, err := newBaseBuiltinFuncWithTp(ctx, c.funcName, args, types.ETInt)
+	if err != nil {
+		return nil, err
+	}
+	bf.tp.SetFlen(20) // 64 bit unsigned
+	bf.tp.AddFlag(mysql.UnsignedFlag)
+	bf.tp.AddFlag(mysql.NotNullFlag)
+	types.SetBinChsClnFlag(bf.tp)
+	sig := &builtinUUIDShortSig{bf}
+	sig.setPbCode(tipb.ScalarFuncSig_Unspecified)
+	return sig, nil
+}
+
+type builtinUUIDShortSig struct {
+	baseBuiltinFunc
+}
+
+func (b *builtinUUIDShortSig) Clone() builtinFunc {
+	newSig := &builtinUUIDShortSig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
+}
+
+// evalString evals a builtinUUIDShortSig.
+// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_uuid-short
+func (b *builtinUUIDShortSig) evalInt(ctx EvalContext, _ chunk.Row) (int64, bool, error) {
+	serverID := config.GetGlobalConfig().Instance.ServerID
+	if serverID == vardef.UnspecifiedServerID {
+		return 0, false, errUnknown.GenWithStack("Unspecified server ID. Set the config `instance.server_id` to an integer between 1 and 255 when using `UUID_SHORT()`.")
+	}
+	result := globalUUIDShortAllocator.next(serverID)
+	return int64(result), false, nil
+}
+
+var globalUUIDShortAllocator = &UUIDShortAllocator{ts: time.Now().Unix()}
+
+// UUIDShortAllocator is used to allocate unique 64 bit unsigned integers.
+type UUIDShortAllocator struct {
+	sync.Mutex
+	ts    int64
+	count uint32
+}
+
+func (g *UUIDShortAllocator) next(serverID int) uint64 {
+	g.Lock()
+	defer g.Unlock()
+	if g.count > 0xFFFFFF {
+		now := time.Now().Unix()
+		if g.ts < now {
+			g.ts = now
+		} else {
+			g.ts += 1
+		}
+		g.count = 0
+	}
+	count := g.count
+	ts := g.ts
+	g.count += 1
+
+	p1 := uint64(serverID&0xFF) << 56
+	p2 := uint64(ts) << 24
+	p3 := uint64(count & 0xFFFFFF)
+	return p1 + p2 + p3
 }
 
 type vitessHashFunctionClass struct {
@@ -1970,18 +2033,37 @@ func (c *tidbShardFunctionClass) getFunction(ctx BuildContext, args []Expression
 	if err := c.verifyArgs(args); err != nil {
 		return nil, err
 	}
-	bf, err := newBaseBuiltinFuncWithTp(ctx, c.funcName, args, types.ETInt, types.ETInt)
-	if err != nil {
-		return nil, err
+	switch len(args) {
+	case 1:
+		bf, err := newBaseBuiltinFuncWithTp(ctx, c.funcName, args, types.ETInt, types.ETInt)
+		if err != nil {
+			return nil, err
+		}
+
+		bf.tp.SetFlen(4) //64 bit unsigned
+		bf.tp.AddFlag(mysql.UnsignedFlag)
+		types.SetBinChsClnFlag(bf.tp)
+
+		sig := &builtinTidbShardSig{bf}
+		sig.setPbCode(tipb.ScalarFuncSig_TiDBShard)
+		return sig, nil
+	case 2:
+		if !allowTiDBShardInternalVersion(ctx) {
+			return nil, ErrNotSupportedYet.GenWithStackByArgs("calling tidb_shard() with an explicit internal version")
+		}
+		bf, err := newBaseBuiltinFuncWithTp(ctx, c.funcName, args, types.ETInt, types.ETString, types.ETInt)
+		if err != nil {
+			return nil, err
+		}
+
+		bf.tp.SetFlen(4) //64 bit unsigned
+		bf.tp.AddFlag(mysql.UnsignedFlag)
+		types.SetBinChsClnFlag(bf.tp)
+
+		return &builtinTidbShardStringSig{bf}, nil
+	default:
+		return nil, ErrIncorrectParameterCount.GenWithStackByArgs(c.funcName)
 	}
-
-	bf.tp.SetFlen(4) //64 bit unsigned
-	bf.tp.AddFlag(mysql.UnsignedFlag)
-	types.SetBinChsClnFlag(bf.tp)
-
-	sig := &builtinTidbShardSig{bf}
-	sig.setPbCode(tipb.ScalarFuncSig_TiDBShard)
-	return sig, nil
 }
 
 type builtinTidbShardSig struct {
@@ -2009,6 +2091,39 @@ func (b *builtinTidbShardSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bo
 		return 0, true, err
 	}
 	hashed = hashed % tidbShardBucketCount
+	return int64(hashed), false, nil
+}
+
+type builtinTidbShardStringSig struct {
+	baseBuiltinFunc
+
+	// NOTE: Any new fields added here must be thread-safe or immutable during execution,
+	// as this expression may be shared across sessions.
+	// If a field does not meet these requirements, set SafeToShareAcrossSession to false.
+}
+
+func (b *builtinTidbShardStringSig) Clone() builtinFunc {
+	newSig := &builtinTidbShardStringSig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
+}
+
+// evalInt evals tidb_shard(string, version).
+func (b *builtinTidbShardStringSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool, error) {
+	shardKeyString, isNull, err := b.args[0].EvalString(ctx, row)
+	if isNull || err != nil {
+		return 0, true, err
+	}
+	version, isNull, err := b.args[1].EvalInt(ctx, row)
+	if isNull || err != nil {
+		return 0, true, err
+	}
+	if version != 1 {
+		return 0, true, errIncorrectArgs.GenWithStack("unsupported internal tidb_shard version: %d", version)
+	}
+
+	collator := collate.GetCollator(b.args[0].GetType(ctx).GetCollate())
+	hashed := uint64(murmur3.Sum32(collator.Key(shardKeyString))) % tidbShardBucketCount
 	return int64(hashed), false, nil
 }
 

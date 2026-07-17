@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/stretchr/testify/require"
 )
 

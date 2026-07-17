@@ -19,24 +19,14 @@
 # And make sure these backup data can restore through newly BR tools to newly cluster.
 
 set -o pipefail
-
-coverage_report=./bazel-out/_coverage/_coverage_report.dat
-junit_report=./bazel.xml
-
-go install github.com/hawkingrei/bazel_collect@latest
+which bazel_collect || ./prepare_tools.sh
+GOROOTPATH=$(go env GOPATH)/bin/
+export PATH=${GOROOTPATH}:$PATH
 make bazel_coverage_test
 EXIT_STATUS=$?
 # collect the junit and coverage report
-if [ -f "${coverage_report}" ]; then
-    cp "${coverage_report}" ./coverage.dat
-else
-    : > ./coverage.dat
-    echo "warning: coverage report ${coverage_report} not found, created empty coverage.dat" >&2
-fi
+bazel_collect
+cp ./bazel-out/_coverage/_coverage_report.dat ./coverage.dat
 mkdir -p test_coverage
-if [ -f "${junit_report}" ]; then
-    mv "${junit_report}" test_coverage/bazel.xml
-else
-    echo "warning: junit report ${junit_report} not found, skipping junit artifact collection" >&2
-fi
+mv bazel.xml test_coverage/bazel.xml
 exit ${EXIT_STATUS}

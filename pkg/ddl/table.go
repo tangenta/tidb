@@ -174,7 +174,7 @@ func (w *worker) onRecoverTable(jobCtx *jobContext, job *model.Job) (ver int64, 
 		return ver, errors.Trace(err)
 	}
 
-	err = checkTableNotExists(jobCtx.infoCache, schemaID, tblInfo.Name.L)
+	err = checkTableNotExists(jobCtx.infoCache, schemaID, tblInfo.Name)
 	if err != nil {
 		if infoschema.ErrDatabaseNotExists.Equal(err) || infoschema.ErrTableExists.Equal(err) {
 			job.State = model.JobStateCancelled
@@ -272,7 +272,8 @@ func (w *worker) recoverTable(
 	job *model.Job,
 	recoverInfo *model.RecoverTableInfo,
 ) (ver int64, err error) {
-	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(recoverInfo.TableInfo, recoverInfo.OldSchemaName, recoverInfo.OldTableName)
+	// TODO(lower_case_table_names): support case sensitive db name in label.
+	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(recoverInfo.TableInfo, recoverInfo.OldSchemaName.L, recoverInfo.OldTableName.L)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Wrapf(err, "failed to get old label rules from PD")
@@ -790,7 +791,7 @@ func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 		return finishJobRenameTable(jobCtx, job)
 	}
 	newSchemaID := job.SchemaID
-	err = checkTableNotExists(jobCtx.infoCache, newSchemaID, tableName.L)
+	err = checkTableNotExists(jobCtx.infoCache, newSchemaID, tableName)
 	if err != nil {
 		if infoschema.ErrDatabaseNotExists.Equal(err) || infoschema.ErrTableExists.Equal(err) {
 			job.State = model.JobStateCancelled
@@ -803,6 +804,12 @@ func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
+
+	if err := checkTriggersMovedToWrongSchema(tblInfo, args, job); err != nil {
+		job.State = model.JobStateCancelled
+		return ver, errors.Trace(err)
+	}
+
 	oldTableName := tblInfo.Name
 	ver, err = checkAndRenameTables(metaMut, job, tblInfo, args)
 	if err != nil {
@@ -843,6 +850,12 @@ func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 		if err != nil {
 			return ver, errors.Trace(err)
 		}
+
+		if err := checkTriggersMovedToWrongSchema(tblInfo, info, job); err != nil {
+			job.State = model.JobStateCancelled
+			return ver, errors.Trace(err)
+		}
+
 		ver, err := checkAndRenameTables(metaMut, job, tblInfo, info)
 		if err != nil {
 			return ver, errors.Trace(err)
@@ -927,7 +940,7 @@ func adjustForeignKeyChildTableInfoAfterRenameTable(
 		job.State = model.JobStateCancelled
 		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(fmt.Sprintf("schema-ID: %v", newSchemaID))
 	}
-	referredFKs := is.GetTableReferredForeignKeys(oldSchemaName.L, oldTableName.L)
+	referredFKs := is.GetTableReferredForeignKeys(oldSchemaName, oldTableName)
 	if len(referredFKs) == 0 {
 		return nil
 	}
@@ -1263,7 +1276,7 @@ func onUpdateTiFlashReplicaStatus(jobCtx *jobContext, job *model.Job) (ver int64
 // jobs in the order of job id. During syncing J1, B should have synced the schema
 // with the latest schema version, so when B runs J2, below check will see the table
 // T already exists, and J2 will fail.
-func checkTableNotExists(infoCache *infoschema.InfoCache, schemaID int64, tableName string) error {
+func checkTableNotExists(infoCache *infoschema.InfoCache, schemaID int64, tableName ast.CIStr) error {
 	is := infoCache.GetLatest()
 	return checkTableNotExistsFromInfoSchema(is, schemaID, tableName)
 }
@@ -1304,14 +1317,14 @@ func checkTableIDNotExists(t *meta.Mutator, schemaID, tableID int64) error {
 	return nil
 }
 
-func checkTableNotExistsFromInfoSchema(is infoschema.InfoSchema, schemaID int64, tableName string) error {
+func checkTableNotExistsFromInfoSchema(is infoschema.InfoSchema, schemaID int64, tableName ast.CIStr) error {
 	// Check this table's database.
 	schema, ok := is.SchemaByID(schemaID)
 	if !ok {
 		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs("")
 	}
-	if is.TableExists(schema.Name, ast.NewCIStr(tableName)) {
-		return infoschema.ErrTableExists.GenWithStackByArgs(tableName)
+	if is.TableExists(schema.Name, tableName) {
+		return infoschema.ErrTableExists.GenWithStackByArgs(tableName.L)
 	}
 	return nil
 }

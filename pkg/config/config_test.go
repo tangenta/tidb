@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -839,6 +840,8 @@ max_connections = 200
 log-rotate = true
 [performance]
 mem-profile-interval="1m"
+[experimental]
+enable-create-table-as-select=true
 [stmt-summary]
 enable=false
 enable-internal-query=true
@@ -1350,6 +1353,15 @@ func TestTcpNoDelay(t *testing.T) {
 }
 
 func TestGetJSONConfig(t *testing.T) {
+	// The test builds a config containing a MaxInt64 TiKV client value, renders
+	// it as JSON, and verifies hidden fields are removed without rounding the
+	// large integer or breaking unmarshalling back into Config.
+	originalGlobalConfig := GetGlobalConfig()
+	confForJSON := NewConfig()
+	confForJSON.TiKVClient.MaxConcurrencyRequestLimit = math.MaxInt64
+	StoreGlobalConfig(confForJSON)
+	defer StoreGlobalConfig(originalGlobalConfig)
+
 	conf, err := GetJSONConfig()
 	require.NoError(t, err)
 
@@ -1362,6 +1374,11 @@ func TestGetJSONConfig(t *testing.T) {
 
 	require.Contains(t, conf, "stmt-count-limit")
 	require.Contains(t, conf, "rpc-metrics")
+	require.Contains(t, conf, `"max-concurrency-request-limit": 9223372036854775807`)
+
+	var decodedConf Config
+	require.NoError(t, json.Unmarshal([]byte(conf), &decodedConf))
+	require.Equal(t, int64(math.MaxInt64), decodedConf.TiKVClient.MaxConcurrencyRequestLimit)
 }
 
 func TestConfigExample(t *testing.T) {

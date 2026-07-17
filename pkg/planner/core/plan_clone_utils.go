@@ -15,6 +15,8 @@
 package core
 
 import (
+	"slices"
+
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
 	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
@@ -64,6 +66,8 @@ func FastClonePointGetForPlanCache(newCtx base.PlanContext, src, dst *physicalop
 	dst.SetOutputNames(src.OutputNames())
 	dst.LockWaitTime = src.LockWaitTime
 	dst.Columns = src.Columns
+	dst.Unfold = slices.Clone(src.Unfold)
+	dst.ColsInWhereClause = slices.Clone(src.ColsInWhereClause)
 
 	// remaining fields are unnecessary to clone:
 	// cost, planCostInit, planCost, planCostVer2, accessCols

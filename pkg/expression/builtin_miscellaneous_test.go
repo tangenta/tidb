@@ -18,8 +18,11 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -28,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit/testutil"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/vitess"
 	"github.com/stretchr/testify/require"
 )
 
@@ -235,6 +239,55 @@ func TestUUIDTimestamp(t *testing.T) {
 				fmt.Sprintf("UUID_TIMESTAMP('%s') = %v (got %v)", tt.arg, tt.ret, r))
 		}
 	}
+}
+
+func TestUUIDShort(t *testing.T) {
+	ctx := createContext(t)
+	f, err := newFunctionForTest(ctx, ast.UUIDShort)
+	require.NoError(t, err)
+	_, err = f.Eval(ctx, chunk.Row{})
+	require.Error(t, err) // unknown sever id
+	_, err = funcs[ast.UUIDShort].getFunction(ctx, datumsToConstants(nil))
+	require.NoError(t, err)
+}
+
+func TestUUIDShortAllocator(t *testing.T) {
+	allocator := UUIDShortAllocator{
+		ts:    1760422595,
+		count: 0,
+	}
+	// basic test.
+	require.Equal(t, uint64(101592584165523456), allocator.next(1))
+
+	// concurrency test
+	now := time.Now().Unix()
+	allocator.ts = now
+	values := sync.Map{}
+	for i := 1; i < 100; i++ {
+		id := allocator.next(1)
+		_, loaded := values.LoadOrStore(id, true)
+		require.False(t, loaded, "duplicated value")
+	}
+	allocator.count = math.MaxUint32 - 100
+	var wg sync.WaitGroup
+	count := uint64(0)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				id := allocator.next(1)
+				_, loaded := values.LoadOrStore(id, true)
+				require.False(t, loaded, "duplicated value")
+				if atomic.AddUint64(&count, 1) > 10000 {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	require.True(t, 10000 < count)
+	require.True(t, now < allocator.ts)
 }
 
 func TestAnyValue(t *testing.T) {
@@ -690,8 +743,15 @@ func TestBinToUUID(t *testing.T) {
 
 func TestTidbShard(t *testing.T) {
 	ctx := createContext(t)
+	internalCtx := WithTiDBShardInternalVersion(ctx)
 
 	fc := funcs[ast.TiDBShard]
+	versionType := types.NewFieldType(mysql.TypeLonglong)
+	versionOne := &Constant{Value: types.NewIntDatum(1), RetType: versionType}
+
+	_, err := ParseSimpleExpr(ctx, "tidb_shard('ShardKey', 1)")
+	require.Error(t, err)
+	require.True(t, ErrNotSupportedYet.Equal(err))
 
 	// tidb_shard(-1) == 81, ......
 	args := makeDatums([]int{-1, 0, 1, 9999999999999999})
@@ -715,9 +775,259 @@ func TestTidbShard(t *testing.T) {
 		testutil.DatumEqual(t, res2[0], d)
 	}
 
+	t.Run("legacy one-argument string semantics stay cast-based", func(t *testing.T) {
+		legacyShard := func(val int64) types.Datum {
+			hashed, err := vitess.HashUint64(uint64(val))
+			require.NoError(t, err)
+			return types.NewDatum(uint64(hashed % tidbShardBucketCount))
+		}
+
+		cases := []struct {
+			input     string
+			legacyInt int64
+		}{
+			{input: "abc", legacyInt: 0},
+			{input: "65.0", legacyInt: 65},
+			{input: "11xx", legacyInt: 11},
+		}
+		for _, tc := range cases {
+			f, err := fc.getFunction(ctx, datumsToConstants([]types.Datum{types.NewStringDatum(tc.input)}))
+			require.NoError(t, err)
+			d, err := evalBuiltinFunc(f, ctx, chunk.Row{})
+			require.NoError(t, err)
+			testutil.DatumEqual(t, legacyShard(tc.legacyInt), d)
+		}
+	})
+
 	args3 := makeDatums([]int{-1, 0, 1, 9999999999999999})
 	{
 		_, err := fc.getFunction(ctx, datumsToConstants(args3))
 		require.Error(t, err)
 	}
+
+	ciType := types.NewFieldType(mysql.TypeVarString)
+	ciType.SetCharset("utf8mb4")
+	ciType.SetCollate("utf8mb4_general_ci")
+	ciUpper := &Constant{Value: types.NewStringDatum("AbC"), RetType: ciType}
+	ciLower := &Constant{Value: types.NewStringDatum("abc"), RetType: ciType}
+	ciUpperFn, err := fc.getFunction(internalCtx, []Expression{ciUpper, versionOne})
+	require.NoError(t, err)
+	ciLowerFn, err := fc.getFunction(internalCtx, []Expression{ciLower, versionOne})
+	require.NoError(t, err)
+	ciUpperRes, err := evalBuiltinFunc(ciUpperFn, ctx, chunk.Row{})
+	require.NoError(t, err)
+	ciLowerRes, err := evalBuiltinFunc(ciLowerFn, ctx, chunk.Row{})
+	require.NoError(t, err)
+	require.Equal(t, ciUpperRes.GetValue(), ciLowerRes.GetValue())
+
+	binType := types.NewFieldType(mysql.TypeVarString)
+	binType.SetCharset("utf8mb4")
+	binType.SetCollate("utf8mb4_bin")
+	binVal := &Constant{Value: types.NewStringDatum("ShardKey"), RetType: binType}
+	binFn, err := fc.getFunction(internalCtx, []Expression{binVal, versionOne})
+	require.NoError(t, err)
+	binRes1, err := evalBuiltinFunc(binFn, ctx, chunk.Row{})
+	require.NoError(t, err)
+	binRes2, err := evalBuiltinFunc(binFn, ctx, chunk.Row{})
+	require.NoError(t, err)
+	require.Equal(t, binRes1.GetValue(), binRes2.GetValue())
+}
+
+func TestLoadableFunctionSoHandleRefCount(t *testing.T) {
+	ctx := createContext(t)
+
+	soName := "test_loadable_function_ref_count.so"
+	fakeHandle := unsafe.Pointer(new(int))
+	initialEntry := &soHandleRef{handle: fakeHandle, refs: 1}
+
+	udfSoHandleCache.mu.Lock()
+	_, existed := udfSoHandleCache.handles[soName]
+	inserted := false
+	if !existed {
+		udfSoHandleCache.handles[soName] = &soHandleBucket{
+			entries:  []*soHandleRef{initialEntry},
+			reusable: initialEntry,
+		}
+		inserted = true
+	}
+	udfSoHandleCache.mu.Unlock()
+	require.False(t, existed)
+
+	origDlclose := udfDlclose
+	var dlcloseCalls int64
+	udfDlclose = func(handle unsafe.Pointer) {
+		atomic.AddInt64(&dlcloseCalls, 1)
+	}
+	defer func() {
+		udfDlclose = origDlclose
+		if inserted {
+			udfSoHandleCache.mu.Lock()
+			delete(udfSoHandleCache.handles, soName)
+			udfSoHandleCache.mu.Unlock()
+		}
+	}()
+
+	def := &LoadableFunctionDef{
+		name:     "test_udf",
+		evalTp:   types.ETInt,
+		soName:   soName,
+		soHandle: fakeHandle,
+	}
+	sig := &loadableFuncSig{
+		baseBuiltinFunc: baseBuiltinFunc{
+			tp: types.NewFieldType(mysql.TypeLonglong),
+		},
+		def: def,
+	}
+	require.NoError(t, sig.initRuntime(ctx))
+	defer sig.cleanupRuntime()
+	udfSoHandleCache.mu.Lock()
+	bucket := udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.NotNil(t, bucket)
+	require.Same(t, initialEntry, bucket.reusable)
+	require.Equal(t, 2, bucket.reusable.refs)
+
+	def.Drop()
+	require.Equal(t, int64(0), atomic.LoadInt64(&dlcloseCalls))
+	udfSoHandleCache.mu.Lock()
+	bucket = udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.NotNil(t, bucket)
+	var (
+		entry *soHandleRef
+		ok    bool
+	)
+	for _, e := range bucket.entries {
+		if e.handle == fakeHandle {
+			entry = e
+			ok = true
+			break
+		}
+	}
+	require.True(t, ok)
+	require.Equal(t, 1, entry.refs)
+
+	sig.cleanupRuntime()
+	require.Equal(t, int64(1), atomic.LoadInt64(&dlcloseCalls))
+	udfSoHandleCache.mu.Lock()
+	_, ok = udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.False(t, ok)
+}
+
+func TestLoadableFunctionInvalidateSoHandleCache(t *testing.T) {
+	soName := "test_loadable_function_reload.so"
+	handleV1 := unsafe.Pointer(new(int))
+	handleV2 := unsafe.Pointer(new(int))
+
+	origLoadSoHandle := udfLoadSoHandle
+	origLoadSymbols := udfLoadSymbols
+	origDlclose := udfDlclose
+	udfSoHandleCache.mu.Lock()
+	origHandles := udfSoHandleCache.handles
+	udfSoHandleCache.handles = make(map[string]*soHandleBucket)
+	udfSoHandleCache.mu.Unlock()
+	t.Cleanup(func() {
+		udfLoadSoHandle = origLoadSoHandle
+		udfLoadSymbols = origLoadSymbols
+		udfDlclose = origDlclose
+		udfSoHandleCache.mu.Lock()
+		udfSoHandleCache.handles = origHandles
+		udfSoHandleCache.mu.Unlock()
+	})
+
+	loadCount := 0
+	udfLoadSoHandle = func(gotSoName string) (unsafe.Pointer, error) {
+		require.Equal(t, soName, gotSoName)
+		loadCount++
+		if loadCount == 1 {
+			return handleV1, nil
+		}
+		return handleV2, nil
+	}
+	udfLoadSymbols = func(handle unsafe.Pointer, funcName string) (
+		fn unsafe.Pointer,
+		fnInit unsafe.Pointer,
+		fnDeinit unsafe.Pointer,
+		err error,
+	) {
+		switch handle {
+		case handleV1:
+			if funcName == "udf_a" {
+				return handle, nil, nil, nil
+			}
+		case handleV2:
+			if funcName == "udf_a" || funcName == "udf_b" {
+				return handle, nil, nil, nil
+			}
+		}
+		return nil, nil, nil, errCantFindDlEntry.FastGenByArgs(funcName)
+	}
+
+	closedHandles := make([]unsafe.Pointer, 0, 2)
+	udfDlclose = func(handle unsafe.Pointer) {
+		closedHandles = append(closedHandles, handle)
+	}
+
+	defA, err := LoadUDF(soName, "udf_a", types.ETInt)
+	require.NoError(t, err)
+	require.Equal(t, handleV1, defA.soHandle)
+	require.Equal(t, 1, loadCount)
+
+	_, err = LoadUDF(soName, "udf_b", types.ETInt)
+	require.ErrorContains(t, err, "udf_b")
+	require.Equal(t, 1, loadCount)
+
+	InvalidateSoHandleCache(soName)
+	udfSoHandleCache.mu.Lock()
+	bucket := udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.NotNil(t, bucket)
+	require.Nil(t, bucket.reusable)
+
+	defB, err := LoadUDF(soName, "udf_b", types.ETInt)
+	require.NoError(t, err)
+	require.Equal(t, handleV2, defB.soHandle)
+	require.Equal(t, 2, loadCount)
+
+	udfSoHandleCache.mu.Lock()
+	bucket = udfSoHandleCache.handles[soName]
+	var entries []*soHandleRef
+	var reusable *soHandleRef
+	if bucket != nil {
+		entries = append([]*soHandleRef(nil), bucket.entries...)
+		reusable = bucket.reusable
+	}
+	udfSoHandleCache.mu.Unlock()
+	require.NotNil(t, bucket)
+	require.Len(t, entries, 2)
+	require.Equal(t, handleV1, entries[0].handle)
+	require.Equal(t, handleV2, entries[1].handle)
+	require.NotNil(t, reusable)
+	require.Equal(t, handleV2, reusable.handle)
+
+	entryByHandle := make(map[unsafe.Pointer]*soHandleRef, len(entries))
+	for _, entry := range entries {
+		entryByHandle[entry.handle] = entry
+	}
+	require.Equal(t, 1, entryByHandle[handleV1].refs)
+	require.Equal(t, 1, entryByHandle[handleV2].refs)
+
+	reusedHandle, err := acquireSoHandle(soName)
+	require.NoError(t, err)
+	require.Equal(t, handleV2, reusedHandle)
+	require.Equal(t, 2, loadCount)
+	releaseSoHandle(soName, reusedHandle)
+
+	defB.Drop()
+	require.Equal(t, []unsafe.Pointer{handleV2}, closedHandles)
+
+	defA.Drop()
+	require.Equal(t, []unsafe.Pointer{handleV2, handleV1}, closedHandles)
+
+	udfSoHandleCache.mu.Lock()
+	_, ok := udfSoHandleCache.handles[soName]
+	udfSoHandleCache.mu.Unlock()
+	require.False(t, ok)
 }

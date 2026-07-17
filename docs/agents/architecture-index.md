@@ -1,4 +1,4 @@
-# TiDB Architecture Index for Agents
+# TiDB Architecture Index
 
 This file is a navigation index for quick subsystem discovery.
 Hard requirements remain in the repository root `AGENTS.md`.
@@ -16,6 +16,7 @@ Hard requirements remain in the repository root `AGENTS.md`.
 - `pkg/planner/core/base/`
 - `pkg/planner/core/operator/logicalop/`
 - `pkg/planner/core/operator/physicalop/`
+- Maintainer guide (sharp edges + invariants + playbooks, incl. plan cache): `pkg/planner/MAINTAINER_GUIDE.md`
 - Typical changes: rule matching, plan shape, cost-based choices.
 - First tests to inspect:
   - `pkg/planner/core/casetest/`
@@ -42,6 +43,7 @@ Hard requirements remain in the repository root `AGENTS.md`.
 - `pkg/meta/`
 - `pkg/meta/autoid/`
 - Typical changes: schema evolution, metadata persistence, ID generation.
+- Read-first DDL doc (execution model + invariants + playbooks): `pkg/ddl/MAINTAINER_GUIDE.md`
 
 ### Storage and distributed execution
 - `pkg/kv/`
@@ -90,3 +92,4 @@ Hard requirements remain in the repository root `AGENTS.md`.
 - Testing runbook: `docs/agents/testing-flow.md`
 - AGENTS review guide: `docs/agents/agents-review-guide.md`
 - Root execution contract: `AGENTS.md`
+- Writing a subsystem `MAINTAINER_GUIDE.md`: `docs/agents/maintainer-guide.md`

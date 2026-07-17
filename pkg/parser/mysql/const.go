@@ -15,6 +15,8 @@ package mysql
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
@@ -232,11 +234,16 @@ const (
 	ClientDeprecateEOF                                  // CLIENT_DEPRECATE_EOF
 	ClientOptionalResultsetMetadata                     // CLIENT_OPTIONAL_RESULTSET_METADATA, Not supported: https://dev.mysql.com/doc/c-api/8.0/en/c-api-optional-metadata.html
 	ClientZstdCompressionAlgorithm                      // CLIENT_ZSTD_COMPRESSION_ALGORITHM
-	// 1 << 27 == CLIENT_QUERY_ATTRIBUTES
-	// 1 << 28 == MULTI_FACTOR_AUTHENTICATION
-	// 1 << 29 == CLIENT_CAPABILITY_EXTENSION
+	ClientQueryAttributes
+	MultiFactorAuthentication
+	ClientCapabilityExtension // use CLIENT_CAPABILITY_EXTENSION support TLCP
 	// 1 << 30 == CLIENT_SSL_VERIFY_SERVER_CERT
 	// 1 << 31 == CLIENT_REMEMBER_OPTIONS
+)
+
+// TLCP Capability information.
+const (
+	ClientTLCP uint8 = 1 << iota
 )
 
 // Cache type information.
@@ -275,7 +282,7 @@ const (
 	// ColumnPrivTable is the table in system db contains column scope privilege info.
 	ColumnPrivTable = "Columns_priv"
 	// GlobalVariablesTable is the table contains global system variables.
-	GlobalVariablesTable = "GLOBAL_VARIABLES"
+	GlobalVariablesTable = "global_variables"
 	// GlobalStatusTable is the table contains global status variables.
 	GlobalStatusTable = "GLOBAL_STATUS"
 	// TiDBTable is the table contains tidb info.
@@ -288,6 +295,10 @@ const (
 	PasswordHistoryTable = "password_history"
 	// WorkloadSchema is the name of workload repository database.
 	WorkloadSchema = "workload_schema"
+	// Routines is the table in system db contains procedure.
+	Routines = "routines"
+	// ProcsPriv is the table in system db contains routine privilege.
+	ProcsPriv = "procs_priv"
 )
 
 // MySQL type maximum length.
@@ -369,7 +380,7 @@ var Command2Str = map[byte]string{
 	ComResetConnection:  "Reset connect",
 }
 
-// DefaultSQLMode for GLOBAL_VARIABLES
+// DefaultSQLMode for global_variables
 const DefaultSQLMode = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 
 // DefaultLengthOfMysqlTypes is the map for default physical length of MySQL data types.
@@ -500,6 +511,20 @@ func (m SQLMode) HasAllowInvalidDatesMode() bool {
 	return m&ModeAllowInvalidDates == ModeAllowInvalidDates
 }
 
+// String returns the string representation of SQLMode
+func (m SQLMode) String() string {
+	if m == 0 {
+		return ""
+	}
+	var modes []string
+	for _, name := range sortedStr2SQLModeKeys {
+		if m&Str2SQLMode[name] != 0 {
+			modes = append(modes, name)
+		}
+	}
+	return strings.Join(modes, ",")
+}
+
 // DelSQLMode delete sql mode from ori
 func DelSQLMode(ori SQLMode, del SQLMode) SQLMode {
 	return ori & (^del)
@@ -625,6 +650,12 @@ var Str2SQLMode = map[string]SQLMode{
 	"NO_ENGINE_SUBSTITUTION":     ModeNoEngineSubstitution,
 	"PAD_CHAR_TO_FULL_LENGTH":    ModePadCharToFullLength,
 	"ALLOW_INVALID_DATES":        ModeAllowInvalidDates,
+}
+
+var sortedStr2SQLModeKeys []string
+
+func init() {
+	sortedStr2SQLModeKeys = slices.Sorted(maps.Keys(Str2SQLMode))
 }
 
 // CombinationSQLMode is the special modes that provided as shorthand for combinations of mode values.

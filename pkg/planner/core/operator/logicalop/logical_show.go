@@ -41,6 +41,10 @@ type ShowContents struct {
 	DBName    string
 	Table     *resolve.TableNameW // Used for showing columns.
 	Partition ast.CIStr           // Use for showing partition
+
+	Procedure *ast.TableName
+	Trigger   *ast.TableName
+
 	// Column points to the AST selector for `desc table column` and is treated as read-only after plan build.
 	Column            *ast.ColumnName
 	IndexName         ast.CIStr
