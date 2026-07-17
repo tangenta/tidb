@@ -1278,12 +1278,12 @@ func TestNULL(t *testing.T) {
 
 	cfg = config.MydumperRuntime{
 		CSV: config.CSVConfig{
-			Separator:        ",",
-			Delimiter:        `"`,
-			Terminator:       "\n",
-			Null:             []string{`NULL`, `null`},
-			EscapedBy:        ``,
-			QuotedNullIsText: true,
+			FieldsTerminatedBy: ",",
+			FieldsEnclosedBy:   `"`,
+			LinesTerminatedBy:  "\n",
+			FieldNullDefinedBy: []string{`NULL`, `null`},
+			FieldsEscapedBy:    ``,
+			QuotedNullIsText:   true,
 		},
 	}
 	testCases = []testCase{

@@ -99,8 +99,9 @@ type ownerListener struct {
 
 	scheduler *jobScheduler
 
-	unsafeDestroyMgr  *unsafeDestroyMgr
-	logReplJobManager *tidbWaitJobManager
+	unsafeDestroyMgr        *unsafeDestroyMgr
+	tiflashPlacementSyncMgr *tiflashPlacementSyncMgr
+	logReplJobManager       *tidbWaitJobManager
 }
 
 var _ owner.Listener = (*ownerListener)(nil)
@@ -136,6 +137,11 @@ func (l *ownerListener) OnBecomeOwner() {
 		l.ddl.store,
 	)
 	l.unsafeDestroyMgr.start()
+	l.tiflashPlacementSyncMgr = newTiFlashPlacementSyncMgr(
+		ctx,
+		l.ddl.infoCache,
+	)
+	l.tiflashPlacementSyncMgr.start()
 	// in unistore, there's no etcdCli.
 	if l.ddl.etcdCli != nil {
 		l.logReplJobManager = newTiDBWaitJobManager(
@@ -156,6 +162,9 @@ func (l *ownerListener) OnRetireOwner() {
 	l.scheduler.close()
 	// rely on scheduler's close to cancel the context of unsafeDestroyMgr
 	l.unsafeDestroyMgr.close()
+	if l.tiflashPlacementSyncMgr != nil {
+		l.tiflashPlacementSyncMgr.close()
+	}
 	if l.logReplJobManager != nil {
 		l.logReplJobManager.close()
 	}

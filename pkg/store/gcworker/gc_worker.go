@@ -1739,6 +1739,12 @@ func doGCPlacementRules(se sessionapi.Session, _ uint64,
 	return nil
 }
 
+func doGCPlacementRulesForDDLJob(store kv.Storage, ddlJobID int64) error {
+	se := createSession(store)
+	defer se.Close()
+	return doGCPlacementRules(se, 0, util.DelRangeTask{JobID: ddlJobID}, &sync.Map{})
+}
+
 func (w *GCWorker) doGCLabelRules(dr util.DelRangeTask) (err error) {
 	// Get the job from the job history
 	var historyJob *model.Job
@@ -1914,4 +1920,5 @@ func (w *MockGCWorker) DeleteRanges(ctx context.Context, safePoint uint64) error
 
 func init() {
 	ddl.DoUnsafeDestroyRangeRequest = doUnsafeDestroyRangeRequest
+	ddl.DoGCPlacementRules = doGCPlacementRulesForDDLJob
 }
