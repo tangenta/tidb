@@ -1738,6 +1738,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	AdminSwitchOverAsPrimary               "Admin switchover as primary statement"
 	AdminActivateStandby                   "Admin activate standby statement"
 	ActivateStandbyMode                    "Activate standby mode"
+	AdminCancelLogReplicationWorkflow      "Admin cancel log replication workflow statement"
 	LogReplicationOptList                  "Log replication option list"
 	LogReplicationOpt                      "Log replication option"
 	ProtectionMode                         "Log replication protection mode"
@@ -12523,6 +12524,13 @@ AdminStmt:
 			ActivateStandby: $2.(*ast.ActivateStandby),
 		}
 	}
+|	"ADMIN" AdminCancelLogReplicationWorkflow
+	{
+		$$ = &ast.AdminStmt{
+			Tp:                           ast.AdminCancelLogReplicationWorkflow,
+			CancelLogReplicationWorkflow: $2.(*ast.CancelLogReplicationWorkflow),
+		}
+	}
 
 AlterJobOptionList:
 	AlterJobOption
@@ -19296,7 +19304,13 @@ AdminSwitchOverAsPrimary:
 	}
 
 AdminActivateStandby:
-	"ACTIVATE" "STANDBY" "MODE" "=" ActivateStandbyMode
+	"ACTIVATE" "STANDBY"
+	{
+		$$ = &ast.ActivateStandby{
+			Mode: ast.ActivateStandbyModeDefault,
+		}
+	}
+|	"ACTIVATE" "STANDBY" "MODE" "=" ActivateStandbyMode
 	{
 		$$ = &ast.ActivateStandby{
 			Mode: $5.(ast.ActivateStandbyMode),
@@ -19304,13 +19318,29 @@ AdminActivateStandby:
 	}
 
 ActivateStandbyMode:
-	"FLASHBACK"
+	"DEFAULT"
+	{
+		$$ = ast.ActivateStandbyModeDefault
+	}
+|	"FLASHBACK"
 	{
 		$$ = ast.ActivateStandbyModeFlashback
 	}
 |	"FORCE_COMMIT"
 	{
 		$$ = ast.ActivateStandbyModeForceCommit
+	}
+
+AdminCancelLogReplicationWorkflow:
+	"CANCEL" "LOG" "REPLICATION" Identifier LengthNum
+	{
+		if !strings.EqualFold($4, "workflow") {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
+		$$ = &ast.CancelLogReplicationWorkflow{
+			WorkflowID: $5.(uint64),
+		}
 	}
 
 LogReplicationOptList:
