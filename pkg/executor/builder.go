@@ -2869,6 +2869,14 @@ func (b *executorBuilder) buildTopN(v *physicalop.PhysicalTopN) exec.Executor {
 		// return nil
 	}
 	t.ColumnIdxsUsedByChild = columnIdxsUsedByChild
+
+	// init partial order params
+	if v.PrefixCol != nil {
+		t.RankInfo.TruncateKeyExprs = make([]expression.Expression, 0, 1)
+		t.RankInfo.TruncateKeyExprs = append(t.RankInfo.TruncateKeyExprs, v.PrefixCol)
+		t.RankInfo.TruncateKeyPrefixCharCounts = make([]int, 0, 1)
+		t.RankInfo.TruncateKeyPrefixCharCounts = append(t.RankInfo.TruncateKeyPrefixCharCounts, v.PrefixLen)
+	}
 	return t
 }
 
@@ -4723,6 +4731,7 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *physicalop.PhysicalInd
 		idxCols:                    is.IdxCols,
 		colLens:                    is.IdxColLens,
 		idxPlans:                   v.IndexPlans,
+		idxPlanUnNatureOrders:      v.IndexPlansUnNatureOrders,
 		tblPlans:                   v.TablePlans,
 		PushedLimit:                v.PushedLimit,
 		idxNetDataSize:             v.GetAvgTableRowSize(),

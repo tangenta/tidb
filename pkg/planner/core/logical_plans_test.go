@@ -1113,7 +1113,6 @@ func TestVisitInfo(t *testing.T) {
 			sql: "update t, (select * from t) a1 set t.a = a1.a;",
 			ans: []visitInfo{
 				{mysql.UpdatePriv, "test", "t", "a", plannererrors.ErrColumnaccessDenied.FastGenByArgs("UPDATE", "", "", "a", "t"), false, nil, false},
-				{mysql.SelectPriv, "test", "t", "a", plannererrors.ErrColumnaccessDenied.FastGenByArgs("SELECT", "", "", "a", "t"), false, nil, false},
 				{mysql.SelectPriv, "test", "t", "a", plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", "", "", "t"), false, nil, false},
 				{mysql.SelectPriv, "test", "t", "b", plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", "", "", "t"), false, nil, false},
 				{mysql.SelectPriv, "test", "t", "c", plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", "", "", "t"), false, nil, false},
@@ -1739,8 +1738,7 @@ func TestColumnPrivilegeVisitInfo(t *testing.T) {
 		{
 			sql: `SELECT * FROM (select x.a from t2 x) tt;`,
 			ans: []visitInfo{
-				{mysql.SelectPriv, "test", "t2", "a", plannererrors.ErrColumnaccessDenied.FastGenByArgs("SELECT", "", "", "a", "t2"), false, nil, false},
-				{mysql.SelectPriv, "test", "t2", "a", plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", "", "", "t2"), false, nil, false},
+				{mysql.SelectPriv, "test", "t2", "a", plannererrors.ErrColumnaccessDenied.FastGenByArgs("SELECT", "", "", "t2"), false, nil, false},
 			},
 		},
 		{

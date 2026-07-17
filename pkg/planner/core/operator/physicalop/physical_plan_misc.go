@@ -265,7 +265,7 @@ func (rf *RuntimeFilter) Assign(targetNode *PhysicalTableScan,
 }
 
 // ExplainInfo explain info of runtime filter
-func (rf *RuntimeFilter) ExplainInfo(isBuildNode bool) string {
+func (rf *RuntimeFilter) ExplainInfo(isBuildNode bool, ctx expression.EvalContext) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "%d[%s]", rf.id, rf.rfType)
 	if isBuildNode {
@@ -274,7 +274,7 @@ func (rf *RuntimeFilter) ExplainInfo(isBuildNode bool) string {
 			if i != 0 {
 				fmt.Fprintf(&builder, ",")
 			}
-			fmt.Fprintf(&builder, "%s", srcExpr.String())
+			fmt.Fprintf(&builder, "%s", srcExpr.ExplainInfo(ctx))
 		}
 	} else {
 		fmt.Fprintf(&builder, " -> ")
@@ -282,7 +282,7 @@ func (rf *RuntimeFilter) ExplainInfo(isBuildNode bool) string {
 			if i != 0 {
 				fmt.Fprintf(&builder, ",")
 			}
-			fmt.Fprintf(&builder, "%s", targetExpr.String())
+			fmt.Fprintf(&builder, "%s", targetExpr.ExplainInfo(ctx))
 		}
 	}
 	return builder.String()

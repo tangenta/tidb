@@ -414,7 +414,7 @@ func main() {
 		executor.Stop()
 		close(exited)
 	})
-	topsql.SetupTopProfiling(keyspace.GetKeyspaceNameBytesBySettings(), svr)
+	topsql.SetupTopProfiling(keyspace.GetKeyspaceNameBytesBySettings(), svr, dom)
 	terror.MustNil(svr.Run(dom))
 	<-exited
 	syncLog()
@@ -1101,10 +1101,10 @@ func cleanup(svr *server.Server, storage kv.Storage, dom *domain.Domain) {
 	svr.KillSysProcesses()
 	plugin.Shutdown(context.Background())
 	repository.StopRepository()
+	topsql.Close()
 	closeDDLOwnerMgrDomainAndStorage(storage, dom)
 	disk.CleanUp()
 	closeStmtSummary()
-	topsql.Close()
 	cgmon.StopCgroupMonitor()
 }
 

@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
+	"github.com/pingcap/tidb/pkg/dxf/framework/handle"
 	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
 	llog "github.com/pingcap/tidb/pkg/lightning/log"
 	"github.com/pingcap/tidb/pkg/util/intest"
@@ -39,7 +40,8 @@ var (
 // NodeManager maintains live TiDB nodes in the cluster, and maintains the nodes
 // managed by the framework.
 type NodeManager struct {
-	logger *zap.Logger
+	logger       *zap.Logger
+	sampleLogger *zap.Logger
 	// prevLiveNodes is used to record the live nodes in last checking.
 	prevLiveNodes map[string]struct{}
 	// nodes is the cached nodes managed by the framework.
@@ -49,11 +51,14 @@ type NodeManager struct {
 
 func newNodeManager(serverID string) *NodeManager {
 	logger := logutil.ErrVerboseLogger()
+	sampleLogger := handle.NewSampleErrVerboseLogger()
 	if intest.InTest {
 		logger = logger.With(zap.String("server-id", serverID))
+		sampleLogger = sampleLogger.With(zap.String("server-id", serverID))
 	}
 	nm := &NodeManager{
 		logger:        logger,
+		sampleLogger:  sampleLogger,
 		prevLiveNodes: make(map[string]struct{}),
 	}
 	nodes := make([]proto.ManagedNode, 0, 10)
@@ -81,7 +86,7 @@ func (nm *NodeManager) maintainLiveNodes(ctx context.Context, taskMgr TaskManage
 	// Safe to discard errors since this function can be called at regular intervals.
 	liveExecIDs, err := GetLiveExecIDs(ctx)
 	if err != nil {
-		nm.logger.Warn("generate task executor nodes met error", llog.ShortError(err))
+		nm.sampleLogger.Warn("generate task executor nodes met error", llog.ShortError(err))
 		return
 	}
 	nodeChanged := len(liveExecIDs) != len(nm.prevLiveNodes)
@@ -98,7 +103,7 @@ func (nm *NodeManager) maintainLiveNodes(ctx context.Context, taskMgr TaskManage
 
 	oldNodes, err := taskMgr.GetAllNodes(ctx)
 	if err != nil {
-		nm.logger.Warn("get all nodes met error", llog.ShortError(err))
+		nm.sampleLogger.Warn("get all nodes met error", llog.ShortError(err))
 		return
 	}
 
@@ -144,7 +149,7 @@ func (nm *NodeManager) refreshNodes(ctx context.Context, taskMgr TaskManager, sl
 	defer r.End()
 	newNodes, err := taskMgr.GetAllNodes(ctx)
 	if err != nil {
-		nm.logger.Warn("get managed nodes met error", llog.ShortError(err))
+		nm.sampleLogger.Warn("get managed nodes met error", llog.ShortError(err))
 		return
 	}
 

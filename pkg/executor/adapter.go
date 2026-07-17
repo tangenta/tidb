@@ -1703,6 +1703,7 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	a.checkPlanReplayerCapture(txnTS)
 
 	sessVars := a.Ctx.GetSessionVars()
+	sessVars.StmtCtx.ExecRetryCount += uint64(a.retryCount)
 	execDetail := sessVars.StmtCtx.GetExecDetails()
 	// Attach commit/lockKeys runtime stats to executor runtime stats.
 	if (execDetail.CommitDetail != nil || execDetail.LockKeysDetail != nil || execDetail.SharedLockKeysDetail != nil) && sessVars.StmtCtx.RuntimeStatsColl != nil {
@@ -1840,7 +1841,6 @@ func recordInsertRows2Metrics(sessVars *variable.SessionVars) {
 		return
 	}
 
-	metrics.RUV2ExecutorL5InsertRows.Add(float64(affectedRows))
 	if sessVars.RUV2Metrics != nil {
 		sessVars.RUV2Metrics.AddExecutorL5InsertRows(int64(affectedRows))
 	}
@@ -1849,7 +1849,7 @@ func recordInsertRows2Metrics(sessVars *variable.SessionVars) {
 
 func (a *ExecStmt) finalizeStatementRUV2Metrics() {
 	sessVars := a.Ctx.GetSessionVars()
-	if sessVars.RUV2Metrics == nil {
+	if sessVars.RUV2Metrics == nil || sessVars.RUV2Metrics.Bypass() {
 		return
 	}
 
@@ -1999,7 +1999,6 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 		}
 
 		sessVars.StmtCtx.ExecSuccess = succ
-		sessVars.StmtCtx.ExecRetryCount = uint64(a.retryCount)
 		globalRules := vardef.GlobalSlowLogRules.Load()
 		slowItems = PrepareSlowLogItemsForRules(a.GoCtx, globalRules, sessVars)
 		// EffectiveFields is not empty (unique fields for this session including global rules),
@@ -2474,8 +2473,14 @@ func (a *ExecStmt) observeStmtBeginForTopProfiling(ctx context.Context) context.
 		}
 		if topRU {
 			beginInfo.Ctx = a.GoCtx
+			beginInfo.RUV2Metrics = vars.RUV2Metrics
+			beginInfo.RUV2Weights = vars.RUV2Weights()
 			if vars.User != nil {
 				beginInfo.User = vars.User.String()
+			}
+			beginInfo.RUVersion = stmtstats.DefaultRUVersion()
+			if do := domain.GetDomain(a.Ctx); do != nil {
+				beginInfo.RUVersion = stmtstats.NormalizeRUVersion(do.GetRUVersion())
 			}
 		}
 	}
