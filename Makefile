@@ -53,7 +53,7 @@ precheck: fmt bazel_prepare
 .PHONY: check
 # disable license check
 check: ## Run comprehensive code quality checks
-check: parser_yacc check-parallel lint tidy testSuite errdoc
+check: fmt parser_yacc check-parallel lint tidy testSuite errdoc
 
 .PHONY: fmt
 fmt: ## Format Go code using gofmt
