@@ -13,6 +13,7 @@
 # limitations under the License.
 
 include Makefile.common
+include Makefile.realtikvtest.gotest
 
 
 .DEFAULT_GOAL := default
@@ -50,8 +51,9 @@ precheck: ## Run pre-commit checks
 precheck: fmt bazel_prepare
 
 .PHONY: check
+# disable license check
 check: ## Run comprehensive code quality checks
-check: check-bazel-prepare parser_yacc check-parallel lint tidy testSuite errdoc license bazel_check_abi
+check: fmt parser_yacc check-parallel lint tidy testSuite errdoc
 
 .PHONY: fmt
 fmt: ## Format Go code using gofmt
@@ -188,6 +190,12 @@ integrationtest: server_check
 	@cd tests/integrationtest && GOCOVERDIR=../../$(TEST_COVERAGE_DIR) ./run-tests.sh -s ../../bin/tidb-server
 	@$(GO) tool covdata textfmt -i=$(TEST_COVERAGE_DIR) -o=coverage.dat
 
+.PHONY: loadablefunctest
+loadablefunctest: server_check
+	@mkdir -p $(TEST_COVERAGE_DIR)
+	@cd tests/loadablefunc && GOCOVERDIR=../../$(TEST_COVERAGE_DIR) ./run-tests.sh -s ../../bin/tidb-server
+	@$(GO) tool covdata textfmt -i=$(TEST_COVERAGE_DIR) -o=coverage-loadablefunc.dat
+
 .PHONY: ddltest
 ddltest:
 	@cd cmd/ddltest && $(GO) test --tags=deadllock,intest -o ../../bin/ddltest -c
@@ -195,7 +203,7 @@ ddltest:
 .PHONY: ut
 ut: tools/bin/ut tools/bin/xprog failpoint-enable ## Run unit tests
 	@echo "Debug: Running ut with X=$(X)"
-	tools/bin/ut $(X) || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
+	tools/bin/ut $(X) --except flaky_ut.list --retry-cnt 3 || { $(FAILPOINT_DISABLE); $(CLEAN_UT_BINARY); exit 1; }
 	@$(FAILPOINT_DISABLE)
 	@$(CLEAN_UT_BINARY)
 

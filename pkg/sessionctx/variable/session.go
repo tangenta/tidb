@@ -29,9 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/executor/join/joinversion"
 	"github.com/pingcap/tidb/pkg/infoschema/issyncer/mdldef"
@@ -755,6 +757,7 @@ func (s *UserVars) Clone() UserVarsReader {
 
 // SetUserVarVal set user defined variables' value
 func (s *UserVars) SetUserVarVal(name string, dt types.Datum) {
+	name = strings.ToLower(name)
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.values[name] = dt
@@ -771,6 +774,7 @@ func (s *UserVars) UnsetUserVar(varName string) {
 
 // GetUserVarVal get user defined variables' value
 func (s *UserVars) GetUserVarVal(name string) (types.Datum, bool) {
+	name = strings.ToLower(name)
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	dt, ok := s.values[name]
@@ -779,6 +783,7 @@ func (s *UserVars) GetUserVarVal(name string) (types.Datum, bool) {
 
 // SetUserVarType set user defined variables' type
 func (s *UserVars) SetUserVarType(name string, ft *types.FieldType) {
+	name = strings.ToLower(name)
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.types[name] = ft
@@ -786,6 +791,7 @@ func (s *UserVars) SetUserVarType(name string, ft *types.FieldType) {
 
 // GetUserVarType get user defined variables' type
 func (s *UserVars) GetUserVarType(name string) (*types.FieldType, bool) {
+	name = strings.ToLower(name)
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	ft, ok := s.types[name]
@@ -811,6 +817,7 @@ type SessionVars struct {
 	MemQuota
 	BatchSize
 	PipelinedDMLConfig
+	pkdbSessionVars
 	// DMLBatchSize indicates the number of rows batch-committed for a statement.
 	// It will be used when using LOAD DATA or BatchInsert or BatchDelete is on.
 	DMLBatchSize        int
@@ -877,6 +884,9 @@ type SessionVars struct {
 	// TLSConnectionState is the TLS connection state (nil if not using TLS).
 	TLSConnectionState *tls.ConnectionState
 
+	// TLCPConnectionState is the TLCP connection state (nil if not using TLCP).
+	TLCPConnectionState *tlcp.ConnectionState
+
 	// ConnectionID is the connection id of the current session.
 	ConnectionID uint64
 
@@ -903,6 +913,10 @@ type SessionVars struct {
 
 	// CurrentDB is the default database of this session.
 	CurrentDB string
+
+	// CurrentDBCI is the CIStr version of CurrentDB.
+	// TODO(lower_case_table_names): remove CurrentDB and only use this.
+	CurrentDBCI ast.CIStr
 
 	// CurrentDBChanged indicates if the CurrentDB has been updated, and if it is we should print it into
 	// the slow log to make it be compatible with MySQL, https://github.com/pingcap/tidb/issues/17846.
@@ -1819,6 +1833,18 @@ type SessionVars struct {
 	// OptimizerFixControl control some details of the optimizer behavior through the tidb_opt_fix_control variable.
 	OptimizerFixControl map[uint64]string
 
+	// in call procedure status
+	inCallProcedure struct {
+		inCall bool
+		num    int
+	}
+
+	// procedureContext indicates current procedure environment variable
+	procedureContext sessionProcedureContext
+	// storedRoutineEvalGuard serializes concurrent stored routine evaluation on the same
+	// session while allowing nested calls in the same goroutine to re-enter.
+	storedRoutineEvalGuard storedRoutineEvalGuard
+
 	// FastCheckTable is used to control whether fast check table is enabled.
 	FastCheckTable bool
 
@@ -1894,6 +1920,24 @@ type SessionVars struct {
 
 	// BulkDMLEnabled indicates whether to enable bulk DML in pipelined mode.
 	BulkDMLEnabled bool
+
+	// database name +"."+procedure_name as key , *RoutineCacahe as value.
+	ProcedurePlanCache map[string]any
+	// LastProcedureErrorStr is used to save last handler command.
+	LastProcedureErrorStr string
+	// MaxSpRecursionDepth indicates how many recursions are allowed in a stored procedure
+	MaxSpRecursionDepth int
+	// ReplaceAbleUserDefVars indicates whether to replace user defined variables in the sql.
+	ReplaceAbleUserDefVars map[string]struct{}
+	// EnableUDVSubstitute indicates whether to enable user defined variable substitute,
+	// it takes effect both in general sql and stored procedures.
+	EnableUDVSubstitute bool
+	// EnableSPParamSubstitute indicate whether to enable stored procedure parameter substitute, it is only used to control
+	// the replacement of parameters (in, out, inout) in stored procedures.
+	EnableSPParamSubstitute bool
+	// EnableSPPlanCache indicates whether to enable the stored-routine hidden prepared plan-cache path
+	// and the related compatibility behavior added for it.
+	EnableSPPlanCache bool
 
 	// InternalSQLScanUserTable indicates whether to use user table for internal SQL. it will be used by TTL scan
 	InternalSQLScanUserTable bool
@@ -2332,6 +2376,7 @@ type ConnectionInfo struct {
 	DB                string
 	AuthMethod        string
 	Attributes        map[string]string
+	IPInWhiteList     bool
 }
 
 const (
@@ -2500,6 +2545,11 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 		IndexLookUpPushDownPolicy:        vardef.DefTiDBIndexLookUpPushDownPolicy,
 		OptPartialOrderedIndexForTopN:    vardef.DefTiDBOptPartialOrderedIndexForTopN,
 		EnableCachePrepareStmt:           vardef.DefEnableCachePrepareStmt,
+		inCallProcedure: struct {
+			inCall bool
+			num    int
+		}{inCall: false, num: 0},
+		ProcedurePlanCache: make(map[string]any),
 	}
 	vars.TiFlashFineGrainedShuffleBatchSize = vardef.DefTiFlashFineGrainedShuffleBatchSize
 	vars.status.Store(uint32(mysql.ServerStatusAutocommit))
@@ -2545,6 +2595,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 	vars.TiFlashQuerySpillRatio = vardef.DefTiFlashQuerySpillRatio
 	vars.TiFlashHashJoinVersion = vardef.DefTiFlashHashJoinVersion
 	vars.MPPStoreFailTTL = vardef.DefTiDBMPPStoreFailTTL
+	vars.EnableSPPlanCache = vardef.DefTiDBEnableSPPlanCache
 	vars.DiskTracker = disk.NewTracker(memory.LabelForSession, -1)
 	vars.MemTracker = memory.NewTracker(memory.LabelForSession, vars.MemQuotaQuery)
 	vars.MemTracker.IsRootTrackerOfSess = true
@@ -2738,7 +2789,6 @@ func (s *SessionVars) GetParseParams() []parser.ParseParam {
 
 // SetStringUserVar set the value and collation for user defined variable.
 func (s *SessionVars) SetStringUserVar(name string, strVal string, collation string) {
-	name = strings.ToLower(name)
 	if len(collation) > 0 {
 		s.SetUserVarVal(name, types.NewCollationStringDatum(stringutil.Copy(strVal), collation))
 	} else {
@@ -2854,6 +2904,17 @@ func (s *SessionVars) SetTxnIsolationLevelOneShotStateForNextTxn() {
 			isoLevelOneShot.value = ""
 		}
 	}
+}
+
+// TakeIsolationLevelOneShotInTxn takes the isoLevelOneShot value in transaction.
+func (s *SessionVars) TakeIsolationLevelOneShotInTxn() string {
+	if isoLevelOneShot := &s.txnIsolationLevelOneShot; isoLevelOneShot.state == oneShotSet {
+		isolation := isoLevelOneShot.value
+		isoLevelOneShot.value = ""
+		isoLevelOneShot.state = oneShotDef
+		return isolation
+	}
+	return ""
 }
 
 // IsPessimisticReadConsistency if true it means the statement is in a read consistency pessimistic transaction.
@@ -3192,6 +3253,7 @@ func (s *SessionVars) EncodeSessionStates(_ context.Context, sessionStates *sess
 	// Encode other session contexts.
 	sessionStates.PreparedStmtID = s.preparedStmtID
 	sessionStates.Status = s.status.Load()
+	// TODO(lower_case_table_names): use model.CIStr to store database name.
 	sessionStates.CurrentDB = s.CurrentDB
 	sessionStates.LastTxnInfo = s.LastTxnInfo
 	if s.LastQueryInfo.StartTS != 0 {
@@ -3227,7 +3289,9 @@ func (s *SessionVars) DecodeSessionStates(_ context.Context, sessionStates *sess
 	// Decode other session contexts.
 	s.preparedStmtID = sessionStates.PreparedStmtID
 	s.status.Store(sessionStates.Status)
+	// TODO(lower_case_table_names): use model.CIStr to store database name.
 	s.CurrentDB = sessionStates.CurrentDB
+	s.CurrentDBCI = ast.NewCIStr(sessionStates.CurrentDB)
 	s.LastTxnInfo = sessionStates.LastTxnInfo
 	if sessionStates.LastQueryInfo != nil {
 		s.LastQueryInfo = *sessionStates.LastQueryInfo
@@ -3256,6 +3320,11 @@ func (s *SessionVars) SetResourceGroupName(groupName string) {
 		metrics.ConnGauge.WithLabelValues(groupName).Inc()
 	}
 	s.ResourceGroupName = groupName
+}
+
+// GetCallProcedure get procedure flag.
+func (s *SessionVars) GetCallProcedure() bool {
+	return s.inCallProcedure.inCall
 }
 
 // TableDelta stands for the changed count for one table or partition.
@@ -3929,6 +3998,50 @@ func (s *SessionVars) PessimisticLockEligible() bool {
 		return true
 	}
 	return false
+}
+
+// SetInCallProcedure set in procedure flag.
+func (s *SessionVars) SetInCallProcedure() {
+	if !s.inCallProcedure.inCall {
+		s.inCallProcedure.inCall = true
+	}
+	s.inCallProcedure.num++
+}
+
+// InOtherCall in other procedure.
+func (s *SessionVars) InOtherCall() bool {
+	return s.inCallProcedure.num >= 2
+}
+
+// OutCallProcedure out of procedure.
+func (s *SessionVars) OutCallProcedure(clearStmtCtx bool) {
+	s.inCallProcedure.num--
+	if s.inCallProcedure.num <= 0 {
+		s.inCallProcedure.inCall = false
+		//clear all BackupStmtCtxes
+		if clearStmtCtx {
+			for i := range s.procedureContext.BackupStmtCtx {
+				s.procedureContext.BackupStmtCtx[i] = nil
+			}
+			s.procedureContext.BackupStmtCtx = s.procedureContext.BackupStmtCtx[:0]
+		}
+		if len(s.procedureContext.BackupStmtCtx) != 0 {
+			log.Error("procedure unclear backup stmtctx", zap.String("SQL", s.StmtCtx.OriginalSQL))
+		}
+		if len(s.ProcedurePlanCache) > int(vardef.StoredProgramCacheSize.Load()) {
+			for k := range s.ProcedurePlanCache {
+				delete(s.ProcedurePlanCache, k)
+			}
+		}
+	}
+}
+
+// GetProcedureContext get procedure environment variables.
+func (s *SessionVars) GetProcedureContext() *sessionProcedureContext {
+	if !s.inCallProcedure.inCall {
+		return nil
+	}
+	return &s.procedureContext
 }
 
 // RemoveLockDDLJobs removes the DDL jobs which doesn't get the metadata lock from jobs.

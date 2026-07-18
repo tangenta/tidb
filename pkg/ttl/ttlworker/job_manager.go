@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	infoschemacontext "github.com/pingcap/tidb/pkg/infoschema/context"
 	"github.com/pingcap/tidb/pkg/kv"
@@ -213,6 +214,8 @@ func (m *JobManager) jobLoopWithSession(se session.Session) (err error) {
 			cancel()
 		}
 		lastLeaderState = currentLeaderState
+
+		pkdbrepl.CheckStandbyBlocking(m.ctx)
 
 		select {
 		// misc

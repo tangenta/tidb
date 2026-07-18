@@ -17,13 +17,17 @@ package column
 import (
 	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/pingcap/tidb/pkg/format/textrow"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/server/err"
 	"github.com/pingcap/tidb/pkg/server/internal/dump"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/encrypt"
 	"github.com/pingcap/tidb/pkg/util/hack"
 )
 
@@ -42,6 +46,8 @@ type Info struct {
 	Flag         uint16
 	Decimal      uint8
 	Type         uint8
+	SubType      uint8
+	Encryption   bool
 }
 
 // Dump dumps Info to bytes.
@@ -75,7 +81,11 @@ func (column *Info) dump(buffer []byte, d *textrow.ResultEncoder, withDefault bo
 	buffer = append(buffer, 0x0c)
 	buffer = dump.Uint16(buffer, d.ColumnCharsetID(column.dumpCharset(), textrow.IsStringColumnType(column.Type)))
 	buffer = dump.Uint32(buffer, column.dumpLength())
-	buffer = append(buffer, dumpType(column.Type))
+	if column.Encryption && vardef.EnableEAL.Load() {
+		buffer = append(buffer, dumpType(mysql.TypeVarString))
+	} else {
+		buffer = append(buffer, dumpType(column.Type))
+	}
 	buffer = dump.Uint16(buffer, DumpFlag(column.Type, column.Flag))
 	buffer = append(buffer, column.Decimal)
 	buffer = append(buffer, 0, 0)
@@ -145,10 +155,75 @@ func dumpType(tp byte) byte {
 	}
 }
 
+func dumpEncyptedData(d *textrow.ResultEncoder, col *Info, i int, row chunk.Row) ([]byte, bool) {
+	if !col.Encryption || !vardef.EnableEAL.Load() {
+		return nil, false
+	}
+	tmp := make([]byte, 0, 20)
+	switch col.Type {
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
+		tmp = strconv.AppendInt(tmp[:0], row.GetInt64(i), 10)
+	case mysql.TypeYear:
+		year := row.GetInt64(i)
+		tmp = tmp[:0]
+		if year == 0 {
+			tmp = append(tmp, '0', '0', '0', '0')
+		} else {
+			tmp = strconv.AppendInt(tmp, year, 10)
+		}
+	case mysql.TypeLonglong:
+		if mysql.HasUnsignedFlag(uint(col.Flag)) {
+			tmp = strconv.AppendUint(tmp[:0], row.GetUint64(i), 10)
+		} else {
+			tmp = strconv.AppendInt(tmp[:0], row.GetInt64(i), 10)
+		}
+	case mysql.TypeFloat:
+		prec := -1
+		if col.Decimal > 0 && int(col.Decimal) != mysql.NotFixedDec && col.Table == "" {
+			prec = int(col.Decimal)
+		}
+		tmp = textrow.AppendFormatFloat(tmp[:0], float64(row.GetFloat32(i)), prec, 32)
+	case mysql.TypeDouble:
+		prec := types.UnspecifiedLength
+		if col.Decimal > 0 && int(col.Decimal) != mysql.NotFixedDec && col.Table == "" {
+			prec = int(col.Decimal)
+		}
+		tmp = textrow.AppendFormatFloat(tmp[:0], row.GetFloat64(i), prec, 64)
+	case mysql.TypeNewDecimal:
+		tmp = hack.Slice(row.GetMyDecimal(i).String())
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeBit,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		d.UpdateDataEncoding(col.Charset)
+		tmp = row.GetBytes(i)
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
+		tmp = hack.Slice(row.GetTime(i).String())
+	case mysql.TypeDuration:
+		dur := row.GetDuration(i, int(col.Decimal))
+		tmp = hack.Slice(dur.String())
+	case mysql.TypeEnum:
+		d.UpdateDataEncoding(col.Charset)
+		tmp = hack.Slice(row.GetEnum(i).String())
+	case mysql.TypeSet:
+		d.UpdateDataEncoding(col.Charset)
+		tmp = hack.Slice(row.GetSet(i).String())
+	case mysql.TypeJSON:
+		d.UpdateDataEncoding(mysql.DefaultCollationID)
+		tmp = hack.Slice(row.GetJSON(i).String())
+	case mysql.TypeTiDBVectorFloat32:
+		d.UpdateDataEncoding(mysql.DefaultCollationID)
+		tmp = hack.Slice(row.GetVectorFloat32(i).String())
+	default:
+		return nil, false
+	}
+	tmp = encrypt.AESEncryptWithGCM(tmp)
+	return tmp, true
+}
+
 // toTextRow maps the serialization-relevant fields of Info onto the ColumnInfo.
 func (column *Info) toTextRow() textrow.ColumnInfo {
 	return textrow.ColumnInfo{
 		Type:    column.Type,
+		SubType: column.SubType,
 		Charset: column.Charset,
 		Flag:    column.Flag,
 		Decimal: column.Decimal,
@@ -166,6 +241,10 @@ func DumpTextRow(buffer []byte, columns []*Info, row chunk.Row, d *textrow.Resul
 	for i, col := range columns {
 		if row.IsNull(i) {
 			buffer = append(buffer, 0xfb)
+			continue
+		}
+		if encryptedData, ok := dumpEncyptedData(d, col, i, row); ok {
+			buffer = dump.LengthEncodedString(buffer, d.EncodeData(encryptedData))
 			continue
 		}
 		val, err1 := textrow.FormatValueText(row, i, col.toTextRow(), d)
@@ -188,11 +267,15 @@ func DumpBinaryRow(buffer []byte, columns []*Info, row chunk.Row, d *textrow.Res
 	for range numBytes4Null {
 		buffer = append(buffer, 0)
 	}
-	for i := range columns {
+	for i, col := range columns {
 		if row.IsNull(i) {
 			bytePos := (i + 2) / 8
 			bitPos := byte((i + 2) % 8)
 			buffer[nullBitmapOff+bytePos] |= 1 << bitPos
+			continue
+		}
+		if encryptedData, ok := dumpEncyptedData(d, col, i, row); ok {
+			buffer = dump.LengthEncodedString(buffer, d.EncodeData(encryptedData))
 			continue
 		}
 		switch columns[i].Type {

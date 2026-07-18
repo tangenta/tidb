@@ -717,6 +717,13 @@ SELECT t84.c0 FROM t84 NATURAL RIGHT JOIN t0 WHERE true GROUP BY NULL HAVING (t8
 		tk.MustHavePlan("select a from t where a=@A", "IndexRangeScan")
 	}
 
+	// Regression test for user-variable assignment inside scalar subquery with aggregate.
+	{
+		tk := prepareSharedTestKit(t)
+		tk.MustQuery("select (select sum(1))").Check(testkit.Rows("1"))
+		tk.MustQuery("select (select @a:=sum(1))").Check(testkit.Rows("1"))
+	}
+
 	// plan-cache-explain-for-connection
 	{
 		tk := prepareSharedTestKit(t)

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/dxf/framework/handle"
 	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
 	llog "github.com/pingcap/tidb/pkg/lightning/log"
@@ -73,6 +74,7 @@ func (nm *NodeManager) maintainLiveNodesLoop(ctx context.Context, taskMgr TaskMa
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			pkdbrepl.CheckStandbyBlocking(ctx)
 			nm.maintainLiveNodes(ctx, taskMgr)
 		}
 	}

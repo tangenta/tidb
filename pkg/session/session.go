@@ -39,6 +39,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -52,6 +53,7 @@ import (
 	distsqlctx "github.com/pingcap/tidb/pkg/distsql/context"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/domain/infosync"
+	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/domain/sqlsvrapi"
 	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
 	"github.com/pingcap/tidb/pkg/dxf/framework/scheduler"
@@ -157,6 +159,9 @@ func init() {
 	executor.CreateSession = func(ctx sessionctx.Context) (sessionctx.Context, error) {
 		return CreateSession(ctx.GetStore())
 	}
+	executor.CreateSessionWithStore = func(store kv.Storage) (sessionctx.Context, error) {
+		return CreateSession(store)
+	}
 	executor.CloseSession = func(ctx sessionctx.Context) {
 		if se, ok := ctx.(sessionapi.Session); ok {
 			se.Close()
@@ -261,11 +266,18 @@ type session struct {
 
 	// Used to wait for all async commit background jobs to finish.
 	commitWaitGroup sync.WaitGroup
+
+	writeResultset sessionctx.SessionExec
 }
 
 // GetTraceCtx returns the trace context of the session.
 func (s *session) GetTraceCtx() context.Context {
 	return s.currentCtx
+}
+
+// SetTraceCtx updates the trace context of the session.
+func (s *session) SetTraceCtx(ctx context.Context) {
+	s.currentCtx = ctx
 }
 
 // AddTableLock adds table lock to the session lock map.
@@ -406,6 +418,13 @@ func (s *session) SetTLSState(tlsState *tls.ConnectionState) {
 	}
 }
 
+func (s *session) SetTLCPState(tlcpState *tlcp.ConnectionState) {
+	// If user is not connected via TLS, then tlsState == nil.
+	if tlcpState != nil {
+		s.sessionVars.TLCPConnectionState = tlcpState
+	}
+}
+
 func (s *session) SetCompressionAlgorithm(ca int) {
 	s.sessionVars.CompressionAlgorithm = ca
 }
@@ -468,13 +487,7 @@ func (s *session) FieldList(tableName string) ([]*resolve.ResultField, error) {
 	pm := privilege.GetPrivilegeManager(s)
 	if pm != nil && s.sessionVars.User != nil {
 		if !pm.RequestVerification(s.sessionVars.ActiveRoles, dbName.O, tName.O, "", mysql.AllPrivMask) {
-			user := s.sessionVars.User
-			u := user.Username
-			h := user.Hostname
-			if len(user.AuthUsername) > 0 && len(user.AuthHostname) > 0 {
-				u = user.AuthUsername
-				h = user.AuthHostname
-			}
+			u, h := auth.GetUserAndHostName(s.sessionVars.User)
 			return nil, plannererrors.ErrTableaccessDenied.GenWithStackByArgs("SELECT", u, h, tableName)
 		}
 	}
@@ -989,7 +1002,7 @@ func (s *session) CommitTxn(ctx context.Context) error {
 	ctx = context.WithValue(ctx, tikvutil.CommitDetailCtxKey, &commitDetail)
 	err := s.doCommitWithRetry(ctx)
 	if commitDetail != nil {
-		s.sessionVars.StmtCtx.MergeExecDetails(commitDetail)
+		s.sessionVars.StmtCtx.MergeExecDetails(nil, commitDetail)
 	}
 
 	if err == nil && s.txn.lastCommitTS > 0 {
@@ -1713,6 +1726,10 @@ func (s *session) ParseSQL(ctx context.Context, sql string, params ...parser.Par
 
 	defer tracing.StartRegion(ctx, "ParseSQL").End()
 	p := parserutil.GetParser()
+	if s.sessionVars.GetCallProcedure() {
+		p.InProcedure()
+		defer p.OutProcedure()
+	}
 	defer func() {
 		parserutil.DestroyParser(p)
 	}()
@@ -2459,6 +2476,10 @@ func (s *session) executeStmtImpl(ctx context.Context, stmtNode ast.StmtNode) (s
 	}
 
 	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
+		if preparedCore, ok := execStmt.PrepStmt.(*plannercore.PlanCacheStmt); ok {
+			preparedCore.InUse = true
+			defer func() { preparedCore.InUse = false }()
+		}
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
 			args, err := expression.ExecBinaryParam(s.GetSessionVars().StmtCtx.TypeCtx(), binParam)
 			if err != nil {
@@ -2818,7 +2839,7 @@ func (s *session) validateStatementInTxn(stmtNode ast.StmtNode) error {
 
 func (s *session) validateStatementReadOnlyInStaleness(stmtNode ast.StmtNode) error {
 	vars := s.GetSessionVars()
-	if !vars.TxnCtx.IsStaleness && vars.TxnReadTS.PeakTxnReadTS() == 0 && !vars.EnableExternalTSRead || vars.InRestrictedSQL {
+	if !vars.TxnCtx.IsStaleness && vars.TxnReadTS.PeakTxnReadTS() == 0 && !vars.EnableExternalTSRead && !pkdbrepl.IsStandbyMode() || vars.InRestrictedSQL {
 		return nil
 	}
 	errMsg := "only support read-only statement during read-only staleness transactions"
@@ -3655,6 +3676,11 @@ func (s *session) Auth(user *auth.UserIdentity, authentication, salt []byte, aut
 			return err
 		}
 		if lockStatusChanged {
+			s.extensions.OnConnectionEvent(extension.ConnConnected, &extension.ConnEventInfo{
+				ConnectionInfo: s.sessionVars.ConnectionInfo,
+				ActiveRoles:    s.sessionVars.ActiveRoles,
+				Info:           fmt.Sprintf("lock %s@%s for consecutive incorrect password", authUser.Username, authUser.Hostname),
+			})
 			// Notification auto unlock.
 			err = domain.GetDomain(s).NotifyUpdatePrivilege([]string{authUser.Username})
 			if err != nil {
@@ -3803,6 +3829,11 @@ func verifyAccountAutoLock(s *session, user, host string) (bool, error) {
 		// Generate unlock json string.
 		plJSON = privileges.BuildPasswordLockingJSON(pl.FailedLoginAttempts,
 			pl.PasswordLockTimeDays, "N", 0, time.Now().Format(time.UnixDate))
+		s.GetExtensions().OnConnectionEvent(extension.ConnConnected, &extension.ConnEventInfo{
+			ConnectionInfo: s.sessionVars.ConnectionInfo,
+			ActiveRoles:    s.sessionVars.ActiveRoles,
+			Info:           fmt.Sprintf("unlock %s@%s automatically", user, host),
+		})
 	}
 	if plJSON != "" {
 		lockStatusChanged = true
@@ -4104,6 +4135,27 @@ type versionedDDLTables struct {
 	tables []TableBasicInfo
 }
 
+// loadLowerCaseTableNames loads lower_case_table_names parameter from mysql.tidb.
+func loadLowerCaseTableNames(ctx context.Context, se *session) (int, error) {
+	para, err := se.getTableValue(ctx, mysql.TiDBTable, lowerCaseTableNames)
+	if err != nil {
+		return 0, err
+	}
+	switch para {
+	case "0":
+		return 0, nil
+	case "1":
+		return 1, nil
+	case "2":
+		return 2, nil
+	default:
+		logutil.BgLogger().Warn(
+			"Unexpected value of 'lower_case_table_names' in 'mysql.tidb', use '2' instead",
+			zap.String("value", para))
+		return 2, nil
+	}
+}
+
 var (
 	errResultIsEmpty = dbterror.ClassExecutor.NewStd(errno.ErrResultIsEmpty)
 	// DDLJobTables is a list of tables definitions used in concurrent DDL.
@@ -4355,6 +4407,62 @@ func InitMDLVariable(store kv.Storage) error {
 	return err
 }
 
+func executeDutySeparation(s sessionapi.Session, sql string, args ...any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(internalSQLTimeout)*time.Second)
+	ctx = kv.WithInternalSourceType(ctx, kv.InternalTxnPrivilege)
+	_, err := s.ExecuteInternal(ctx, sql, args...)
+	defer cancel()
+	if err != nil {
+		logutil.BgLogger().Fatal("failed to execute grant admin role", zap.Error(err))
+	}
+	return err
+}
+
+// GrantDutySeparation creates the 4 admin roles and grants corresponding privilege.
+func GrantDutySeparation(s sessionapi.Session) error {
+	for _, sqls := range executor.DutyRoles {
+		for _, sql := range sqls {
+			if err := executeDutySeparation(s, sql); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkAndGrantDutySeparation checks duty separation, grant it if need.
+func checkAndGrantDutySeparation(store kv.Storage) error {
+	sess, err := CreateSession(store)
+	if err != nil {
+		logutil.BgLogger().Error("failed to create session", zap.Error(err))
+		return err
+	}
+
+	// if the TiDBEnableDutySeparationMode is On already, do not need to grant duty repeatedly.
+	if vardef.EnableDutySeparationMode.Load() {
+		return nil
+	}
+
+	if err = GrantDutySeparation(sess); err != nil {
+		logutil.BgLogger().Error("failed to grant admin role", zap.Error(err))
+		return err
+	}
+
+	if err = sess.GetSessionVars().GlobalVarsAccessor.SetGlobalSysVarOnly(
+		context.TODO(),
+		vardef.TiDBEnableDutySeparationMode,
+		variable.BoolToOnOff(true),
+		true,
+	); err != nil {
+		logutil.BgLogger().Error("failed to set config", zap.String("item", vardef.TiDBEnableDutySeparationMode), zap.Error(err))
+		return err
+	}
+
+	logutil.BgLogger().Info("set duty separation successfully", zap.Bool("duty-separation", vardef.EnableDutySeparationMode.Load()))
+	return nil
+}
+
 // BootstrapSession bootstrap session and domain.
 func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 	return bootstrapSessionImpl(context.Background(), store, createSessions)
@@ -4408,6 +4516,10 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 			return nil, err
 		}
 	}
+	// Set the lower_case_table_names before bootstrap to initialze infoschema cache correctly.
+	// The validity will be checked later before reading system table mysql.tidb.
+	model.SetLowerCaseTableNamesOnBootstrap(cfg.LowerCaseTableNamesOnFirstBootstrap)
+
 	err := InitDDLTables(store)
 	if err != nil {
 		return nil, err
@@ -4416,8 +4528,10 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	if err != nil {
 		return nil, err
 	}
-	if ver < currentBootstrapVersion {
-		err = runInBootstrapSession(store, ver)
+	verEE := getStoreEEBootstrapVersionWithCache(store)
+	startMode := ddl.Normal
+	if ver < currentBootstrapVersion || verEE < currentEEBootstrapVersion {
+		startMode, err = runInBootstrapSession(store, ver, verEE)
 		if err != nil {
 			return nil, err
 		}
@@ -4458,6 +4572,18 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 			return importinto.NewImportExecutor(ctx, task, param)
 		},
 	)
+	scheduler.RegisterSchedulerFactory(
+		proto.CTAS,
+		func(ctx context.Context, task *proto.Task, param scheduler.Param) scheduler.Scheduler {
+			return executor.NewCTASScheduler(ctx, task, param)
+		},
+	)
+	taskexecutor.RegisterTaskType(
+		proto.CTAS,
+		func(ctx context.Context, task *proto.Task, param taskexecutor.Param) taskexecutor.TaskExecutor {
+			return executor.NewCTASTaskExecutor(ctx, task, param)
+		},
+	)
 
 	concurrency := config.GetGlobalConfig().Performance.StatsLoadConcurrency
 	if concurrency == 0 {
@@ -4485,6 +4611,17 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 		ses[i].GetSessionVars().InRestrictedSQL = true
 	}
 
+	lowerCaseTableNames, err := loadLowerCaseTableNames(ctx, ses[0])
+	if err != nil {
+		return nil, err
+	}
+	if cfg.LowerCaseTableNamesOnFirstBootstrap != lowerCaseTableNames {
+		return nil, fmt.Errorf("lower_case_table_names in config (%d) does not match the value in mysql.tidb (%d)", cfg.LowerCaseTableNamesOnFirstBootstrap, lowerCaseTableNames)
+	}
+	model.SetLowerCaseTableNamesOnBootstrap(lowerCaseTableNames)
+
+	infoschema.BootstrapFinishGlobalVars.Store(true)
+
 	// only start the domain after we have initialized some global variables.
 	dom := domain.GetDomain(ses[0])
 	err = dom.Start(ddl.Normal)
@@ -4498,6 +4635,13 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	if !config.GetGlobalConfig().Security.SkipGrantTable {
 		err = dom.LoadPrivilegeLoop(ses[3])
 		if err != nil {
+			return nil, err
+		}
+	}
+
+	// check TiDBEnableDutySeparationMode config and grant duty separation
+	if (startMode == ddl.Bootstrap || startMode == ddl.Upgrade) && cfg.Security.TidbEnableDutySeparationMode {
+		if err := checkAndGrantDutySeparation(store); err != nil {
 			return nil, err
 		}
 	}
@@ -4653,21 +4797,22 @@ func GetOrCreateDomainWithFilter(store kv.Storage, filter issyncer.Filter) (*dom
 }
 
 // getStartMode gets the start mode according to the bootstrap version.
-func getStartMode(ver int64) ddl.StartMode {
-	if ver == notBootstrapped {
-		return ddl.Bootstrap
-	} else if ver < currentBootstrapVersion {
-		return ddl.Upgrade
+func getStartMode(ver, verEE int64) ddl.StartMode {
+	if ver >= currentBootstrapVersion && verEE >= currentEEBootstrapVersion {
+		return ddl.Normal
 	}
-	return ddl.Normal
+	if ver == notBootstrapped && verEE == notBootstrapped {
+		return ddl.Bootstrap
+	}
+	return ddl.Upgrade
 }
 
 // runInBootstrapSession create a special session for bootstrap to run.
 // If no bootstrap and storage is remote, we must use a little lease time to
 // bootstrap quickly, after bootstrapped, we will reset the lease time.
 // TODO: Using a bootstrap tool for doing this may be better later.
-func runInBootstrapSession(store kv.Storage, ver int64) error {
-	startMode := getStartMode(ver)
+func runInBootstrapSession(store kv.Storage, ver, verEE int64) (ddl.StartMode, error) {
+	startMode := getStartMode(ver, verEE)
 	startTime := time.Now()
 	defer func() {
 		logutil.BgLogger().Info("bootstrap cluster finished",
@@ -4686,7 +4831,8 @@ func runInBootstrapSession(store kv.Storage, ver int64) error {
 		// Recheck the version and create the table under the upgrade lock so that only
 		// one TiDB can do this at a time.
 		currVer := mustGetStoreBootstrapVersion(store)
-		if currVer >= currentBootstrapVersion {
+		currEEVersion := mustGetStoreEEBootstrapVersion(store)
+		if currVer >= currentBootstrapVersion && currEEVersion >= currentEEBootstrapVersion {
 			// It is already bootstrapped/upgraded by another TiDB instance, but
 			// we still need to go through the following domain Start/Close code
 			// right now as we have already initialized it when creating the session,
@@ -4702,14 +4848,14 @@ func runInBootstrapSession(store kv.Storage, ver int64) error {
 				}
 				if shouldTerminate {
 					if intest.InTest {
-						return nil
+						return startMode, nil
 					}
 					releaseFn()
 					logutil.BgLogger().Fatal("GCV2 worker aborted before bootstrap upgrade")
 				}
 			}
 			if err := initBootstrapDependentTables(store, currVer); err != nil {
-				return errors.Trace(err)
+				return startMode, errors.Trace(err)
 			}
 		}
 	}
@@ -4753,7 +4899,7 @@ func runInBootstrapSession(store kv.Storage, ver int64) error {
 		infosync.MockGlobalServerInfoManagerEntry.Close()
 	}
 	domap.Delete(store)
-	return nil
+	return startMode, nil
 }
 
 func createSessions(store kv.Storage, cnt int) ([]*session, error) {
@@ -4917,6 +5063,22 @@ func mustGetStoreBootstrapVersion(store kv.Storage) int64 {
 	return ver
 }
 
+func mustGetStoreEEBootstrapVersion(store kv.Storage) int64 {
+	var ver int64
+	// check in kv store
+	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnBootstrap)
+	err := kv.RunInNewTxn(ctx, store, false, func(_ context.Context, txn kv.Transaction) error {
+		var err error
+		t := meta.NewMutator(txn)
+		ver, err = t.GetBootstrapEEVersion()
+		return err
+	})
+	if err != nil {
+		logutil.BgLogger().Fatal("get store bootstrap version failed", zap.Error(err))
+	}
+	return ver
+}
+
 func getStoreBootstrapVersionWithCache(store kv.Storage) int64 {
 	// check in memory
 	_, ok := store.GetOption(StoreBootstrappedKey)
@@ -4935,6 +5097,24 @@ func getStoreBootstrapVersionWithCache(store kv.Storage) int64 {
 	return ver
 }
 
+func getStoreEEBootstrapVersionWithCache(store kv.Storage) int64 {
+	// check in memory
+	_, ok := store.GetOption(StoreEEBootstrappedKey)
+	if ok {
+		return currentEEBootstrapVersion
+	}
+
+	ver := mustGetStoreEEBootstrapVersion(store)
+
+	if ver > notBootstrapped {
+		// here mean memory is not ok, but other server has already finished it
+		store.SetOption(StoreEEBootstrappedKey, true)
+	}
+
+	modifyBootstrapVersionForTest(ver)
+	return ver
+}
+
 func finishBootstrap(store kv.Storage) {
 	store.SetOption(StoreBootstrappedKey, true)
 
@@ -4942,6 +5122,10 @@ func finishBootstrap(store kv.Storage) {
 	err := kv.RunInNewTxn(ctx, store, true, func(_ context.Context, txn kv.Transaction) error {
 		t := meta.NewMutator(txn)
 		err := t.FinishBootstrap(currentBootstrapVersion)
+		if err != nil {
+			return err
+		}
+		err = t.FinishBootstrapEE(currentEEBootstrapVersion)
 		return err
 	})
 	if err != nil {
@@ -5125,7 +5309,7 @@ func (s *session) RefreshTxnCtx(ctx context.Context) error {
 	ctx = context.WithValue(ctx, tikvutil.CommitDetailCtxKey, &commitDetail)
 	err := s.doCommit(ctx)
 	if commitDetail != nil {
-		s.GetSessionVars().StmtCtx.MergeExecDetails(commitDetail)
+		s.GetSessionVars().StmtCtx.MergeExecDetails(nil, commitDetail)
 	}
 	if err != nil {
 		return err
@@ -5187,6 +5371,8 @@ func logStmt(execStmt *executor.ExecStmt, s *session) {
 		*ast.DropDatabaseStmt, *ast.DropTableStmt, *ast.RenameTableStmt, *ast.TruncateTableStmt,
 		*ast.RenameUserStmt, *ast.CreateBindingStmt, *ast.DropBindingStmt, *ast.SetBindingStmt, *ast.BRIEStmt:
 		isCrucial = true
+	case *ast.AdminStmt:
+		isCrucial = isAdminLogReplStmt(stmt.Tp)
 	}
 
 	if isCrucial {
@@ -5816,7 +6002,8 @@ func (s *session) usePipelinedDmlOrWarn(ctx context.Context) bool {
 			stmtCtx.AppendWarning(errors.New("Pipelined DML can not be used on sequence. Fallback to standard mode"))
 			return false
 		}
-		if vars.ForeignKeyChecks && (len(tbl.Meta().ForeignKeys) > 0 || len(is.GetTableReferredForeignKeys(t.DB, t.Table)) > 0) {
+		// TODO(lower_case_table_names): stmtctx.TableEntry should use CIStr for DB and Table.
+		if vars.ForeignKeyChecks && (len(tbl.Meta().ForeignKeys) > 0 || len(is.GetTableReferredForeignKeys(ast.NewCIStr(t.DB), ast.NewCIStr(t.Table))) > 0) {
 			stmtCtx.AppendWarning(
 				errors.New(
 					"Pipelined DML can not be used on table with foreign keys when foreign_key_checks = ON. Fallback to standard mode",
@@ -5890,4 +6077,12 @@ func (s *session) GetCommitWaitGroup() *sync.WaitGroup {
 // GetDomain get domain from session.
 func (s *session) GetDomain() any {
 	return s.dom
+}
+
+func (s *session) SetSessionExec(cc sessionctx.SessionExec) {
+	s.writeResultset = cc
+}
+
+func (s *session) GetSessionExec() sessionctx.SessionExec {
+	return s.writeResultset
 }

@@ -571,6 +571,11 @@ func isPlanCacheable(sctx base.PlanContext, p base.Plan, paramNum, limitParamNum
 		pp = x.SelectPlan
 	case *physicalop.Delete:
 		pp = x.SelectPlan
+	case *SelectInto:
+		if x.TargetPlan == nil {
+			return true, ""
+		}
+		return isPlanCacheable(sctx, x.TargetPlan, paramNum, limitParamNum, hasSubQuery)
 	case base.PhysicalPlan:
 		pp = x
 	default:

@@ -46,6 +46,8 @@ func IsReadOnly(node Node, checkGlobalVars bool) bool {
 		return checker.readOnly
 	case *ExplainStmt:
 		return !st.Analyze || IsReadOnly(st.Stmt, checkGlobalVars)
+	case *ExplainRoutineStmt:
+		return !st.Analyze
 	case *DoStmt, *ShowStmt:
 		return true
 	case *SetOprStmt:

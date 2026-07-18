@@ -866,8 +866,20 @@ func checkAndBuildIndexInfo(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	indexInfo.ShardIndexVersion, err = detectShardIndexVersionFromColumnInfos(args.IndexPartSpecifications, args.Unique, tblInfo.Columns)
+	if err != nil {
+		return nil, err
+	}
 	if isPK {
-		if _, err = CheckPKOnGeneratedColumn(tblInfo, args.IndexPartSpecifications); err != nil {
+		// In multi-schema change, the referenced column may be non-public at this moment
+		// (e.g. the column is added earlier in the same statement), so allow non-public
+		// columns for this specific generated-column check.
+		if job.MultiSchemaInfo != nil {
+			_, err = checkPKOnGeneratedColumnAllowNonPublic(tblInfo, args.IndexPartSpecifications)
+		} else {
+			_, err = CheckPKOnGeneratedColumn(tblInfo, args.IndexPartSpecifications)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1137,8 +1149,8 @@ func (w *worker) checkColumnarIndexProcessOnce(jobCtx *jobContext, tbl table.Tab
 	// Get and process info from multiple TiFlash nodes.
 	errMsg := ""
 	for _, row := range rows {
-		notAddedIndexCnt += row.GetInt64(0)
-		addedIndexCnt += row.GetInt64(1)
+		notAddedIndexCnt = max(notAddedIndexCnt, row.GetInt64(0))
+		addedIndexCnt = max(addedIndexCnt, row.GetInt64(1))
 		errMsg = row.GetString(2)
 		if len(errMsg) != 0 {
 			err = dbterror.ErrTiFlashBackfillIndex.FastGenByArgs(errMsg)
@@ -2266,7 +2278,7 @@ func checkDropIndex(infoCache *infoschema.InfoCache, t *meta.Mutator, job *model
 		}
 
 		// Double check for drop index needed in foreign key.
-		if err := checkIndexNeededInForeignKeyInOwner(infoCache, job, job.SchemaName, tblInfo, indexInfo); err != nil {
+		if err := checkIndexNeededInForeignKeyInOwner(infoCache, job, job.GetSchemaName(), tblInfo, indexInfo); err != nil {
 			return nil, nil, false, errors.Trace(err)
 		}
 		indexInfos = append(indexInfos, indexInfo)

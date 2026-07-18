@@ -36,10 +36,12 @@ func upgrade(s sessionapi.Session) {
 		logutil.BgLogger().Fatal("init metadata lock failed during upgrade", zap.Error(err))
 	}
 
-	var ver int64
+	var ver, verEE int64
 	ver, err = getBootstrapVersion(s)
 	terror.MustNil(err)
-	if ver >= currentBootstrapVersion {
+	verEE, err = getBootstrapEEVersion(s)
+	terror.MustNil(err)
+	if ver >= currentBootstrapVersion && verEE >= currentEEBootstrapVersion {
 		// It is already bootstrapped/upgraded by a higher version TiDB server.
 		return
 	}
@@ -63,6 +65,12 @@ func upgrade(s sessionapi.Session) {
 				zap.Int64("target-version", currentBootstrapVersion))
 		}
 	}
+	for _, upgrade := range bootstrapEEVersion {
+		upgrade(s, verEE)
+	}
+	for _, upgrade := range bootstrapEEVersion {
+		upgrade(s, verEE)
+	}
 	if isNull {
 		upgradeToVer99After(s)
 	}
@@ -81,13 +89,39 @@ func upgrade(s sessionapi.Session) {
 		if err1 != nil {
 			logutil.BgLogger().Fatal("upgrade failed", zap.Error(err1))
 		}
-		if v >= currentBootstrapVersion {
+		vEE, err1 := getBootstrapEEVersion(s)
+		if err1 != nil {
+			logutil.BgLogger().Fatal("upgrade failed", zap.Error(err1))
+		}
+		if v >= currentBootstrapVersion && vEE >= currentEEBootstrapVersion {
 			// It is already bootstrapped/upgraded by a higher version TiDB server.
 			return
 		}
 		logutil.BgLogger().Fatal("[upgrade] upgrade failed",
 			zap.Int64("from", ver),
 			zap.Int64("to", currentBootstrapVersion),
+			zap.Error(err))
+	}
+
+	updateEEBootstrapVer(s)
+	_, err = s.ExecuteInternal(ctx, "COMMIT")
+	if err != nil {
+		sleepTime := 1 * time.Second
+		logutil.BgLogger().Info("update ee bootstrap ver failed",
+			zap.Error(err), zap.Duration("sleeping time", sleepTime))
+		time.Sleep(sleepTime)
+		// Check if TiDB is already upgraded.
+		vEE, err1 := getBootstrapEEVersion(s)
+		if err1 != nil {
+			logutil.BgLogger().Fatal("upgrade enterprise edition failed", zap.Error(err1))
+		}
+		if vEE >= currentEEBootstrapVersion {
+			// It is already bootstrapped/upgraded by a higher version TiDB server.
+			return
+		}
+		logutil.BgLogger().Fatal("[upgrade enterprise edition] upgrade failed",
+			zap.Int64("from", verEE),
+			zap.Int64("to", currentEEBootstrapVersion),
 			zap.Error(err))
 	}
 }

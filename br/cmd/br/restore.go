@@ -33,14 +33,18 @@ func runRestoreCommand(command *cobra.Command, cmdName string) error {
 		return errors.Trace(err)
 	}
 
-	if err := metricsutil.RegisterMetricsForBR(cfg.PD, cfg.TLS, cfg.KeyspaceName); err != nil {
-		return errors.Trace(err)
-	}
-
 	if task.IsStreamRestore(cmdName) {
 		if err := cfg.ParseStreamRestoreFlags(command.Flags()); err != nil {
 			return errors.Trace(err)
 		}
+	} else if cfg.FullBackupType != task.FullBackupTypeEBS && cfg.FullBackupType != task.FullBackupTypeIDC {
+		if err := autoDetectKeyspaceName(GetDefaultContext(), &cfg.Config); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if err := metricsutil.RegisterMetricsForBR(cfg.PD, cfg.TLS, cfg.KeyspaceName); err != nil {
+		return errors.Trace(err)
 	}
 
 	// have to skip grant table, in order to NotifyUpdatePrivilege in binary mode
@@ -79,6 +83,14 @@ func runRestoreCommand(command *cobra.Command, cmdName string) error {
 	// Disable the memory limit tuner. That's because the server memory is get from TiDB node instead of BR node.
 	gctuner.GlobalMemoryLimitTuner.DisableAdjustMemoryLimit()
 	defer gctuner.GlobalMemoryLimitTuner.EnableAdjustMemoryLimit()
+	// adaptation of idc volume snapshot restore
+	if cfg.FullBackupType == task.FullBackupTypeIDC {
+		if err := task.RunResolveKvData(GetDefaultContext(), tidbGlue, cmdName, &cfg); err != nil {
+			log.Error("failed to restore data", zap.Error(err))
+			return errors.Trace(err)
+		}
+		return nil
+	}
 
 	if len(cfg.Schemas) > 0 {
 		extraDBNames := make([]string, 0, len(cfg.Schemas))

@@ -597,10 +597,18 @@ aes_decrypt
 aes_encrypt
 and
 any_value
+array_element
 ascii
 asin
 atan
 atan2
+audit_log_create_filter
+audit_log_create_rule
+audit_log_disable_rule
+audit_log_enable_rule
+audit_log_remove_filter
+audit_log_remove_rule
+audit_log_rotate
 benchmark
 bin
 bin_to_uuid
@@ -620,6 +628,7 @@ charset
 coalesce
 coercibility
 collation
+column_decryption
 compress
 concat
 concat_ws
@@ -638,6 +647,7 @@ current_time
 current_timestamp
 current_user
 curtime
+data_operation_audit
 database
 date
 date_add
@@ -659,6 +669,7 @@ eq
 exp
 export_set
 extract
+extractvalue
 field
 find_in_set
 floor
@@ -729,9 +740,11 @@ json_storage_size
 json_type
 json_unquote
 json_valid
+label_accessible
 last_day
 last_insert_id
 lastval
+lbac_dominates
 lcase
 le
 least
@@ -805,6 +818,8 @@ rpad
 rtrim
 schema
 sec_to_time
+seclabel
+seclabel_to_char
 second
 session_user
 setval

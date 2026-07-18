@@ -916,6 +916,8 @@ type VarAssignment struct {
 	IsInstance  bool
 	IsSystem    bool
 	ExtendValue *Constant
+	// can be a sp variable
+	CanSPVariable bool
 }
 
 // splitNormalFormItems split CNF(conjunctive normal form) like "a and b and c", or DNF(disjunctive normal form) like "a or b or c"
@@ -1159,10 +1161,7 @@ func ColumnInfos2ColumnsAndNamesWithCollate(
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
-			e, err := BuildSimpleExpr(ctx, expr,
-				WithInputSchemaAndNames(mockSchema, names, tblInfo),
-				WithAllowCastArray(true),
-				WithUseNewCollate(useNewCollate))
+			e, err := BuildSimpleExprForGeneratedColumn(ctx, expr, mockSchema, names, tblInfo, col, useNewCollate)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}

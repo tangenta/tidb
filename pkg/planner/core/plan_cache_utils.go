@@ -101,10 +101,11 @@ func GeneratePlanCacheStmtWithAST(ctx context.Context, sctx sessionctx.Context, 
 	}
 
 	switch stmt := paramStmt.(type) {
-	case *ast.ImportIntoStmt, *ast.LoadDataStmt, *ast.PrepareStmt, *ast.ExecuteStmt, *ast.DeallocateStmt, *ast.NonTransactionalDMLStmt:
+	case *ast.ImportIntoStmt, *ast.LoadDataStmt, *ast.PrepareStmt, *ast.ExecuteStmt, *ast.DeallocateStmt, *ast.NonTransactionalDMLStmt, *ast.CreateProcedureInfo,
+		*ast.AlterProcedureStmt, *ast.DropProcedureStmt, *ast.Signal, *ast.GetDiagnosticsStmt:
 		return nil, nil, 0, plannererrors.ErrUnsupportedPs
 	case *ast.SelectStmt:
-		if stmt.SelectIntoOpt != nil {
+		if stmt.SelectIntoOpt != nil && stmt.SelectIntoOpt.Tp == ast.SelectIntoOutfile {
 			return nil, nil, 0, plannererrors.ErrUnsupportedPs
 		}
 	}
@@ -217,6 +218,7 @@ func GeneratePlanCacheStmtWithAST(ctx context.Context, sctx sessionctx.Context, 
 		StmtDB:              vars.CurrentDB,
 		StmtText:            paramSQL,
 		VisitInfos:          destBuilder.GetVisitInfo(),
+		LBACVisitInfos:      destBuilder.GetLBACVisitInfo(),
 		NormalizedSQL:       normalizedSQL,
 		SQLDigest:           digest,
 		ForUpdateRead:       destBuilder.GetIsForUpdateRead(),
@@ -545,6 +547,8 @@ type PlanCacheValue struct {
 	OutputColumns    types.NameSlice    // output column names of this plan
 	ParamTypes       []*types.FieldType // all parameters' types, different parameters may share same plan
 	StmtHints        *hint.StmtHints    // related hints of this plan, like 'max_execution_time'.
+	Warnings         []stmtctx.SQLWarn  // warnings produced while building the cached plan
+	ExtraWarnings    []stmtctx.SQLWarn  // extra warnings produced while building the cached plan
 
 	// Runtime Info, all are READ-WRITE, use UpdateRuntimeInfo() and RuntimeInfo() to access them.
 	executions         int64 // the execution times.
@@ -612,6 +616,19 @@ func (v *PlanCacheValue) MemoryUsage() (sum int64) {
 
 	for _, name := range v.OutputColumns {
 		sum += name.MemoryUsage()
+	}
+	sum += size.SizeOfSlice * 2
+	for _, warn := range v.Warnings {
+		sum += size.SizeOfString + int64(len(warn.Level))
+		if warn.Err != nil {
+			sum += size.SizeOfInterface + int64(len(warn.Err.Error()))
+		}
+	}
+	for _, warn := range v.ExtraWarnings {
+		sum += size.SizeOfString + int64(len(warn.Level))
+		if warn.Err != nil {
+			sum += size.SizeOfInterface + int64(len(warn.Err.Error()))
+		}
 	}
 	sum += int64(len(v.SQLDigest)) + int64(len(v.SQLText)) + int64(len(v.StmtType)) + int64(len(v.BinaryPlan)) +
 		int64(len(v.ParseUser)) + int64(len(v.Binding)) + int64(len(v.OptimizerEnvHash)) + int64(len(v.ParseValues))
@@ -686,6 +703,10 @@ func NewPlanCacheValue(
 		ParamTypes:    userParamTypes,
 		StmtHints:     stmtHints.Clone(),
 	}
+	if stmt.ReplayWarningsOnHit {
+		pcv.Warnings = sctx.GetSessionVars().StmtCtx.CopyWarnings(nil)
+		pcv.ExtraWarnings = append([]stmtctx.SQLWarn(nil), sctx.GetSessionVars().StmtCtx.GetExtraWarnings()...)
+	}
 	pcv.MemoryUsage() // initialize the memory usage field
 	return pcv
 }
@@ -735,11 +756,12 @@ type PointGetExecutorCache struct {
 
 // PlanCacheStmt store prepared ast from PrepareExec and other related fields
 type PlanCacheStmt struct {
-	PreparedAst *ast.Prepared
-	ResolveCtx  *resolve.Context
-	StmtDB      string // which DB the statement will be processed over
-	VisitInfos  []visitInfo
-	Params      []ast.ParamMarkerExpr
+	PreparedAst    *ast.Prepared
+	ResolveCtx     *resolve.Context
+	StmtDB         string // which DB the statement will be processed over
+	VisitInfos     []visitInfo
+	LBACVisitInfos []ColumnVisitInfo
+	Params         []ast.ParamMarkerExpr
 
 	PointGet PointGetExecutorCache
 
@@ -774,6 +796,16 @@ type PlanCacheStmt struct {
 	//  NormalizedSQL4PC: select * from `test` . `t` where `a` > ? and `b` < ? --> schema name is added,
 	//  StmtText: select * from t where a>1 and b <? --> just format the original query;
 	StmtText string
+
+	// InUse is used to mark plan cache is used.
+	// Avoid stored procedures being recursively called in prepare.
+	InUse bool
+
+	// ReplayWarningsOnHit marks cached statements whose build-time warnings must
+	// be replayed when the cached plan is reused. This is currently reserved for
+	// hidden stored-routine prepared templates so their warning handlers observe
+	// the same warnings on cache hits as on cache misses.
+	ReplayWarningsOnHit bool
 
 	// dbName and tbls are used to add metadata lock.
 	dbName []ast.CIStr

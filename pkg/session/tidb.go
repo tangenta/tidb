@@ -20,6 +20,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ngaut/pools"
@@ -37,12 +38,14 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	session_metrics "github.com/pingcap/tidb/pkg/session/metrics"
 	"github.com/pingcap/tidb/pkg/session/sessionapi"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
+	tidbtypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/dbterror"
@@ -56,6 +59,14 @@ import (
 
 // StoreBootstrappedKey is used by store.G/SetOption to store related bootstrap context for kv.Storage.
 const StoreBootstrappedKey = "bootstrap"
+
+// StoreEEBootstrappedKey is used in ee version.
+const StoreEEBootstrappedKey = "ee_bootstrap"
+
+const (
+	// commitFailAuditLogStr is the audit log string template of commit failure.
+	commitFailAuditLogStr = "[Commit failed error info: %s]"
+)
 
 type domainMap struct {
 	mu      syncutil.Mutex
@@ -319,6 +330,7 @@ func autoCommitAfterStmt(ctx context.Context, se *session, meetsErr error, sql s
 
 	if !sessVars.InTxn() {
 		if err := se.CommitTxn(ctx); err != nil {
+			sessionctx.OnExtensionSecurity(se, fmt.Sprintf(commitFailAuditLogStr, err.Error()), se.GetSessionVars().StmtCtx)
 			if _, ok := sql.(*executor.ExecStmt).StmtNode.(*ast.CommitStmt); ok {
 				err = errors.Annotatef(err, "previous statement: %s", se.GetSessionVars().PrevStmt)
 			}
@@ -417,7 +429,18 @@ func ResultSetToStringSlice(ctx context.Context, s sessionapi.Session, rs sqlexe
 			if row.IsNull(j) {
 				iRow[j] = "<nil>"
 			} else {
-				d := row.GetDatum(j, &rs.Fields()[j].Column.FieldType)
+				ft := &rs.Fields()[j].Column.FieldType
+				d := row.GetDatum(j, ft)
+				switch ft.GetSubType() {
+				case mysql.SubTypeIntervalYearToMonth:
+					iRow[j] = tidbtypes.FormatIntervalYearToMonth(d.GetInt64())
+					continue
+				case mysql.SubTypeIntervalDayToSecond:
+					iRow[j] = tidbtypes.FormatIntervalDayToSecond(d.GetInt64())
+					continue
+				default:
+					// fall through to base type output.
+				}
 				iRow[j], err = d.ToString()
 				if err != nil {
 					return nil, err

@@ -60,6 +60,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/sem"
 	"github.com/pingcap/tidb/pkg/util/versioninfo"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -1690,6 +1691,7 @@ func TestInfoBuiltin(t *testing.T) {
 		require.Equal(t, mysql.TiDBReleaseVersion, tidbVersionInfo["Release Version"], "errors in 'select tidb_version()'")
 	}
 	require.Equal(t, versioninfo.TiDBEdition, tidbVersionInfo["Edition"], "errors in 'select tidb_version()'")
+	assert.Contains(t, tidbVersionResult, "Core Version: "+versioninfo.TiDBCoreVersion, "errors in 'select tidb_version()'")
 
 	// for row_count
 	tk.MustExec("drop table if exists t")
@@ -4507,4 +4509,9 @@ func TestDeepCopyRetType(t *testing.T) {
 	tk.MustExec("insert  into t0(c0) values (0);")
 	tk.MustExec("create view v0(c0) as select cast((t1.c0 div t1.c0) as decimal) from t1;")
 	tk.MustQuery("select * from v0 inner join t0 on (v0.c0 like cast(v0.c0 as char) <= t0.c0) and (not atan2(t0.c0, v0.c0));").Check(testkit.Rows())
+}
+func TestDataOperationAuditFunction(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustQuery("select data_operation_audit('tidb-lightning', 'success', 'target', 'table.t1', '~/')")
 }

@@ -521,6 +521,16 @@ func (e *InsertExec) doDupRowUpdate(
 	}
 
 	newData := e.row4Update[:len(oldRow)]
+	if e.lbacGuard != nil {
+		if err := e.lbacGuard.CheckRowLabelAccess(oldRow[e.lbacGuard.labelColOffset]); err != nil {
+			return err
+		}
+		labelDatum, err := e.lbacGuard.EnforceWriteLabel(newData[e.lbacGuard.labelColOffset])
+		if err != nil {
+			return err
+		}
+		newData[e.lbacGuard.labelColOffset] = labelDatum
+	}
 	_, ignored, err := updateRecord(
 		ctx, e.Ctx(),
 		handle, oldRow, newData,
@@ -584,4 +594,9 @@ func (e *InsertExec) GetFKCascades() []*FKCascadeExec {
 // HasFKCascades implements WithForeignKeyTrigger interface.
 func (e *InsertExec) HasFKCascades() bool {
 	return len(e.fkCascades) > 0
+}
+
+// GetTriggerExec implements WithTriggerSupport interface.
+func (e *InsertExec) GetTriggerExec() *TriggerExec {
+	return e.triggerExec
 }

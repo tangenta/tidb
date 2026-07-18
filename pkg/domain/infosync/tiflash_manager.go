@@ -373,8 +373,18 @@ func makeBaseRule() pd.Rule {
 	}
 }
 
-func (*mockTiFlashReplicaManagerCtx) GetPlacementRule(context.Context, int64) (*pd.Rule, error) {
-	return nil, errors.New("not implemented")
+func (m *mockTiFlashReplicaManagerCtx) GetPlacementRule(_ context.Context, tableID int64) (*pd.Rule, error) {
+	m.RLock()
+	tiflash := m.tiflash
+	m.RUnlock()
+	if tiflash == nil {
+		return nil, nil
+	}
+	rule, ok := tiflash.GetPlacementRule(MakeRuleID(tableID))
+	if !ok {
+		return nil, nil
+	}
+	return rule, nil
 }
 
 // MakeNewRule creates a pd rule for TiFlash.

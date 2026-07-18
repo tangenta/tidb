@@ -186,6 +186,8 @@ type TableInfo struct {
 
 	Sequence *SequenceInfo `json:"sequence"`
 
+	Triggers []*TriggerInfo `json:"triggers,omitempty"`
+
 	// Lock represent the table lock info.
 	Lock *TableLockInfo `json:"Lock"`
 
@@ -215,6 +217,9 @@ type TableInfo struct {
 	// SoftdeleteInfo is softdelete TTL. It is required if IsActiveActive == true.
 	SoftdeleteInfo *SoftdeleteInfo `json:"softdelete_info,omitempty"`
 
+	// SecurityPolicy represents the LBAC security policy for this table
+	SecurityPolicy *ast.CIStr `json:"security_policy,omitempty"`
+
 	// Affinity stores the affinity info for the table
 	// If it is nil, it means no affinity
 	Affinity *TableAffinityInfo `json:"affinity,omitempty"`
@@ -235,7 +240,8 @@ type TableInfo struct {
 	// StorageClassTransitions is the storage class transition rules of the table level.
 	StorageClassTransitions []StorageClassTransitRule `json:"storage_class_transitions,omitempty"`
 
-	Mode TableMode `json:"mode,omitempty"`
+	Mode       TableMode `json:"mode,omitempty"`
+	Encryption bool      `json:"encryption,omitempty"`
 }
 
 // Hash64 implement HashEquals interface.
@@ -264,6 +270,16 @@ func (t *TableInfo) SepAutoInc() bool {
 	return t.Version >= TableInfoVersion5 && t.AutoIDCache == 1
 }
 
+// GetSecurityLabelColumnID returns the row-level security label column ID, or 0 if absent.
+func (t *TableInfo) GetSecurityLabelColumnID() int64 {
+	for _, col := range t.Columns {
+		if col != nil && col.FieldType.IsSecurityLabel() {
+			return col.ID
+		}
+	}
+	return 0
+}
+
 // GetPartitionInfo returns the partition information.
 func (t *TableInfo) GetPartitionInfo() *PartitionInfo {
 	if t.Partition != nil && t.Partition.Enable {
@@ -280,6 +296,10 @@ func (t *TableInfo) GetUpdateTime() time.Time {
 // Clone clones TableInfo.
 func (t *TableInfo) Clone() *TableInfo {
 	nt := *t
+	if t.SecurityPolicy != nil {
+		securityPolicy := *t.SecurityPolicy
+		nt.SecurityPolicy = &securityPolicy
+	}
 	nt.Columns = make([]*ColumnInfo, len(t.Columns))
 	nt.Indices = make([]*IndexInfo, len(t.Indices))
 	nt.ForeignKeys = nil
@@ -307,6 +327,13 @@ func (t *TableInfo) Clone() *TableInfo {
 	}
 	if t.TableSplitPolicy != nil {
 		nt.TableSplitPolicy = t.TableSplitPolicy.Clone()
+	}
+
+	if len(t.Triggers) > 0 {
+		nt.Triggers = make([]*TriggerInfo, len(t.Triggers))
+		for i := range t.Triggers {
+			nt.Triggers[i] = t.Triggers[i].Clone()
+		}
 	}
 
 	if t.Affinity != nil {
@@ -646,6 +673,11 @@ func (t *TableInfo) GetNonTempColumns() []*ColumnInfo {
 	return result
 }
 
+// NameAsID returns the name according to the lower_case_table_names setting.
+func (t *TableInfo) NameAsID() string {
+	return NameAsID(t.Name)
+}
+
 // FindFKInfoByName finds FKInfo in fks by lowercase name.
 func FindFKInfoByName(fks []*FKInfo, name string) *FKInfo {
 	for _, fk := range fks {
@@ -818,6 +850,37 @@ type SequenceInfo struct {
 	Increment  int64  `json:"sequence_increment"`
 	CacheValue int64  `json:"sequence_cache_value"`
 	Comment    string `json:"sequence_comment"`
+}
+
+// TriggerInfo provides meta data describing a DB trigger.
+type TriggerInfo struct {
+	Name      ast.CIStr          `json:"trigger_name"`
+	Timing    ast.TriggerTiming  `json:"timing"`
+	Event     ast.TriggerEvent   `json:"event"`
+	Table     ast.CIStr          `json:"table"`
+	Order     ast.TriggerOrder   `json:"order"`
+	CreateSQL string             `json:"create_sql"`
+	Body      string             `json:"body"`
+	Definer   *auth.UserIdentity `json:"definer"`
+	State     SchemaState        `json:"state"`
+	SQLMode   mysql.SQLMode      `json:"sql_mode"`
+
+	CharacterSetClient  string `json:"charset_client"`
+	CollationConnection string `json:"collation_connection"`
+	DatabaseCollation   string `json:"database_collation"`
+	CreatedTimestamp    uint64 `json:"created_timestamp"`
+}
+
+// Clone clones TriggerInfo.
+func (t *TriggerInfo) Clone() *TriggerInfo {
+	nt := *t
+	if t.Definer != nil {
+		nt.Definer = &auth.UserIdentity{
+			Username: t.Definer.Username,
+			Hostname: t.Definer.Hostname,
+		}
+	}
+	return &nt
 }
 
 // ExchangePartitionInfo provides exchange partition info.

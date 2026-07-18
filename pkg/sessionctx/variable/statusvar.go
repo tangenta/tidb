@@ -19,7 +19,9 @@ import (
 	"crypto/tls"
 	"sync"
 
+	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
+	"github.com/pingcap/tidb/pkg/util"
 	tlsutil "github.com/pingcap/tidb/pkg/util/tls"
 )
 
@@ -120,7 +122,20 @@ var tlsCiphers = []uint16{
 	tls.TLS_CHACHA20_POLY1305_SHA256,
 }
 
-var tlsSupportedCiphers string
+// TLCP ciphers from https://github.com/Trisia/gotlcp/blob/c9f7412bc2f041e4169553a0dca0fd415d758027/tlcp/cipher_suites.go#L41
+var tlcpCiphers = []uint16{
+	tlcp.TLCP_ECC_SM4_GCM_SM3,
+	tlcp.TLCP_ECC_SM4_CBC_SM3,
+	tlcp.TLCP_ECDHE_SM4_GCM_SM3,
+	tlcp.TLCP_ECDHE_SM4_CBC_SM3,
+}
+
+var tlsSupportedCiphers, tlcpSupportedCiphers string
+
+// tlcp version string from https://github.com/Trisia/gotlcp/blob/c9f7412bc2f041e4169553a0dca0fd415d758027/tlcp/common.go#L29
+var tlcpVersionString = map[uint16]string{
+	tlcp.VersionTLCP: "TLCPv1.1",
+}
 
 var defaultStatus = map[string]*StatusVal{
 	"Ssl_cipher":      {vardef.ScopeGlobal | vardef.ScopeSession, ""},
@@ -130,6 +145,10 @@ var defaultStatus = map[string]*StatusVal{
 	"Performance_schema_session_connect_attrs_longest_seen": {vardef.ScopeGlobal, int64(0)},
 	"Performance_schema_session_connect_attrs_lost":         {vardef.ScopeGlobal, int64(0)},
 	"tidb_keys_examined": {vardef.ScopeSession, uint64(0)},
+	// tlcp status variables
+	"tlcp_cipher":      {vardef.ScopeGlobal | vardef.ScopeSession, ""},
+	"tlcp_cipher_list": {vardef.ScopeGlobal | vardef.ScopeSession, ""},
+	"tlcp_version":     {vardef.ScopeGlobal | vardef.ScopeSession, ""},
 }
 
 type defaultStatusStat struct {
@@ -162,6 +181,17 @@ func (s defaultStatusStat) Stats(vars *SessionVars) (map[string]any, error) {
 		}
 	}
 
+	if vars != nil && vars.TLCPConnectionState != nil {
+		statusVars["tlcp_cipher"] = util.TLCPCipher2String(vars.TLCPConnectionState.CipherSuite)
+		statusVars["tlcp_cipher_list"] = tlcpSupportedCiphers
+		//statusVars["tlcp_verify_mode"] = 0x01 | 0x04
+		if tlcpVersion, tlcpVersionKnown := tlcpVersionString[vars.TLCPConnectionState.Version]; tlcpVersionKnown {
+			statusVars["tlcp_version"] = tlcpVersion
+		} else {
+			statusVars["tlcp_version"] = "unknown_tlcp_version"
+		}
+	}
+
 	return statusVars, nil
 }
 
@@ -173,6 +203,13 @@ func init() {
 	}
 	tlsSupportedCiphers = ciphersBuffer.String()
 
+	// set supported tlcp ciphers
+	ciphersBuffer.Reset()
+	for _, v := range tlcpCiphers {
+		ciphersBuffer.WriteString(util.TLCPCipher2String(v))
+		ciphersBuffer.WriteString(":")
+	}
+	tlcpSupportedCiphers = ciphersBuffer.String()
 	var stat defaultStatusStat
 	RegisterStatistics(stat)
 }

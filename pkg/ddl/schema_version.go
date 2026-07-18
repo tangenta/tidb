@@ -248,7 +248,17 @@ func SetSchemaDiffForPartitionModify(diff *model.SchemaDiff, job *model.Job, job
 // SetSchemaDiffForCreateTable set SchemaDiff for ActionCreateTable.
 func SetSchemaDiffForCreateTable(diff *model.SchemaDiff, job *model.Job, jobCtx *jobContext) error {
 	diff.TableID = job.TableID
-	tbInfo := jobCtx.jobArgs.(*model.CreateTableArgs).TableInfo
+	args := jobCtx.jobArgs.(*model.CreateTableArgs)
+	tbInfo := args.TableInfo
+
+	// CTAS rollback removes the table metadata before bumping the schema version.
+	// Emit a drop-shaped diff so infoschema removes the stale name entry instead
+	// of trying to reload a table that no longer exists in meta.
+	if args.CTASSnapshotTS != 0 && tbInfo.State == model.StateNone {
+		diff.OldTableID = job.TableID
+		diff.TableID = 0
+		return nil
+	}
 
 	// When create table with foreign key, there are two schema status change:
 	// 1. none -> write-only

@@ -46,6 +46,7 @@ type ColumnInfo struct {
 	Flag    uint16
 	Decimal uint8
 	Type    uint8
+	SubType uint8
 }
 
 // FormatValueText returns the text representation of row[idx], charset-encoded via
@@ -56,6 +57,14 @@ func FormatValueText(row chunk.Row, idx int, col ColumnInfo, enc *ResultEncoder)
 	tmp := enc.scratch[:0]
 	switch col.Type {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
+		switch col.SubType {
+		case mysql.SubTypeIntervalYearToMonth:
+			return []byte(types.FormatIntervalYearToMonth(row.GetInt64(idx))), nil
+		case mysql.SubTypeIntervalDayToSecond:
+			return []byte(types.FormatIntervalDayToSecond(row.GetInt64(idx))), nil
+		default:
+			// Unknown qualifier: fall through to base type output.
+		}
 		return strconv.AppendInt(tmp, row.GetInt64(idx), 10), nil
 	case mysql.TypeYear:
 		year := row.GetInt64(idx)

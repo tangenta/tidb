@@ -589,6 +589,35 @@ func TestReservedRowIDAlloc(t *testing.T) {
 	require.Equal(t, int64(0), id)
 }
 
+func TestRegisterUDFCleanupAndReset(t *testing.T) {
+	sc := stmtctx.NewStmtCtx()
+	calls := make([]string, 0, 3)
+
+	sc.RegisterUDFCleanup(nil)
+	sc.RegisterUDFCleanup(func() {
+		calls = append(calls, "first")
+	})
+	sc.RegisterUDFCleanup(func() {
+		calls = append(calls, "second")
+	})
+
+	sc.UDFCleanup()
+	require.Equal(t, []string{"first", "second"}, calls)
+
+	// Cleanup callbacks are statement-scoped and should run at most once.
+	sc.UDFCleanup()
+	require.Equal(t, []string{"first", "second"}, calls)
+
+	sc.RegisterUDFCleanup(func() {
+		calls = append(calls, "reset")
+	})
+	require.True(t, sc.Reset())
+	require.Equal(t, []string{"first", "second", "reset"}, calls)
+
+	sc.UDFCleanup()
+	require.Equal(t, []string{"first", "second", "reset"}, calls)
+}
+
 func TestUsedStatsInfoForTableWriteToSlowLog(t *testing.T) {
 	// pseudo stats: Version=0
 	sPseudo := &stmtctx.UsedStatsInfoForTable{

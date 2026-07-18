@@ -74,7 +74,8 @@ func TestUpgradeGCV2AbortUsesPostLockBootstrapVersion(t *testing.T) {
 
 	mgr := &upgradeGCV2Manager{}
 	extworkload.SetManagerForStore(store, mgr)
-	runInBootstrapSession(store, currentBootstrapVersion-1)
+	_, err := runInBootstrapSession(store, currentBootstrapVersion-1, currentEEBootstrapVersion)
+	require.NoError(t, err)
 
 	require.Zero(t, mgr.abortCount)
 }

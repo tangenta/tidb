@@ -840,7 +840,7 @@ type CSVConfig struct {
 	// FieldNullDefinedBy fields to be treated as text instead of NULL when we have
 	// `FIELDS DEFINED NULL BY 'xxx'` without `OPTIONALLY ENCLOSED`.
 	// in all other cases, it's always false.
-	QuotedNullIsText bool `toml:"-" json:"-"`
+	QuotedNullIsText bool `toml:"quoted-null-is-text" json:"quoted-null-is-text"`
 	// ref https://dev.mysql.com/doc/refman/8.0/en/load-data.html
 	// > If the field begins with the ENCLOSED BY character, instances of that character are recognized as terminating a
 	// > field value only if followed by the field or line TERMINATED BY sequence.

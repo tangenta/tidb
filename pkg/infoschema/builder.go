@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta"
 	"github.com/pingcap/tidb/pkg/meta/autoid"
@@ -38,6 +39,9 @@ import (
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/domainutil"
 	"github.com/pingcap/tidb/pkg/util/intest"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"github.com/pingcap/tidb/pkg/util/sqlexec"
+	"go.uber.org/zap"
 )
 
 // Builder builds a new InfoSchema.
@@ -58,6 +62,10 @@ type Builder struct {
 	infoData *Data
 	store    kv.Storage
 	crossKS  bool
+
+	// Snapshot loads must be side-effect free. Reloading loadable functions is a global side effect.
+	// Since loadable functions are registered globally and not versioned, snapshot loads must not touch it.
+	loadableFunctionReload bool
 }
 
 // SetSchemaVersion sets the schema version of the InfoSchema.
@@ -94,6 +102,14 @@ func (b *Builder) ApplyDiff(m meta.Reader, diff *model.SchemaDiff) ([]int64, err
 		return applyDropResourceGroup(b, m, diff), nil
 	case model.ActionCreateMaskingPolicy, model.ActionAlterMaskingPolicy, model.ActionDropMaskingPolicy:
 		return applyMaskingPolicyChange(b, m, diff)
+	case model.ActionCreateProcedure, model.ActionDropProcedure, model.ActionAlterProcedure:
+		if err := b.reloadRoutines(); err != nil {
+			return nil, err
+		}
+		if err := b.reloadLoadableFunctions(); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	case model.ActionTruncateTablePartition, model.ActionTruncateTable:
 		return applyTruncateTableOrPartition(b, m, diff)
 	case model.ActionDropTable, model.ActionDropTablePartition:
@@ -594,7 +610,7 @@ func (b *Builder) applyTableUpdate(m meta.Reader, diff *model.SchemaDiff) ([]int
 			fmt.Sprintf("(Schema ID %d)", diff.SchemaID),
 		)
 	}
-	dbInfo := b.getSchemaAndCopyIfNecessary(roDBInfo.Name.L)
+	dbInfo := b.getSchemaAndCopyIfNecessary(roDBInfo.NameAsID())
 	oldTableID, newTableID, err := b.getTableIDs(m, diff)
 	if err != nil {
 		return nil, err
@@ -722,7 +738,7 @@ func (b *Builder) applyModifySchemaCharsetAndCollate(m meta.Reader, diff *model.
 			fmt.Sprintf("(Schema ID %d)", diff.SchemaID),
 		)
 	}
-	newDbInfo := b.getSchemaAndCopyIfNecessary(di.Name.L)
+	newDbInfo := b.getSchemaAndCopyIfNecessary(di.NameAsID())
 	newDbInfo.Charset = di.Charset
 	newDbInfo.Collate = di.Collate
 	return nil
@@ -739,7 +755,7 @@ func (b *Builder) applyModifySchemaDefaultPlacement(m meta.Reader, diff *model.S
 			fmt.Sprintf("(Schema ID %d)", diff.SchemaID),
 		)
 	}
-	newDbInfo := b.getSchemaAndCopyIfNecessary(di.Name.L)
+	newDbInfo := b.getSchemaAndCopyIfNecessary(di.NameAsID())
 	newDbInfo.PlacementPolicyRef = di.PlacementPolicyRef
 	return nil
 }
@@ -750,6 +766,9 @@ func (b *Builder) applyDropSchema(diff *model.SchemaDiff) []int64 {
 		return nil
 	}
 	b.infoSchema.delSchema(di)
+	if b.infoSchema.routineMap != nil {
+		delete(b.infoSchema.routineMap, di.Name.L)
+	}
 
 	// Copy the sortedTables that contain the table we are going to drop.
 	tableIDs := make([]int64, 0, len(di.Deprecated.Tables))
@@ -808,6 +827,8 @@ func (b *Builder) copySortedTablesBucket(bucketIdx int) {
 func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.DBInfo, tblInfo *model.TableInfo, allocs autoid.Allocators) autoid.Allocators {
 	if len(allocs.Allocs) != 0 {
 		tblVer := autoid.AllocOptionTableInfoVersion(tblInfo.Version)
+		// Keep the allocator routing logic in sync with the current TableInfo.
+		allocs.SepAutoInc = tblInfo.SepAutoInc()
 		switch tp {
 		case model.ActionRebaseAutoID, model.ActionModifyTableAutoIDCache:
 			idCacheOpt := autoid.CustomAutoIncCacheOption(tblInfo.AutoIDCache)
@@ -831,6 +852,9 @@ func (b *Builder) buildAllocsForCreateTable(tp model.ActionType, dbInfo *model.D
 				newAlloc := autoid.NewAllocator(b.Requirement, dbInfo.ID, tblInfo.ID, tblInfo.IsAutoRandomBitColUnsigned(), autoid.AutoRandomType, tblVer)
 				allocs = allocs.Append(newAlloc)
 			}
+			allocs = pkdbMaybeAdjustAllocsAfterAutoIncrementEnabled(b.Requirement, dbInfo, tblInfo, allocs, tblVer)
+		case model.ActionMultiSchemaChange:
+			allocs = pkdbMaybeAdjustAllocsAfterAutoIncrementEnabled(b.Requirement, dbInfo, tblInfo, allocs, tblVer)
 		}
 		return allocs
 	}
@@ -910,8 +934,8 @@ func applyCreateTable(b *Builder, m meta.Reader, dbInfo *model.DBInfo, tableID i
 	}
 
 	if !b.enableV2 {
-		tableNames := b.infoSchema.schemaMap[dbInfo.Name.L]
-		tableNames.tables[tblInfo.Name.L] = tbl
+		tableNames := b.infoSchema.schemaMap[dbInfo.NameAsID()]
+		tableNames.tables[tblInfo.NameAsID()] = tbl
 	}
 	b.addTable(schemaVersion, dbInfo, tblInfo, tbl)
 
@@ -969,8 +993,9 @@ func (b *Builder) applyDropTable(diff *model.SchemaDiff, dbInfo *model.DBInfo, t
 	if idx == -1 {
 		return affected
 	}
+	tblInfo := sortedTbls[idx].Meta()
+	b.infoSchema.deleteTriggers(dbInfo.Name, tblInfo)
 	if tableNames, ok := b.infoSchema.schemaMap[dbInfo.Name.L]; ok {
-		tblInfo := sortedTbls[idx].Meta()
 		delete(tableNames.tables, tblInfo.Name.L)
 		affected = appendAffectedIDs(affected, tblInfo)
 	}
@@ -1015,6 +1040,17 @@ func (b *Builder) Build(schemaTS uint64) InfoSchema {
 	return b.infoSchema
 }
 
+func cloneRoutineMap(src map[string]map[string]*model.ProcedureInfo) map[string]map[string]*model.ProcedureInfo {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]map[string]*model.ProcedureInfo, len(src))
+	for schemaName, routines := range src {
+		dst[schemaName] = maps.Clone(routines)
+	}
+	return dst
+}
+
 // InitWithOldInfoSchema initializes an empty new InfoSchema by copies all the data from old InfoSchema.
 func (b *Builder) InitWithOldInfoSchema(oldSchema InfoSchema) error {
 	// Do not mix infoschema v1 and infoschema v2 building, this can simplify the logic.
@@ -1054,6 +1090,8 @@ func (b *Builder) InitWithOldInfoSchema(oldSchema InfoSchema) error {
 	oldIS.maskingPolicyMutex.RUnlock()
 	b.infoSchema.temporaryTableIDs = maps.Clone(oldIS.temporaryTableIDs)
 	b.infoSchema.referredForeignKeyMap = maps.Clone(oldIS.referredForeignKeyMap)
+	b.infoSchema.routineMap = cloneRoutineMap(oldIS.routineMap)
+	b.infoSchema.triggerTableMap = maps.Clone(oldIS.triggerTableMap)
 
 	copy(b.infoSchema.sortedTablesBuckets, oldIS.sortedTablesBuckets)
 	return nil
@@ -1101,6 +1139,105 @@ func (b *Builder) sortAllTablesByID() {
 	}
 }
 
+func (b *Builder) reloadLoadableFunctions() error {
+	if !b.loadableFunctionReload {
+		return nil
+	}
+	if b.crossKS {
+		return nil
+	}
+	// The sys session factory is optional. Leave loadable functions unchanged in such cases.
+	if b.factory == nil {
+		return nil
+	}
+
+	res, err := b.factory()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer res.Close()
+	sctx, ok := res.(sessionctx.Context)
+	if !ok {
+		return errors.Errorf("unexpected sys session type %T", res)
+	}
+	sessIS := sctx.GetLatestInfoSchema()
+	if sessIS == nil {
+		// During bootstrap/domain initialization the session may not have any usable infoschema yet.
+		// Skip loadable function loading in such cases; it will be loaded on later infoschema reloads.
+		return nil
+	}
+	if ext, ok := sessIS.(*SessionExtendedInfoSchema); ok && ext.InfoSchema == nil {
+		// During bootstrap/domain initialization the session may not have any usable infoschema yet.
+		// Skip loadable function loading in such cases; it will be loaded on later infoschema reloads.
+		return nil
+	}
+
+	exec := sctx.GetSQLExecutor()
+	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnProcedure)
+	rs, err := exec.ExecuteInternal(ctx, "SELECT name, ret, dl FROM mysql.func WHERE type = 'function'")
+	if err != nil {
+		logutil.BgLogger().Error("failed to execute query for loadable functions", zap.Error(err))
+		return nil
+	}
+	if rs == nil {
+		return nil
+	}
+	chunkRows, err := sqlexec.DrainRecordSet(ctx, rs, 8)
+	closeErr := rs.Close()
+	if err != nil {
+		logutil.BgLogger().Error("failed to drain record set for loadable functions", zap.Error(err))
+		return nil
+	}
+	if closeErr != nil {
+		logutil.BgLogger().Error("failed to close record set for loadable functions", zap.Error(closeErr))
+		return nil
+	}
+
+	dbFuncs := make(map[string]struct{}, len(chunkRows))
+	for _, row := range chunkRows {
+		name := row.GetString(0)
+		lowerName := strings.ToLower(name)
+		dbFuncs[lowerName] = struct{}{}
+		if expression.HasLoadableFunction(lowerName) {
+			continue
+		}
+
+		ret := row.GetInt64(1)
+		dl := row.GetString(2)
+		funcDef, err := expression.LoadUDF(dl, lowerName, expression.CastUDFArgTypeIntToEvalType(int(ret)))
+		if err != nil {
+			logutil.BgLogger().Error("failed to load UDF expression",
+				zap.String("soName", dl),
+				zap.String("name", lowerName),
+				zap.Error(err))
+			continue
+		}
+
+		exist, err := expression.CreateLoadableFunction(funcDef)
+		if err != nil || exist {
+			logutil.BgLogger().Error(
+				"failed to create loadable function",
+				zap.String("name", lowerName),
+				zap.Bool("exist", exist),
+				zap.Error(err))
+			funcDef.Drop()
+			continue
+		}
+	}
+
+	for _, name := range expression.LoadableFunctionNames() {
+		if _, ok := dbFuncs[name]; ok {
+			continue
+		}
+		if def, ok := expression.RemoveLoadableFunction(name); ok {
+			if def != nil {
+				def.Drop()
+			}
+		}
+	}
+	return nil
+}
+
 // InitWithDBInfos initializes an empty new InfoSchema with a slice of DBInfo, misc metadata, and schema version.
 func (b *Builder) InitWithDBInfos(dbInfos []*model.DBInfo, policies []*model.PolicyInfo, resourceGroups []*model.ResourceGroupInfo, maskingPolicies []*model.MaskingPolicyInfo, schemaVersion int64) error {
 	info := b.infoSchema
@@ -1144,7 +1281,11 @@ func (b *Builder) InitWithDBInfos(dbInfos []*model.DBInfo, policies []*model.Pol
 
 	b.sortAllTablesByID()
 
-	return nil
+	if err = b.reloadRoutines(); err != nil {
+		return err
+	}
+	err = b.reloadLoadableFunctions()
+	return err
 }
 
 func tableFromMeta(alloc autoid.Allocators, factory func() (pools.Resource, error), tblInfo *model.TableInfo) (table.Table, error) {
@@ -1182,7 +1323,7 @@ func (b *Builder) createSchemaTablesForDB(di *model.DBInfo, tableFromMeta tableF
 			return errors.Wrap(err, fmt.Sprintf("Build table `%s`.`%s` schema failed", di.Name.O, t.Name.O))
 		}
 
-		schTbls.tables[t.Name.L] = tbl
+		schTbls.tables[t.NameAsID()] = tbl
 		b.addTable(schemaVersion, di, t, tbl)
 		if len(di.TableName2ID) > 0 {
 			delete(di.TableName2ID, t.Name.O)
@@ -1224,6 +1365,7 @@ func (b *Builder) addDB(schemaVersion int64, di *model.DBInfo, schTbls *schemaTa
 }
 
 func (b *Builder) addTable(schemaVersion int64, di *model.DBInfo, tblInfo *model.TableInfo, tbl table.Table) {
+	b.infoSchema.addTriggers(di.Name, tblInfo)
 	if b.enableV2 {
 		b.infoData.addReferredForeignKeys(di.Name, tblInfo, schemaVersion)
 		b.infoData.add(tableItem{
@@ -1262,6 +1404,8 @@ func NewBuilder(r autoid.Requirement, schemaCacheSize uint64, factory func() (po
 		factory:      factory,
 		infoData:     infoData,
 		enableV2:     useV2,
+		// Reload loadable functions on schema reload by default.
+		loadableFunctionReload: true,
 	}
 	infoData.tableCache.SetCapacity(schemaCacheSize)
 	return builder
@@ -1276,6 +1420,12 @@ func (b *Builder) WithStore(s kv.Storage) *Builder {
 // WithCrossKS marks whether this builder is used to build I_S for cross keyspace.
 func (b *Builder) WithCrossKS(crossKS bool) *Builder {
 	b.crossKS = crossKS
+	return b
+}
+
+// WithLoadableFunctionReload controls whether to reload loadable functions.
+func (b *Builder) WithLoadableFunctionReload(enable bool) *Builder {
+	b.loadableFunctionReload = enable
 	return b
 }
 

@@ -61,6 +61,8 @@ type ImportIntoExec struct {
 	plan       *plannercore.ImportInto
 	tbl        table.Table
 	dataFilled bool
+
+	ctasFlag bool
 }
 
 var (
@@ -68,7 +70,7 @@ var (
 )
 
 func newImportIntoExec(b exec.BaseExecutor, selectExec exec.Executor, userSctx sessionctx.Context,
-	plan *plannercore.ImportInto, tbl table.Table) (*ImportIntoExec, error) {
+	plan *plannercore.ImportInto, tbl table.Table, ctasFlag bool) (*ImportIntoExec, error) {
 	return &ImportIntoExec{
 		BaseExecutor: b,
 		selectExec:   selectExec,
@@ -76,6 +78,7 @@ func newImportIntoExec(b exec.BaseExecutor, selectExec exec.Executor, userSctx s
 		stmt:         plan.Stmt,
 		plan:         plan,
 		tbl:          tbl,
+		ctasFlag:     ctasFlag,
 	}, nil
 }
 
@@ -262,9 +265,12 @@ func (e *ImportIntoExec) importFromSelect(ctx context.Context) error {
 	}
 	defer CloseSession(newSCtx)
 
-	if err2 = e.controller.CheckRequirements(ctx, newSCtx); err2 != nil {
-		return err2
+	if !e.ctasFlag {
+		if err := e.controller.CheckRequirements(ctx, newSCtx); err != nil {
+			return err
+		}
 	}
+
 	if err := e.controller.InitTiKVConfigs(ctx, newSCtx); err != nil {
 		return err
 	}
@@ -330,7 +336,7 @@ func (e *ImportIntoExec) importFromSelect(ctx context.Context) error {
 		return err
 	}
 
-	if err2 = importer.FlushTableStats(ctx, newSCtx, e.controller.TableInfo.ID, importedRows); err2 != nil {
+	if err2 := importer.FlushTableStats(ctx, newSCtx, e.controller.TableInfo.ID, importedRows); err2 != nil {
 		logutil.Logger(ctx).Error("flush stats failed", zap.Error(err2))
 	}
 

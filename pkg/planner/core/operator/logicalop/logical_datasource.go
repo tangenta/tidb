@@ -149,6 +149,9 @@ type DataSource struct {
 	// FtsPushDown stores extracted FTS query metadata, when FTS_MATCH_WORD() can
 	// be planned as a TiFlash full-text search scan.
 	FtsPushDown *FTSPushDown
+
+	// TableSplit is a split (range) of the table to read.
+	TableSplit *ast.TableSplit
 }
 
 // Init initializes DataSource.

@@ -1234,7 +1234,6 @@ func (c gcStatesClient) GetGCState(ctx context.Context, opts ...pdgc.GCStatesAPI
 	for _, o := range opts {
 		o(&options)
 	}
-
 	startTime := time.Now()
 
 	c.inner.mu.Lock()

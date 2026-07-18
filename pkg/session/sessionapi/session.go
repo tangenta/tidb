@@ -20,6 +20,7 @@ import (
 	"errors"
 	"time"
 
+	"gitee.com/Trisia/gotlcp/tlcp"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/extension"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -70,6 +71,7 @@ type Session interface {
 	SetCompressionLevel(int)
 	SetProcessInfo(string, time.Time, byte, uint64)
 	SetTLSState(*tls.ConnectionState)
+	SetTLCPState(*tlcp.ConnectionState)
 	SetCollation(coID int) error
 	SetSessionManager(sessmgr.Manager)
 	Close()
@@ -87,4 +89,6 @@ type Session interface {
 
 	// SetExtensions sets the `*extension.SessionExtensions` object
 	SetExtensions(extensions *extension.SessionExtensions)
+	SetSessionExec(cc sessionctx.SessionExec)
+	GetSessionExec() sessionctx.SessionExec
 }

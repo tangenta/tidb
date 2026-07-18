@@ -27,12 +27,14 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
 	core_metrics "github.com/pingcap/tidb/pkg/planner/core/metrics"
 	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/privilege"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessiontxn/staleread"
 	"github.com/pingcap/tidb/pkg/types"
@@ -234,6 +236,22 @@ func GetPlanFromPlanCache(ctx context.Context, sctx sessionctx.Context,
 			stmtCtx.WarnSkipPlanCache(planCacheHintOnlyNoHintReason)
 		}
 	}
+
+	paramTypes := parseParamTypes(sctx, params)
+	if cacheEnabled && sessVars.PlanCacheMaxDecimalParamNums >= 0 {
+		// Check the number of parameters' decimal types
+		decimalNums := 0
+		for _, param := range paramTypes {
+			if param.GetType() == mysql.TypeNewDecimal {
+				decimalNums++
+			}
+		}
+		if decimalNums > sessVars.PlanCacheMaxDecimalParamNums {
+			sctx.GetSessionVars().StmtCtx.AppendWarning(errors.NewNoStackError("skip prepared plan-cache: too many decimal parameters"))
+			cacheEnabled = false
+		}
+	}
+
 	if stmt.StmtCacheable && cacheEnabled {
 		stmtCtx.EnablePlanCache()
 	}
@@ -253,7 +271,6 @@ func GetPlanFromPlanCache(ctx context.Context, sctx sessionctx.Context,
 		}
 	}
 
-	paramTypes := parseParamTypes(sctx, params)
 	if stmtCtx.UseCache() {
 		plan, outputCols, stmtHints, hit := lookupPlanCache(ctx, sctx, cacheKey, paramTypes)
 		skipPrivCheck := stmt.PointGet.Executor != nil // this case is specially handled
@@ -352,7 +369,31 @@ func adjustCachedPlan(ctx context.Context, sctx sessionctx.Context,
 	}
 	stmtCtx.SetPlanDigest(stmt.NormalizedPlan, stmt.PlanDigest)
 	stmtCtx.StmtHints = *stmtHints
+	if stmt.ReplayWarningsOnHit {
+		if cached, ok := sessVars.PlanCacheValue.(*PlanCacheValue); ok {
+			replayCachedPlanWarnings(stmtCtx, cached)
+		}
+	}
 	return plan, true, nil
+}
+
+func replayCachedPlanWarnings(stmtCtx *stmtctx.StatementContext, cached *PlanCacheValue) {
+	if stmtCtx == nil || cached == nil {
+		return
+	}
+	if len(cached.Warnings) > 0 {
+		stmtCtx.AppendWarnings(cached.Warnings)
+	}
+	for _, warn := range cached.ExtraWarnings {
+		switch warn.Level {
+		case contextutil.WarnLevelError:
+			stmtCtx.AppendExtraError(warn.Err)
+		case contextutil.WarnLevelNote:
+			stmtCtx.AppendExtraNote(warn.Err)
+		default:
+			stmtCtx.AppendExtraWarning(warn.Err)
+		}
+	}
 }
 
 // generateNewPlan call the optimizer to generate a new plan for current statement
@@ -407,6 +448,9 @@ func checkPreparedPriv(ctx context.Context, sctx sessionctx.Context, stmt *PlanC
 	if pm := privilege.GetPrivilegeManager(sctx); pm != nil {
 		visitInfo := VisitInfo4PrivCheck(ctx, is, stmt.PreparedAst.Stmt, stmt.VisitInfos)
 		if err := CheckPrivilege(sctx.GetSessionVars().ActiveRoles, pm, visitInfo); err != nil {
+			return err
+		}
+		if err := CheckLBACColumnAccess(sctx.GetPlanCtx(), pm, stmt.LBACVisitInfos); err != nil {
 			return err
 		}
 	}

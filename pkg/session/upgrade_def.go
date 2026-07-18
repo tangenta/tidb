@@ -170,7 +170,7 @@ const (
 	// It initializes a missing tidb_analyze_version during upgrade. Earlier bootstrap logic used 1
 	// for compatibility, but the only supported version is 2.
 	version80 = 80
-	// version81 insert "tidb_enable_index_merge|off" to mysql.GLOBAL_VARIABLES if there is no tidb_enable_index_merge.
+	// version81 insert "tidb_enable_index_merge|off" to mysql.global_variables if there is no tidb_enable_index_merge.
 	// This will only happens when we upgrade a cluster before 4.0.0 to 4.0.0+.
 	version81 = 81
 	// version82 adds the mysql.analyze_options table
@@ -216,7 +216,7 @@ const (
 	version103 = 103
 	// version104 add `sql_digest` and `plan_digest` to `bind_info`
 	version104 = 104
-	// version105 insert "tidb_cost_model_version|1" to mysql.GLOBAL_VARIABLES if there is no tidb_cost_model_version.
+	// version105 insert "tidb_cost_model_version|1" to mysql.global_variables if there is no tidb_cost_model_version.
 	// This will only happens when we upgrade a cluster before 6.0.
 	version105 = 105
 	// version106 add mysql.password_history, and Password_reuse_history, Password_reuse_time into mysql.user.
@@ -263,7 +263,7 @@ const (
 	//   update tidb_load_based_replica_read_threshold from 0 to 4
 	// This will only happens when we upgrade a cluster before 7.1.
 	version141 = 141
-	// version 142 insert "tidb_enable_non_prepared_plan_cache|0" to mysql.GLOBAL_VARIABLES if there is no tidb_enable_non_prepared_plan_cache.
+	// version 142 insert "tidb_enable_non_prepared_plan_cache|0" to mysql.global_variables if there is no tidb_enable_non_prepared_plan_cache.
 	// This will only happens when we upgrade a cluster before 6.5.
 	version142 = 142
 	// version 143 add column `error` to `mysql.tidb_global_task` and `mysql.tidb_background_subtask`
@@ -1011,7 +1011,7 @@ func upgradeToVer36(s sessionapi.Session, _ int64) {
 }
 
 func upgradeToVer37(s sessionapi.Session, _ int64) {
-	// when upgrade from old tidb and no 'tidb_enable_window_function' in GLOBAL_VARIABLES, init it with 0.
+	// when upgrade from old tidb and no 'tidb_enable_window_function' in global_variables, init it with 0.
 	sql := fmt.Sprintf("INSERT IGNORE INTO  %s.%s (`VARIABLE_NAME`, `VARIABLE_VALUE`) VALUES ('%s', '%d')",
 		mysql.SystemDB, mysql.GlobalVariablesTable, vardef.TiDBEnableWindowFunction, 0)
 	mustExecute(s, sql)
@@ -1100,7 +1100,7 @@ func upgradeToVer52(s sessionapi.Session, _ int64) {
 }
 
 func upgradeToVer53(s sessionapi.Session, _ int64) {
-	// when upgrade from old tidb and no `tidb_enable_strict_double_type_check` in GLOBAL_VARIABLES, init it with 1`
+	// when upgrade from old tidb and no `tidb_enable_strict_double_type_check` in global_variables, init it with 1`
 	sql := fmt.Sprintf("INSERT IGNORE INTO %s.%s (`VARIABLE_NAME`, `VARIABLE_VALUE`) VALUES ('%s', '%d')",
 		mysql.SystemDB, mysql.GlobalVariablesTable, vardef.TiDBEnableStrictDoubleTypeCheck, 0)
 	mustExecute(s, sql)
@@ -1404,7 +1404,7 @@ func upgradeToVer80(s sessionapi.Session, _ int64) {
 // For users that upgrade TiDB from a pre-4.0 version, we want to disable index merge by default.
 // This helps minimize query plan regressions.
 func upgradeToVer81(s sessionapi.Session, _ int64) {
-	// Check if tidb_enable_index_merge exists in mysql.GLOBAL_VARIABLES.
+	// Check if tidb_enable_index_merge exists in mysql.global_variables.
 	// If not, insert "tidb_enable_index_merge | off".
 	initGlobalVariableIfNotExists(s, vardef.TiDBEnableIndexMerge, vardef.Off)
 }
@@ -1497,7 +1497,7 @@ func upgradeToVer95(s sessionapi.Session, _ int64) {
 }
 
 func upgradeToVer97(s sessionapi.Session, _ int64) {
-	// Check if tidb_opt_range_max_size exists in mysql.GLOBAL_VARIABLES.
+	// Check if tidb_opt_range_max_size exists in mysql.global_variables.
 	// If not, insert "tidb_opt_range_max_size | 0" since this is the old behavior before we introduce this variable.
 	initGlobalVariableIfNotExists(s, vardef.TiDBOptRangeMaxSize, 0)
 }
@@ -1871,11 +1871,11 @@ func upgradeToVer209(s sessionapi.Session, _ int64) {
 }
 
 func upgradeToVer210(s sessionapi.Session, _ int64) {
-	// Check if tidb_analyze_column_options exists in mysql.GLOBAL_VARIABLES.
+	// Check if tidb_analyze_column_options exists in mysql.global_variables.
 	// If not, set tidb_analyze_column_options to ALL since this is the old behavior before we introduce this variable.
 	initGlobalVariableIfNotExists(s, vardef.TiDBAnalyzeColumnOptions, ast.AllColumns.String())
 
-	// Check if tidb_opt_projection_push_down exists in mysql.GLOBAL_VARIABLES.
+	// Check if tidb_opt_projection_push_down exists in mysql.global_variables.
 	// If not, set tidb_opt_projection_push_down to Off since this is the old behavior before we introduce this variable.
 	initGlobalVariableIfNotExists(s, vardef.TiDBOptProjectionPushDown, vardef.Off)
 }

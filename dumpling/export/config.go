@@ -129,6 +129,16 @@ var DialectBinaryFormatMap = map[CSVDialect]BinaryFormat{
 	CSVDialectBigQuery:  BinaryFormatBase64,
 }
 
+// ExportTiDBRowIDMode controls the export of the `_tidb_rowid` column when dumping from TiDB
+type ExportTiDBRowIDMode int
+
+const (
+	// ExportTiDBRowIDModeOff disables exporting the `_tidb_rowid` column
+	ExportTiDBRowIDModeOff ExportTiDBRowIDMode = iota
+	// ExportTiDBRowIDModeIntPKAutoInc exports the `_tidb_rowid` column as an integer primary key with auto-increment
+	ExportTiDBRowIDModeIntPKAutoInc
+)
+
 // Config is the dump config for dumpling
 type Config struct {
 	objstore.BackendOptions
@@ -193,6 +203,7 @@ type Config struct {
 	CollationCompatible string
 	CsvOutputDialect    CSVDialect
 	Partitions          []string
+	ExportTiDBRowIDMode ExportTiDBRowIDMode
 
 	Labels        prometheus.Labels `json:"-"`
 	PromFactory   promutil.Factory  `json:"-"`
@@ -271,6 +282,7 @@ func DefaultConfig() *Config {
 		CollationCompatible:      LooseCollationCompatible,
 		CsvOutputDialect:         CSVDialectDefault,
 		SpecifiedTables:          false,
+		ExportTiDBRowIDMode:      ExportTiDBRowIDModeOff,
 		PromFactory:              promutil.NewDefaultFactory(),
 		PromRegistry:             promutil.NewDefaultRegistry(),
 		TransactionalConsistency: true,
@@ -410,6 +422,9 @@ func (*Config) DefineFlags(flags *pflag.FlagSet) {
 		units.BytesSize(float64(parquetfile.DefaultRowGroupMemoryLimitBytes)),
 		"Parquet row-group memory limit in bytes (flush threshold by accounted in-memory bytes), accepts human-readable units",
 	)
+	flags.String(flagExportTiDBRowID, "", "Controls the export of the '_tidb_rowid' column when dumping from TiDB. "+
+		"Options: 'off' (default) or 'int-pk-auto-inc'. 'int-pk-auto-inc' exports '_tidb_rowid' only for tables with "+
+		"a single INT-family PRIMARY KEY with AUTO_INCREMENT, using the PK value as '_tidb_rowid' if it does not exist in the table.")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -703,6 +718,15 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	}
 
 	err = conf.BackendOptions.ParseFromFlags(pflag.CommandLine)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	exportMode, err := flags.GetString(flagExportTiDBRowID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.ExportTiDBRowIDMode, err = ParseExportTiDBRowIDMode(exportMode)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1009,6 +1033,12 @@ func adjustFileFormat(conf *Config) error {
 		}
 	default:
 		return errors.Errorf("unknown config.FileType '%s'", conf.FileType)
+	}
+	// When exporting an extra `_tidb_rowid` column in SQL output, we must use
+	// complete-insert to keep INSERT statements consistent with the selected
+	// columns.
+	if conf.ExportTiDBRowIDMode != ExportTiDBRowIDModeOff && conf.FileType == FileFormatSQLTextString {
+		conf.CompleteInsert = true
 	}
 	return nil
 }
