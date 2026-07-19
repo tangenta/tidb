@@ -155,6 +155,13 @@ func (s *Syncer) SetMinJobIDRefresher(minJobIDRefresher *systable.MinJobIDRefres
 	s.minJobIDRefresher = minJobIDRefresher
 }
 
+// MarkLoadableFunctionReconcileNeededForTest marks loadable functions to be
+// reconciled on the next non-snapshot infoschema reload. It is only used in tests
+// to simulate a fresh TiDB process with an empty in-memory UDF registry.
+func (s *Syncer) MarkLoadableFunctionReconcileNeededForTest() {
+	s.loader.loadableFunctionReconcileNeeded.Store(true)
+}
+
 func (s *Syncer) refreshMDLCheckTableInfo(ctx context.Context) {
 	se, err := s.sysSessionPool.Get()
 
