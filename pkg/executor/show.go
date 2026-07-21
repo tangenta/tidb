@@ -2949,9 +2949,9 @@ func (e *ShowExec) fetchShowImportGroups(ctx context.Context) error {
 func (e *ShowExec) fetchShowImportJobs(ctx context.Context) error {
 	sctx := e.Ctx()
 
-	var hasSuperPriv bool
+	var hasElevatedPrivilege bool
 	if pm := privilege.GetPrivilegeManager(sctx); pm != nil {
-		hasSuperPriv = pm.RequestVerification(sctx.GetSessionVars().ActiveRoles, "", "", "", mysql.SuperPriv)
+		hasElevatedPrivilege = pm.RequestDynamicVerification(sctx.GetSessionVars().ActiveRoles, "IMPORT_JOB_VIEW", false)
 	}
 	// we use sessionCtx from GetTaskManager, user ctx might not have system table privileges.
 	taskManager, err := fstorage.GetTaskManager()
@@ -2966,7 +2966,7 @@ func (e *ShowExec) fetchShowImportJobs(ctx context.Context) error {
 		if err = taskManager.WithNewSession(func(se sessionctx.Context) error {
 			exec := se.GetSQLExecutor()
 			var err2 error
-			info, err2 = importer.GetJob(ctx, exec, *e.ImportJobID, sctx.GetSessionVars().User.String(), hasSuperPriv)
+			info, err2 = importer.GetJob(ctx, exec, *e.ImportJobID, sctx.GetSessionVars().User.String(), hasElevatedPrivilege)
 			return err2
 		}); err != nil {
 			return err
@@ -2977,7 +2977,7 @@ func (e *ShowExec) fetchShowImportJobs(ctx context.Context) error {
 	if err = taskManager.WithNewSession(func(se sessionctx.Context) error {
 		exec := se.GetSQLExecutor()
 		var err2 error
-		infos, err2 = importer.GetAllViewableJobs(ctx, exec, sctx.GetSessionVars().User.String(), hasSuperPriv)
+		infos, err2 = importer.GetAllViewableJobs(ctx, exec, sctx.GetSessionVars().User.String(), hasElevatedPrivilege)
 		return err2
 	}); err != nil {
 		return err
