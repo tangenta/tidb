@@ -24,12 +24,12 @@ import (
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	pkdbrepl "github.com/pingcap/tidb/pkg/domain/pkdb_repl"
 	"github.com/pingcap/tidb/pkg/dxf/framework/dxfmetric"
+	"github.com/pingcap/tidb/pkg/dxf/framework/dxfutil"
 	"github.com/pingcap/tidb/pkg/dxf/framework/handle"
 	"github.com/pingcap/tidb/pkg/dxf/framework/proto"
 	"github.com/pingcap/tidb/pkg/dxf/framework/storage"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
-	"github.com/pingcap/tidb/pkg/sessionctx"
 	tidbutil "github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/intest"
 	"github.com/pingcap/tidb/pkg/util/logutil"
@@ -155,8 +155,11 @@ func NewManager(ctx context.Context, store kv.Storage, taskMgr TaskManager, serv
 			slotMgr:  slotMgr,
 			serverID: serverID,
 		}),
-		logger:   logger,
-		finishCh: make(chan struct{}, proto.MaxConcurrentTask),
+		logger: logger,
+		// finishCh must be able to buffer finish signals for the largest runtime
+		// value of maxConcurrentTask. Otherwise, raising the limit after startup
+		// can make non-blocking sends drop signals until the periodic cleanup loop runs.
+		finishCh: make(chan struct{}, proto.MaxConcurrentTaskUpperBound),
 		nodeRes:  nodeRes,
 	}
 	schedulerManager.mu.schedulerMap = make(map[int64]Scheduler)
@@ -246,7 +249,8 @@ func (sm *Manager) getSchedulableTasks(ctx context.Context) ([]*proto.TaskBase, 
 	defer r.End()
 	getTasksFn := sm.taskMgr.GetTopUnfinishedTasks
 	taskCnt := sm.getSchedulerCount()
-	if taskCnt >= proto.MaxConcurrentTask {
+	maxConcurrentTask := proto.GetMaxConcurrentTask()
+	if taskCnt >= maxConcurrentTask {
 		// when we have reached the limit of concurrent tasks, we only handle
 		// tasks in states that don't need resources, e.g. reverting/cancelling/
 		// pausing/modifying.
@@ -293,7 +297,7 @@ func (sm *Manager) startSchedulers(schedulableTasks []*proto.TaskBase) error {
 		switch task.State {
 		case proto.TaskStatePending, proto.TaskStateRunning, proto.TaskStateResuming:
 			taskCnt := sm.getSchedulerCount()
-			if taskCnt >= proto.MaxConcurrentTask {
+			if taskCnt >= proto.GetMaxConcurrentTask() {
 				continue
 			}
 			reservedExecID, ok = sm.slotMgr.canReserve(task)
@@ -353,17 +357,12 @@ func (sm *Manager) startScheduler(basicTask *proto.TaskBase, allocateSlots bool,
 		return
 	}
 
-	taskStore := sm.store
-	if task.Keyspace != sm.store.GetKeyspace() {
-		if err = sm.taskMgr.WithNewSession(func(se sessionctx.Context) error {
-			var err2 error
-			taskStore, err2 = se.GetSQLServer().GetKSStore(task.Keyspace)
-			return err2
-		}); err != nil {
-			sm.logger.Warn("get task store failed", zap.Int64("task-id", basicTask.ID),
-				zap.String("task-key", basicTask.Key), zap.Error(err))
-			return
-		}
+	holderID := dxfutil.GenHolderID("scheduler", task.ID)
+	taskRuntime, releaseFn, err := dxfutil.AcquireTaskRuntime(sm.taskMgr, task.Keyspace, holderID)
+	if err != nil {
+		sm.logger.Warn("acquire task runtime failed", zap.Int64("task-id", basicTask.ID),
+			zap.String("task-key", basicTask.Key), zap.Error(err))
+		return
 	}
 
 	schedulerFactory := getSchedulerFactory(task.Type)
@@ -374,11 +373,12 @@ func (sm *Manager) startScheduler(basicTask *proto.TaskBase, allocateSlots bool,
 		serverID:       sm.serverID,
 		allocatedSlots: allocateSlots,
 		nodeRes:        sm.nodeRes,
-		TaskStore:      taskStore,
+		TaskRuntime:    taskRuntime,
 	})
 	if err = scheduler.Init(); err != nil {
 		sm.logger.Error("init scheduler failed", zap.Error(err))
 		sm.failTask(task.ID, task.State, err)
+		releaseFn()
 		return
 	}
 	sm.addScheduler(task.ID, scheduler)
@@ -389,6 +389,7 @@ func (sm *Manager) startScheduler(basicTask *proto.TaskBase, allocateSlots bool,
 	sm.schedulerWG.RunWithLog(func() {
 		defer func() {
 			scheduler.Close()
+			releaseFn()
 			sm.delScheduler(task.ID)
 			if allocateSlots {
 				sm.slotMgr.unReserve(basicTask, reservedExecID)
@@ -427,14 +428,9 @@ func (sm *Manager) cleanupTaskLoop() {
 //	tasks with global sort should clean up tmp files stored on S3.
 func (sm *Manager) doCleanupTask() {
 	failpoint.InjectCall("doCleanupTask")
-	tasks, err := sm.taskMgr.GetTasksInStates(
-		sm.ctx,
-		proto.TaskStateFailed,
-		proto.TaskStateReverted,
-		proto.TaskStateSucceed,
-	)
+	tasks, err := sm.taskMgr.GetCleanupTasks(sm.ctx)
 	if err != nil {
-		sm.logger.Warn("get task in states failed", zap.Error(err))
+		sm.logger.Warn("get cleanup tasks failed", zap.Error(err))
 		return
 	}
 	if len(tasks) == 0 {

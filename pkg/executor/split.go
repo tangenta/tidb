@@ -662,7 +662,7 @@ func getRegionInfo(store helper.Storage, regions []regionMeta) ([]regionMeta, er
 	if !ok {
 		return regions, nil
 	}
-	pdHosts, err := etcd.EtcdAddrs()
+	pdHosts, err := etcd.GetPDAddrs()
 	if err != nil {
 		return regions, err
 	}

@@ -71,11 +71,12 @@ func WithTiDBShardInternalVersionForShardIndexVersion(ctx BuildContext, version 
 // BuildSimpleExprForGeneratedColumn builds a generated-column expression and
 // enables the internal tidb_shard() form only when the column metadata stores
 // that versioned internal representation.
-func BuildSimpleExprForGeneratedColumn(ctx BuildContext, expr ast.ExprNode, schema *Schema, names types.NameSlice, tblInfo *model.TableInfo, col *model.ColumnInfo) (Expression, error) {
+func BuildSimpleExprForGeneratedColumn(ctx BuildContext, expr ast.ExprNode, schema *Schema, names types.NameSlice, tblInfo *model.TableInfo, col *model.ColumnInfo, useNewCollate bool) (Expression, error) {
 	buildCtx := WithTiDBShardInternalVersionForGeneratedColumn(ctx, expr, col)
 	return BuildSimpleExpr(buildCtx, expr,
 		WithInputSchemaAndNames(schema, names, tblInfo),
 		WithAllowCastArray(true),
+		WithUseNewCollate(useNewCollate),
 	)
 }
 

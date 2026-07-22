@@ -11,6 +11,7 @@ import (
 
 	"gitee.com/joccau/orc"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/dumpformat/parsedef"
 	"github.com/pingcap/tidb/pkg/lightning/log"
 	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/objstore/storeapi"
@@ -80,7 +81,7 @@ type ORCParser struct {
 	// rowOffset specifies the specified row idx in specified stripe.
 	rowIdxInStripe int64
 
-	lastRow Row
+	lastRow parsedef.Row
 	logger  log.Logger
 
 	fr *fileReader
@@ -272,12 +273,12 @@ func (p *ORCParser) ReadRow() error {
 
 // LastRow gets the last row parsed by the parser.
 // It implements the Parser interface.
-func (p *ORCParser) LastRow() Row {
+func (p *ORCParser) LastRow() parsedef.Row {
 	return p.lastRow
 }
 
 // RecycleRow implements the Parser interface.
-func (p *ORCParser) RecycleRow(row Row) {
+func (p *ORCParser) RecycleRow(row parsedef.Row) {
 }
 
 // Columns returns the _lower-case_ column names corresponding to values in

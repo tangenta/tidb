@@ -439,7 +439,7 @@ engines = ["tikv", "tiflash", "tidb"]
 [ru-v2]
 # ru-scale is the scale factor used to convert RU v2 float values into scaled integer values.
 # It is intentionally chosen to match legacy RU values for compatibility.
-ru-scale = 1.34
+ru-scale = 2.01
 
 # result-chunk-cells is the weight for cells materialized into result chunks.
 result-chunk-cells = 0.00010000
@@ -461,6 +461,7 @@ plan-cnt = 0.15392217
 plan-derive-stats-paths = 0.24968182
 resource-manager-read-cnt = 0.02072003
 resource-manager-write-cnt = 0.07179779
+write-keys = 0.330760861554226
 session-parser-total = 0.19230499
 txn-cnt = 0.03013709
 

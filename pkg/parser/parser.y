@@ -43,6 +43,11 @@ type likeEscapeSpec struct {
 	explicit bool
 }
 
+type insertRowAlias struct {
+	rowAlias      ast.CIStr
+	columnAliases []ast.CIStr
+}
+
 func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool) {
 	switch strings.ToUpper(name) {
 	case ast.MaskingPolicyRestrictNameInsertIntoSelect:
@@ -582,6 +587,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	nvarcharType               "NVARCHAR"
 	off                        "OFF"
 	offset                     "OFFSET"
+	old                        "OLD"
 	oltpReadOnly               "OLTP_READ_ONLY"
 	oltpReadWrite              "OLTP_READ_WRITE"
 	oltpWriteOnly              "OLTP_WRITE_ONLY"
@@ -647,7 +653,9 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	restore                    "RESTORE"
 	restores                   "RESTORES"
 	resume                     "RESUME"
+	retain                     "RETAIN"
 	returned_sqlstate          "RETURNED_SQLSTATE"
+	returning                  "RETURNING"
 	returns                    "RETURNS"
 	reuse                      "REUSE"
 	reverse                    "REVERSE"
@@ -720,6 +728,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	status                     "STATUS"
 	stmt                       "STMT"
 	storage                    "STORAGE"
+	storageClass               "STORAGE_CLASS"
 	strictFormat               "STRICT_FORMAT"
 	stringType                 "STRING"
 	subclassOrigin             "SUBCLASS_ORIGIN"
@@ -766,6 +775,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	unknown                    "UNKNOWN"
 	unset                      "UNSET"
 	user                       "USER"
+	uuid                       "UUID"
 	validation                 "VALIDATION"
 	value                      "VALUE"
 	variables                  "VARIABLES"
@@ -937,7 +947,9 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	builtinExtract
 	builtinGroupConcat
 	builtinMax
+	builtinMaxCount
 	builtinMin
+	builtinMinCount
 	builtinNow
 	builtinPosition
 	builtins                   "BUILTINS"
@@ -945,6 +957,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	builtinStddevSamp
 	builtinSubstring
 	builtinSum
+	builtinSumInt
 	builtinSysDate
 	builtinTranslate
 	builtinTrim
@@ -1367,6 +1380,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	IndexPartSpecificationList             "List of index column name or expression"
 	IndexPartSpecificationListOpt          "Optional list of index column name or expression"
 	InsertValues                           "Rest part of INSERT/REPLACE INTO statement"
+	InsertRowAliasOpt                      "optional row alias for INSERT VALUES/SET"
 	IntervalExpr                           "Interval expression"
 	JoinTable                              "join table"
 	JoinType                               "join type"
@@ -1437,6 +1451,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	PasswordOrLockOption                   "Single password or lock option for create user statement"
 	PasswordOrLockOptionList               "Password or lock options for create user statement"
 	PasswordOrLockOptions                  "Optional password or lock options for create user statement"
+	AlterPasswordOrLockOption              "Single password or lock option for alter user statement"
+	AlterPasswordOrLockOptionList          "Password or lock options for alter user statement"
+	AlterPasswordOrLockOptions             "Optional password or lock options for alter user statement"
+	AuthOptionWithPassword                 "Auth option that carries a cleartext password (BY-form), used by ALTER USER ... RETAIN CURRENT PASSWORD"
 	PlanReplayerDumpOpt                    "Plan Replayer Dump option"
 	CommentOrAttributeOption               "Optional comment or attribute option for CREATE/ALTER USER statements"
 	ColumnPosition                         "Column position [First|After ColumnName]"
@@ -1444,8 +1462,8 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	Priority                               "Statement priority"
 	PriorityOpt                            "Statement priority option"
 	PrivElem                               "Privilege element"
-	RefreshObject                          "Refresh object"
-	RefreshObjectList                      "Refresh object list"
+	StatsObject                            "Stats object"
+	StatsObjectList                        "Stats object list"
 	RefreshStatsModeOpt                    "Refresh stats mode optional"
 	RefreshStatsMode                       "Refresh stats mode"
 	RefreshStatsClusterOpt                 "Refresh stats cluster option"
@@ -1478,6 +1496,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	SelectLockOpt                          "SELECT lock options"
 	SelectStmtSQLCache                     "SELECT statement optional SQL_CAHCE/SQL_NO_CACHE"
 	SelectStmtFieldList                    "SELECT statement field list"
+	ReturningClause                        "RETURNING clause for DML"
 	SelectStmtLimit                        "SELECT statement LIMIT clause"
 	SelectStmtLimitOpt                     "SELECT statement optional LIMIT clause"
 	SelectStmtOpt                          "Select statement option"
@@ -1525,6 +1544,7 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	TableAliasRefList                      "table alias reference list"
 	TableAsName                            "table alias name"
 	TableAsNameOpt                         "table alias name optional"
+	TableAsNameOptDelete                   "table alias name optional for delete"
 	TableElement                           "table definition element"
 	TableElementList                       "table definition element list"
 	TableElementListOpt                    "table definition element list optional"
@@ -1567,8 +1587,10 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 	UpdateIndexesOpt                       "UPDATE INDEXES (UpdateIndexesList) or empty"
 	Username                               "Username"
 	UsernameList                           "UsernameList"
-	UserSpec                               "Username and auth option"
+	UserSpec                               "Username and auth option (used by CREATE USER; rejects RETAIN/DISCARD by construction)"
 	UserSpecList                           "Username and auth option list"
+	AlterUserSpec                          "ALTER USER username with optional auth-option and per-spec RETAIN/DISCARD dual-password clause"
+	AlterUserSpecList                      "ALTER USER spec list"
 	UserVariableList                       "User defined variable name list"
 	UserToUser                             "rename user to user"
 	UserToUserList                         "rename user to user by list"
@@ -1866,8 +1888,12 @@ func getMaskingPolicyRestrictOp(name string) (ast.MaskingPolicyRestrictOps, bool
 %precedence local
 %precedence lowerThanRemove
 %precedence remove
+%precedence lowerThanReplayer
+%precedence replayer
 %precedence lowerThenOrder
 %precedence order
+%precedence returning
+%precedence higherThanReturning
 %precedence lowerThanFunction
 %precedence function
 %precedence constraint
@@ -4232,6 +4258,26 @@ ColumnOption:
 			StrValue: $3,
 		}
 	}
+|	GeneratedAlways "AS" "ROW" "START"
+	{
+		// MariaDB period marker only; no engine semantics.
+		// Bare AS ROW START restores to the canonical GENERATED ALWAYS form.
+		if !parser.enableMariaDB {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionMariaDBRowStart}
+	}
+|	GeneratedAlways "AS" "ROW" "END"
+	{
+		// MariaDB period marker only; no engine semantics.
+		// Bare AS ROW END restores to the canonical GENERATED ALWAYS form.
+		if !parser.enableMariaDB {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionMariaDBRowEnd}
+	}
 |	"SECURED" "WITH" Identifier
 	{
 		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionSecuredWith, StrValue: $3}
@@ -4564,6 +4610,13 @@ BuiltinFunction:
 		$$ = &ast.FuncCallExpr{
 			FnName: ast.NewCIStr($1),
 			Args:   $3.([]ast.ExprNode),
+		}
+	}
+|	"UUID" '(' ')'
+	{
+		// UUID is a keyword token now; keep DEFAULT UUID() accepted.
+		$$ = &ast.FuncCallExpr{
+			FnName: ast.NewCIStr($1),
 		}
 	}
 |	"REPLACE" '(' ExpressionList ')'
@@ -5748,7 +5801,7 @@ DoStmt:
  *
  *******************************************************************/
 DeleteWithoutUsingStmt:
-	"DELETE" TableOptimizerHintsOpt PriorityOpt QuickOptional IgnoreOptional "FROM" TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
+	"DELETE" TableOptimizerHintsOpt PriorityOpt QuickOptional IgnoreOptional "FROM" TableName PartitionNameListOpt TableAsNameOptDelete IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause ReturningClause
 	{
 		// Single Table
 		tn := $7.(*ast.TableName)
@@ -5772,6 +5825,9 @@ DeleteWithoutUsingStmt:
 		}
 		if $13 != nil {
 			x.Limit = $13.(*ast.Limit)
+		}
+		if $14 != nil {
+			x.Returning = $14.([]*ast.SelectField)
 		}
 
 		$$ = x
@@ -6042,6 +6098,13 @@ ExplainStmt:
 		$$ = &ast.ExplainStmt{
 			SQLDigest: $3,
 			Explore:   true,
+		}
+	}
+|	ExplainSym "EXPLORE" "REPLAYER" stringLit
+	{
+		$$ = &ast.ExplainStmt{
+			ReplayerFile: $4,
+			Explore:      true,
 		}
 	}
 |	ExplainSym "EXPLORE" "ANALYZE" SelectStmt
@@ -7173,7 +7236,7 @@ Field:
 	}
 
 FieldAsNameOpt:
-	/* EMPTY */
+	/* EMPTY */ %prec higherThanReturning
 	{
 		$$ = ""
 	}
@@ -7568,13 +7631,14 @@ UnReservedKeyword:
 |	"ENGINES"
 |	"ENGINE_ATTRIBUTE"
 |	"SECONDARY_ENGINE_ATTRIBUTE"
+|	"STORAGE_CLASS"
 |	"ENUM"
 |	"ERROR"
 |	"ERRORS"
 |	"ESCAPE"
 |	"EVOLVE"
 |	"EXECUTE"
-|	"EXPLORE"
+|	"EXPLORE" %prec lowerThanReplayer
 |	"EXTENDED"
 |	"FIELDS"
 |	"FILE"
@@ -7659,6 +7723,7 @@ UnReservedKeyword:
 |	"ANY"
 |	"SOME"
 |	"USER"
+|	"UUID"
 |	"IDENTIFIED"
 |	"COLLATION"
 |	"COMMENT"
@@ -7807,6 +7872,8 @@ UnReservedKeyword:
 |	"IMPORT"
 |	"IMPORTS"
 |	"DISCARD"
+|	"OLD"
+|	"RETAIN"
 |	"TABLE_CHECKSUM"
 |	"UNICODE"
 |	"AUTO_RANDOM"
@@ -7883,6 +7950,7 @@ UnReservedKeyword:
 |	"PERCENT"
 |	"PAUSE"
 |	"RESUME"
+|	"RETURNING"
 |	"OFF"
 |	"OPTIONAL"
 |	"REQUIRED"
@@ -8201,7 +8269,7 @@ ProcedureCall:
  *
  **********************************************************************************/
 InsertIntoStmt:
-	"INSERT" TableOptimizerHintsOpt PriorityOpt IgnoreOptional IntoOpt TableName PartitionNameListOpt InsertValues OnDuplicateKeyUpdate
+	"INSERT" TableOptimizerHintsOpt PriorityOpt IgnoreOptional IntoOpt TableName PartitionNameListOpt InsertValues OnDuplicateKeyUpdate ReturningClause
 	{
 		x := $8.(*ast.InsertStmt)
 		x.Priority = $3.(mysql.PriorityEnum)
@@ -8216,6 +8284,9 @@ InsertIntoStmt:
 			x.TableHints = $2.([]*ast.TableOptimizerHint)
 		}
 		x.PartitionNames = $7.([]ast.CIStr)
+		if $10 != nil {
+			x.Returning = $10.([]*ast.SelectField)
+		}
 		$$ = x
 	}
 
@@ -8224,12 +8295,18 @@ IntoOpt:
 |	"INTO"
 
 InsertValues:
-	'(' ColumnNameListOpt ')' ValueSym ValuesList
+	'(' ColumnNameListOpt ')' ValueSym ValuesList InsertRowAliasOpt
 	{
-		$$ = &ast.InsertStmt{
+		x := &ast.InsertStmt{
 			Columns: $2.([]*ast.ColumnName),
 			Lists:   $5.([][]ast.ExprNode),
 		}
+		if $6 != nil {
+			alias := $6.(*insertRowAlias)
+			x.RowAlias = alias.rowAlias
+			x.ColumnAliases = alias.columnAliases
+		}
+		$$ = x
 	}
 |	'(' ColumnNameListOpt ')' SetOprStmt
 	{
@@ -8256,9 +8333,15 @@ InsertValues:
 		}
 		$$ = &ast.InsertStmt{Columns: $2.([]*ast.ColumnName), Select: sel}
 	}
-|	ValueSym ValuesList %prec insertValues
+|	ValueSym ValuesList InsertRowAliasOpt %prec insertValues
 	{
-		$$ = &ast.InsertStmt{Lists: $2.([][]ast.ExprNode)}
+		x := &ast.InsertStmt{Lists: $2.([][]ast.ExprNode)}
+		if $3 != nil {
+			alias := $3.(*insertRowAlias)
+			x.RowAlias = alias.rowAlias
+			x.ColumnAliases = alias.columnAliases
+		}
+		$$ = x
 	}
 |	SetOprStmt
 	{
@@ -8285,9 +8368,15 @@ InsertValues:
 		}
 		$$ = &ast.InsertStmt{Select: sel}
 	}
-|	"SET" ColumnSetValueList
+|	"SET" ColumnSetValueList InsertRowAliasOpt
 	{
-		$$ = $2.(*ast.InsertStmt)
+		x := $2.(*ast.InsertStmt)
+		if $3 != nil {
+			alias := $3.(*insertRowAlias)
+			x.RowAlias = alias.rowAlias
+			x.ColumnAliases = alias.columnAliases
+		}
+		$$ = x
 	}
 
 ValueSym:
@@ -8351,6 +8440,24 @@ ColumnSetValueList:
 	}
 
 /*
+ * Optional row alias for INSERT ... VALUES/SET (MySQL 8.0.19+).
+ * See https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html
+ */
+InsertRowAliasOpt:
+	/* empty */ %prec empty
+	{
+		$$ = nil
+	}
+|	"AS" Identifier
+	{
+		$$ = &insertRowAlias{rowAlias: ast.NewCIStr($2)}
+	}
+|	"AS" Identifier '(' IdentList ')'
+	{
+		$$ = &insertRowAlias{rowAlias: ast.NewCIStr($2), columnAliases: $4.([]ast.CIStr)}
+	}
+
+/*
  * ON DUPLICATE KEY UPDATE col_name=expr [, col_name=expr] ...
  * See https://dev.mysql.com/doc/refman/5.7/en/insert-on-duplicate.html
  */
@@ -8363,6 +8470,16 @@ OnDuplicateKeyUpdate:
 		$$ = $5
 	}
 
+ReturningClause:
+	%prec empty
+	{
+		$$ = nil
+	}
+|	"RETURNING" FieldList
+	{
+		$$ = $2
+	}
+
 /************************************************************************************
  *  Replace Statements
  *  See https://dev.mysql.com/doc/refman/5.7/en/replace.html
@@ -8372,6 +8489,10 @@ ReplaceIntoStmt:
 	"REPLACE" TableOptimizerHintsOpt PriorityOpt IntoOpt TableName PartitionNameListOpt InsertValues
 	{
 		x := $7.(*ast.InsertStmt)
+		if x.RowAlias.O != "" || len(x.ColumnAliases) > 0 {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
 		if $2 != nil {
 			x.TableHints = $2.([]*ast.TableOptimizerHint)
 		}
@@ -8573,6 +8694,7 @@ OptOrder:
 	}
 
 OrderByOptional:
+	%prec empty
 	{
 		$$ = nil
 	}
@@ -8970,6 +9092,7 @@ FunctionNameConflict:
 |	"TIMESTAMP"
 |	"TRUNCATE"
 |	"USER"
+|	"UUID"
 |	"WEEK"
 |	"YEAR"
 
@@ -9415,6 +9538,22 @@ SumExpr:
 			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
 		}
 	}
+|	builtinMaxCount '(' Expression ')' OptWindowingClause
+	{
+		if $5 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$3}, Spec: *($5.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
+		}
+	}
+|	builtinMaxCount '(' "ALL" Expression ')' OptWindowingClause
+	{
+		if $6 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4}, Spec: *($6.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}}
+		}
+	}
 |	builtinMin '(' BuggyDefaultFalseDistinctOpt Expression ')' OptWindowingClause
 	{
 		if $6 != nil {
@@ -9423,7 +9562,31 @@ SumExpr:
 			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
 		}
 	}
+|	builtinMinCount '(' Expression ')' OptWindowingClause
+	{
+		if $5 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$3}, Spec: *($5.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
+		}
+	}
+|	builtinMinCount '(' "ALL" Expression ')' OptWindowingClause
+	{
+		if $6 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4}, Spec: *($6.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}}
+		}
+	}
 |	builtinSum '(' BuggyDefaultFalseDistinctOpt Expression ')' OptWindowingClause
+	{
+		if $6 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool), Spec: *($6.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
+		}
+	}
+|	builtinSumInt '(' BuggyDefaultFalseDistinctOpt Expression ')' OptWindowingClause
 	{
 		if $6 != nil {
 			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool), Spec: *($6.(*ast.WindowSpec))}
@@ -9514,11 +9677,11 @@ SumExpr:
 
 OptGConcatSeparator:
 	{
-		$$ = ast.NewValueExpr(",", "", "")
+		$$ = ast.NewValueExpr(",", parser.charset, parser.collation)
 	}
 |	"SEPARATOR" stringLit
 	{
-		$$ = ast.NewValueExpr($2, "", "")
+		$$ = ast.NewValueExpr($2, parser.charset, parser.collation)
 	}
 
 FunctionCallGeneric:
@@ -10918,6 +11081,13 @@ TableAsNameOpt:
 	}
 |	TableAsName
 
+TableAsNameOptDelete:
+	%prec higherThanReturning
+	{
+		$$ = ast.CIStr{}
+	}
+|	TableAsName
+
 TableAsName:
 	Identifier
 	{
@@ -11073,6 +11243,7 @@ CrossOpt:
 |	"INNER" "JOIN"
 
 LimitClause:
+	%prec empty
 	{
 		$$ = nil
 	}
@@ -11788,9 +11959,17 @@ SetStmt:
 	{
 		$$ = &ast.SetPwdStmt{Password: $4}
 	}
+|	"SET" "PASSWORD" EqOrAssignmentEq PasswordOpt "RETAIN" "CURRENT" "PASSWORD"
+	{
+		$$ = &ast.SetPwdStmt{Password: $4, RetainCurrentPassword: true}
+	}
 |	"SET" "PASSWORD" "FOR" Username EqOrAssignmentEq PasswordOpt
 	{
 		$$ = &ast.SetPwdStmt{User: $4.(*auth.UserIdentity), Password: $6}
+	}
+|	"SET" "PASSWORD" "FOR" Username EqOrAssignmentEq PasswordOpt "RETAIN" "CURRENT" "PASSWORD"
+	{
+		$$ = &ast.SetPwdStmt{User: $4.(*auth.UserIdentity), Password: $6, RetainCurrentPassword: true}
 	}
 |	"SET" "GLOBAL" "TRANSACTION" TransactionChars
 	{
@@ -13396,11 +13575,12 @@ FlushOption:
 			Tp: ast.FlushClientErrorsSummary,
 		}
 	}
-|	"STATS_DELTA" ClusterOpt
+|	"STATS_DELTA" StatsObjectList ClusterOpt
 	{
 		$$ = &ast.FlushStmt{
-			Tp:        ast.FlushStatsDelta,
-			IsCluster: $2.(bool),
+			Tp:           ast.FlushStatsDelta,
+			FlushObjects: $2.([]*ast.StatsObject),
+			IsCluster:    $3.(bool),
 		}
 	}
 
@@ -13801,6 +13981,10 @@ TableElementListOpt:
 
 TableOption:
 	PartDefOption
+|	"STORAGE_CLASS" EqOpt StringName
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionStorageClass, StrValue: strings.ToUpper($3)}
+	}
 |	DefaultKwdOpt CharsetKw EqOpt CharsetName
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionCharset, StrValue: $4,
@@ -14581,6 +14765,17 @@ StringType:
 		tp.SetSubType(mysql.SubTypeIntervalDayToSecond)
 		$$ = tp
 	}
+|	"UUID"
+	{
+		if !parser.enableMariaDB {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
+		// MariaDB UUID has no native TiDB type; restore emits CHAR(36).
+		tp := types.NewFieldType(mysql.TypeString)
+		tp.SetFlen(36)
+		$$ = tp
+	}
 |	"LONG" Varchar OptCharsetWithOptBinary
 	{
 		tp := types.NewFieldType(mysql.TypeMediumBlob)
@@ -14969,7 +15164,7 @@ UpdateStmt:
 	}
 
 UpdateStmtNoWith:
-	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause
+	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause ReturningClause
 	{
 		var refs *ast.Join
 		if x, ok := $5.(*ast.Join); ok {
@@ -14995,9 +15190,12 @@ UpdateStmtNoWith:
 		if $10 != nil {
 			st.Limit = $10.(*ast.Limit)
 		}
+		if $11 != nil {
+			st.Returning = $11.([]*ast.SelectField)
+		}
 		$$ = st
 	}
-|	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRefs "SET" AssignmentList WhereClauseOptional
+|	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRefs "SET" AssignmentList WhereClauseOptional ReturningClause
 	{
 		st := &ast.UpdateStmt{
 			Priority:  $3.(mysql.PriorityEnum),
@@ -15010,6 +15208,9 @@ UpdateStmtNoWith:
 		}
 		if $8 != nil {
 			st.Where = $8.(ast.ExprNode)
+		}
+		if $9 != nil {
+			st.Returning = $9.([]*ast.SelectField)
 		}
 		$$ = st
 	}
@@ -15027,6 +15228,7 @@ WhereClause:
 	}
 
 WhereClauseOptional:
+	%prec empty
 	{
 		$$ = nil
 	}
@@ -15070,7 +15272,7 @@ CreateRoleStmt:
 
 /* See http://dev.mysql.com/doc/refman/8.0/en/alter-user.html */
 AlterUserStmt:
-	"ALTER" "USER" IfExists UserSpecList RequireClauseOpt ConnectionOptions PasswordOrLockOptions CommentOrAttributeOption ResourceGroupNameOption
+	"ALTER" "USER" IfExists AlterUserSpecList RequireClauseOpt ConnectionOptions AlterPasswordOrLockOptions CommentOrAttributeOption ResourceGroupNameOption
 	{
 		ret := &ast.AlterUserStmt{
 			IfExists:              $3.(bool),
@@ -15096,6 +15298,32 @@ AlterUserStmt:
 		$$ = &ast.AlterUserStmt{
 			IfExists:    $3.(bool),
 			CurrentAuth: auth,
+		}
+	}
+|	"ALTER" "USER" IfExists "USER" '(' ')' "IDENTIFIED" "BY" AuthString "RETAIN" "CURRENT" "PASSWORD"
+	{
+		// MySQL 8.0 user_func_auth_option allows RETAIN CURRENT PASSWORD on
+		// the current-user form. The parser accepts it here and tags the
+		// statement with CurrentDualPasswordOption; the executor (see
+		// executeAlterUser) propagates this to the synthetic UserSpec where
+		// the stub returns ER_NOT_SUPPORTED_YET until the behavior PR lands.
+		auth := &ast.AuthOption{
+			AuthString:   $9,
+			ByAuthString: true,
+		}
+		$$ = &ast.AlterUserStmt{
+			IfExists:                  $3.(bool),
+			CurrentAuth:               auth,
+			CurrentDualPasswordOption: ast.DualPasswordRetainCurrent,
+		}
+	}
+|	"ALTER" "USER" IfExists "USER" '(' ')' "DISCARD" "OLD" "PASSWORD"
+	{
+		// MySQL 8.0 user_func_auth_option allows DISCARD OLD PASSWORD as a
+		// standalone clause on the current-user form (no IDENTIFIED BY).
+		$$ = &ast.AlterUserStmt{
+			IfExists:                  $3.(bool),
+			CurrentDualPasswordOption: ast.DualPasswordDiscardOld,
 		}
 	}
 
@@ -15148,6 +15376,80 @@ UserSpecList:
 |	UserSpecList ',' UserSpec
 	{
 		$$ = append($1.([]*ast.UserSpec), $3.(*ast.UserSpec))
+	}
+
+/*
+ * AlterUserSpec is the per-user spec for ALTER USER. It permits MySQL 8.0
+ * dual-password clauses (RETAIN CURRENT PASSWORD / DISCARD OLD PASSWORD)
+ * alongside an auth-option, with grammar-level enforcement of MySQL's
+ * restrictions:
+ *   - RETAIN attaches only to BY-form auth options (IDENTIFIED BY 'plain'
+ *     or IDENTIFIED WITH plugin BY 'plain'). The hashed AS-form and the
+ *     bare-plugin form are NOT accepted with RETAIN.
+ *   - DISCARD OLD PASSWORD is a standalone clause; no auth option may
+ *     accompany it on the same spec.
+ *   - RETAIN / DISCARD are NOT exposed via UserSpec for CREATE USER, so
+ *     CREATE USER continues to reject them at parse time (matching MySQL).
+ */
+AlterUserSpec:
+	Username AuthOption
+	{
+		userSpec := &ast.UserSpec{
+			User: $1.(*auth.UserIdentity),
+		}
+		if $2 != nil {
+			userSpec.AuthOpt = $2.(*ast.AuthOption)
+		}
+		$$ = userSpec
+	}
+|	Username AuthOptionWithPassword "RETAIN" "CURRENT" "PASSWORD"
+	{
+		$$ = &ast.UserSpec{
+			User:               $1.(*auth.UserIdentity),
+			AuthOpt:            $2.(*ast.AuthOption),
+			DualPasswordOption: ast.DualPasswordRetainCurrent,
+		}
+	}
+|	Username "DISCARD" "OLD" "PASSWORD"
+	{
+		$$ = &ast.UserSpec{
+			User:               $1.(*auth.UserIdentity),
+			DualPasswordOption: ast.DualPasswordDiscardOld,
+		}
+	}
+
+AlterUserSpecList:
+	AlterUserSpec
+	{
+		$$ = []*ast.UserSpec{$1.(*ast.UserSpec)}
+	}
+|	AlterUserSpecList ',' AlterUserSpec
+	{
+		$$ = append($1.([]*ast.UserSpec), $3.(*ast.UserSpec))
+	}
+
+/*
+ * AuthOptionWithPassword is the subset of AuthOption that carries an explicit
+ * cleartext password, i.e. the BY forms. Used by ALTER USER and SET PASSWORD
+ * to constrain RETAIN CURRENT PASSWORD attachment per MySQL 8.0 semantics
+ * (RETAIN is not valid with the WITH plugin AS '<hash>' form, the bare
+ * IDENTIFIED WITH plugin form, or with no auth-option at all).
+ */
+AuthOptionWithPassword:
+	"IDENTIFIED" "BY" AuthString
+	{
+		$$ = &ast.AuthOption{
+			AuthString:   $3,
+			ByAuthString: true,
+		}
+	}
+|	"IDENTIFIED" "WITH" AuthPlugin "BY" AuthString
+	{
+		$$ = &ast.AuthOption{
+			AuthPlugin:   $3,
+			AuthString:   $5,
+			ByAuthString: true,
+		}
 	}
 
 ConnectionOptions:
@@ -15325,28 +15627,28 @@ ResourceGroupNameOption:
 		$$ = &ast.ResourceGroupNameOption{Value: $3}
 	}
 
-PasswordOrLockOptions:
+AlterPasswordOrLockOptions:
 	{
 		$$ = []*ast.PasswordOrLockOption{}
 	}
-|	PasswordOrLockOptionList
+|	AlterPasswordOrLockOptionList
 	{
 		$$ = $1
 	}
 
-PasswordOrLockOptionList:
-	PasswordOrLockOption
+AlterPasswordOrLockOptionList:
+	AlterPasswordOrLockOption
 	{
 		$$ = []*ast.PasswordOrLockOption{$1.(*ast.PasswordOrLockOption)}
 	}
-|	PasswordOrLockOptionList PasswordOrLockOption
+|	AlterPasswordOrLockOptionList AlterPasswordOrLockOption
 	{
 		l := $1.([]*ast.PasswordOrLockOption)
 		l = append(l, $2.(*ast.PasswordOrLockOption))
 		$$ = l
 	}
 
-PasswordOrLockOption:
+AlterPasswordOrLockOption:
 	"ACCOUNT" "UNLOCK"
 	{
 		$$ = &ast.PasswordOrLockOption{
@@ -15435,6 +15737,33 @@ PasswordOrLockOption:
 		$$ = &ast.PasswordOrLockOption{
 			Type: ast.PasswordRequireCurrentDefault,
 		}
+	}
+
+PasswordOrLockOptions:
+	{
+		$$ = []*ast.PasswordOrLockOption{}
+	}
+|	PasswordOrLockOptionList
+	{
+		$$ = $1
+	}
+
+PasswordOrLockOptionList:
+	PasswordOrLockOption
+	{
+		$$ = []*ast.PasswordOrLockOption{$1.(*ast.PasswordOrLockOption)}
+	}
+|	PasswordOrLockOptionList PasswordOrLockOption
+	{
+		l := $1.([]*ast.PasswordOrLockOption)
+		l = append(l, $2.(*ast.PasswordOrLockOption))
+		$$ = l
+	}
+
+PasswordOrLockOption:
+	AlterPasswordOrLockOption
+	{
+		$$ = $1
 	}
 
 AuthOption:
@@ -16752,10 +17081,10 @@ UnlockStatsStmt:
 	}
 
 RefreshStatsStmt:
-	"REFRESH" "STATS" RefreshObjectList RefreshStatsModeOpt RefreshStatsClusterOpt
+	"REFRESH" "STATS" StatsObjectList RefreshStatsModeOpt RefreshStatsClusterOpt
 	{
 		stmt := &ast.RefreshStatsStmt{
-			RefreshObjects: $3.([]*ast.RefreshObject),
+			RefreshObjects: $3.([]*ast.StatsObject),
 		}
 		if mode, ok := $4.(*ast.RefreshStatsMode); ok {
 			stmt.RefreshMode = mode
@@ -16764,14 +17093,14 @@ RefreshStatsStmt:
 		$$ = stmt
 	}
 
-RefreshObjectList:
-	RefreshObject
+StatsObjectList:
+	StatsObject
 	{
-		$$ = []*ast.RefreshObject{$1.(*ast.RefreshObject)}
+		$$ = []*ast.StatsObject{$1.(*ast.StatsObject)}
 	}
-|	RefreshObjectList ',' RefreshObject
+|	StatsObjectList ',' StatsObject
 	{
-		$$ = append($1.([]*ast.RefreshObject), $3.(*ast.RefreshObject))
+		$$ = append($1.([]*ast.StatsObject), $3.(*ast.StatsObject))
 	}
 
 RefreshStatsModeOpt:
@@ -16805,33 +17134,33 @@ RefreshStatsClusterOpt:
 		$$ = true
 	}
 
-RefreshObject:
+StatsObject:
 	'*' '.' '*'
 	{
-		$$ = &ast.RefreshObject{
-			RefreshObjectScope: ast.RefreshObjectScopeGlobal,
+		$$ = &ast.StatsObject{
+			StatsObjectScope: ast.StatsObjectScopeGlobal,
 		}
 	}
 |	Identifier '.' '*'
 	{
-		$$ = &ast.RefreshObject{
-			RefreshObjectScope: ast.RefreshObjectScopeDatabase,
-			DBName:             ast.NewCIStr($1),
+		$$ = &ast.StatsObject{
+			StatsObjectScope: ast.StatsObjectScopeDatabase,
+			DBName:           ast.NewCIStr($1),
 		}
 	}
 |	Identifier '.' Identifier
 	{
-		$$ = &ast.RefreshObject{
-			RefreshObjectScope: ast.RefreshObjectScopeTable,
-			DBName:             ast.NewCIStr($1),
-			TableName:          ast.NewCIStr($3),
+		$$ = &ast.StatsObject{
+			StatsObjectScope: ast.StatsObjectScopeTable,
+			DBName:           ast.NewCIStr($1),
+			TableName:        ast.NewCIStr($3),
 		}
 	}
 |	Identifier
 	{
-		$$ = &ast.RefreshObject{
-			RefreshObjectScope: ast.RefreshObjectScopeTable,
-			TableName:          ast.NewCIStr($1),
+		$$ = &ast.StatsObject{
+			StatsObjectScope: ast.StatsObjectScopeTable,
+			TableName:        ast.NewCIStr($1),
 		}
 	}
 

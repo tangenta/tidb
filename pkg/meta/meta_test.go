@@ -486,6 +486,22 @@ func TestMeta(t *testing.T) {
 
 	require.Equal(t, int64(10), bootstrapVer)
 
+	starterBootstrapVer, err := m.GetStarterBootstrapVersion()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), starterBootstrapVer)
+
+	err = m.FinishStarterBootstrap(int64(1))
+	require.NoError(t, err)
+	starterBootstrapVer, err = m.GetStarterBootstrapVersion()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), starterBootstrapVer)
+
+	err = m.FinishStarterBootstrap(int64(10))
+	require.NoError(t, err)
+	starterBootstrapVer, err = m.GetStarterBootstrapVersion()
+	require.NoError(t, err)
+	require.Equal(t, int64(10), starterBootstrapVer)
+
 	bootstrapEEVer, err := m.GetBootstrapEEVersion()
 	require.NoError(t, err)
 	require.Equal(t, int64(0), bootstrapEEVer)

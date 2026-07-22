@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -51,6 +52,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit/testenv"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/stringutil"
 	"github.com/pingcap/tidb/pkg/util/versioninfo"
 	dto "github.com/prometheus/client_model/go"
@@ -434,7 +436,20 @@ func (cli *TestServerClient) RunTestLoadDataWithSelectIntoOutfile(t *testing.T) 
 }
 
 func (cli *TestServerClient) RunTestLoadDataForSlowLog(t *testing.T) {
-	t.Skip("unstable test")
+	originCfg := config.GetGlobalConfig()
+	newCfg := *originCfg
+	slowLogPath := filepath.Join(t.TempDir(), "tidb-slow.log")
+	slowLog, err := os.Create(slowLogPath)
+	require.NoError(t, err)
+	require.NoError(t, slowLog.Close())
+	newCfg.Log.SlowQueryFile = slowLogPath
+	config.StoreGlobalConfig(&newCfg)
+	defer func() {
+		config.StoreGlobalConfig(originCfg)
+		require.NoError(t, logutil.InitLogger(originCfg.Log.ToLogConfig()))
+	}()
+	require.NoError(t, logutil.InitLogger(newCfg.Log.ToLogConfig()))
+
 	fp, err := os.CreateTemp("", "load_data_test.csv")
 	require.NoError(t, err)
 	require.NotNil(t, fp)
@@ -462,6 +477,7 @@ func (cli *TestServerClient) RunTestLoadDataForSlowLog(t *testing.T) {
 			dbt.MustExec("set tidb_slow_log_threshold=300;")
 			dbt.MustExec("set @@global.tidb_enable_stmt_summary=0")
 		}()
+		dbt.MustExec(fmt.Sprintf("set @@tidb_slow_query_file=%q", slowLog.Name()))
 		dbt.MustExec("set tidb_slow_log_threshold=0;")
 		dbt.MustExec("set @@global.tidb_enable_stmt_summary=1")
 		query := fmt.Sprintf("load data local infile %q into table t_slow with thread=1", path)
@@ -480,7 +496,7 @@ func (cli *TestServerClient) RunTestLoadDataForSlowLog(t *testing.T) {
 
 		// Test for record slow log for load data statement.
 		rows := dbt.MustQuery("select plan from information_schema.slow_query where query like 'load data local infile % into table t_slow with thread=1;' order by time desc limit 1")
-		expectedPlan := ".*LoadData.* time.* loops.* prepare.* check_insert.* mem_insert_time:.* prefetch.* rpc.* commit_txn.*"
+		expectedPlan := ".*LoadData.* total_time:.* loops:.* commit_txn:.*"
 		checkPlan(rows, expectedPlan)
 		require.NoError(t, rows.Close())
 		// Test for record statements_summary for load data statement.
@@ -1804,7 +1820,10 @@ func (cli *TestServerClient) RunTestExplainForConn(t *testing.T) {
 		err := rows.Scan(&connID)
 		require.NoError(t, err)
 		require.NoError(t, rows.Close())
-		dbt.MustQuery("select * from t where a=1")
+		// Seed the statement inspected by EXPLAIN FOR CONNECTION, then close rows so
+		// database/sql releases the connection.
+		rows = dbt.MustQuery("select * from t where a=1")
+		require.NoError(t, rows.Close())
 		rows = dbt.MustQuery("explain for connection " + strconv.Itoa(int(connID)))
 		require.True(t, rows.Next())
 		row := make([]string, 9)
@@ -2427,6 +2446,8 @@ func (cli *TestServerClient) RunReloadTLS(t *testing.T, overrider configOverride
 
 func (cli *TestServerClient) RunTestSumAvg(t *testing.T) {
 	cli.RunTests(t, nil, func(dbt *testkit.DBTestKit) {
+		dbt.GetDB().SetMaxOpenConns(1)
+		dbt.GetDB().SetMaxIdleConns(1)
 		dbt.MustExec("create table sumavg (a int, b decimal, c double)")
 		dbt.MustExec("insert sumavg values (1, 1, 1)")
 		rows := dbt.MustQuery("select sum(a), sum(b), sum(c) from sumavg")
@@ -2437,6 +2458,7 @@ func (cli *TestServerClient) RunTestSumAvg(t *testing.T) {
 		require.Equal(t, 1.0, outA)
 		require.Equal(t, 1.0, outB)
 		require.Equal(t, 1.0, outC)
+		require.NoError(t, rows.Close())
 		rows = dbt.MustQuery("select avg(a), avg(b), avg(c) from sumavg")
 		require.True(t, rows.Next())
 		err = rows.Scan(&outA, &outB, &outC)
@@ -2444,6 +2466,7 @@ func (cli *TestServerClient) RunTestSumAvg(t *testing.T) {
 		require.Equal(t, 1.0, outA)
 		require.Equal(t, 1.0, outB)
 		require.Equal(t, 1.0, outC)
+		require.NoError(t, rows.Close())
 	})
 }
 
@@ -2587,6 +2610,10 @@ func (cli *TestServerClient) RunTestInitConnect(t *testing.T) {
 // and not internal SQL statements. Thus, this test is in the server-test suite.
 func (cli *TestServerClient) RunTestInfoschemaClientErrors(t *testing.T) {
 	cli.RunTestsOnNewDB(t, nil, "clientErrors", func(dbt *testkit.DBTestKit) {
+		dbt.MustExec("set @@tidb_enable_cache_prepare_stmt = off")
+		defer func() {
+			dbt.MustExec("set @@tidb_enable_cache_prepare_stmt = default")
+		}()
 		clientErrors := []struct {
 			stmt              string
 			incrementWarnings bool

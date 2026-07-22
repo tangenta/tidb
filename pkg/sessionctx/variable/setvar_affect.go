@@ -92,6 +92,7 @@ var isHintUpdatableVerified = map[string]struct{}{
 	"tidb_max_chunk_size":                             {},
 	"tidb_min_paging_size":                            {},
 	"tidb_max_paging_size":                            {},
+	"tidb_paging_size_bytes":                          {},
 	"tidb_enable_cascades_planner":                    {},
 	"tidb_merge_join_concurrency":                     {},
 	"tidb_index_merge_intersection_concurrency":       {},
@@ -139,10 +140,12 @@ var isHintUpdatableVerified = map[string]struct{}{
 	"tiflash_fine_grained_shuffle_stream_count":       {},
 	"tidb_hash_join_version":                          {},
 	"tidb_allow_tiflash_cop":                          {},
+	"tidb_enable_cache_prepare_stmt":                  {},
 	// Variables that is compatible with MySQL.
 	"cte_max_recursion_depth": {},
 	"sql_mode":                {},
 	"max_execution_time":      {},
+	"tidb_max_keys_read":      {},
 }
 
 func setHintUpdatable(vars []*SysVar) {

@@ -21,7 +21,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	rmpb "github.com/pingcap/kvproto/pkg/resource_manager"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -117,6 +119,21 @@ func (*singleRowCursorRecordSet) Close() error { return nil }
 
 var _ sqlexec.RecordSet = &singleRowCursorRecordSet{}
 
+type failedWriteResponseWriter struct {
+	delay       time.Duration
+	failOnWrite int
+	writes      int
+}
+
+func (w *failedWriteResponseWriter) Write(p []byte) (int, error) {
+	w.writes++
+	if w.writes == w.failOnWrite {
+		time.Sleep(w.delay)
+		return 0, mysql.ErrBadConn
+	}
+	return len(p), nil
+}
+
 func TestCursorExistsFlag(t *testing.T) {
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 	srv := CreateMockServer(t, store)
@@ -186,6 +203,29 @@ func TestCursorExistsFlag(t *testing.T) {
 	require.Error(t, c.Dispatch(ctx, appendUint32(appendUint32([]byte{mysql.ComStmtFetch}, uint32(stmt.ID())), 5)))
 }
 
+func TestResultSetWriteSQLRespDurationIncludesFailedRowWrite(t *testing.T) {
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+	srv := CreateMockServer(t, store)
+	srv.SetDomain(dom)
+	defer srv.Close()
+
+	c := CreateMockConn(t, srv).(*mockConn)
+	c.capability &^= mysql.ClientDeprecateEOF
+	tk := testkit.NewTestKitWithSession(t, store, c.Context().Session)
+	tk.MustExec("use test")
+	tk.MustExec("create table t(a int)")
+	tk.MustExec("insert into t values (1)")
+
+	const delay = 50 * time.Millisecond
+	c.pkt.SetBufWriter(bufio.NewWriterSize(&failedWriteResponseWriter{
+		delay:       delay,
+		failOnWrite: 4,
+	}, 1))
+	require.Error(t, c.Dispatch(context.Background(), append([]byte{mysql.ComQuery}, "select * from t"...)))
+
+	require.GreaterOrEqual(t, c.Context().GetSessionVars().CacheStmtExecInfo.WriteSQLRespDuration, delay)
+}
+
 func TestCursorWithParams(t *testing.T) {
 	t.Run("cursor ruv2 delta reporting", func(t *testing.T) {
 		original := config.GetGlobalConfig()
@@ -205,6 +245,7 @@ func TestCursorWithParams(t *testing.T) {
 		ruv2Metrics.AddPlanCnt(2)
 		ruDetails := goCtx.Value(clientutil.RUDetailsCtxKey).(*clientutil.RUDetails)
 		ruDetails.AddTiKVRUV2(11)
+		ruDetails.AddRUV2(&kvrpcpb.RUV2{ReadRpcCount: 3})
 		weights := execdetails.RUV2Weights{
 			RUScale:                 cfg.RUV2.RUScale,
 			ResultChunkCells:        cfg.RUV2.ResultChunkCells,
@@ -219,9 +260,9 @@ func TestCursorWithParams(t *testing.T) {
 			SessionParserTotal:      cfg.RUV2.SessionParserTotal,
 			TxnCnt:                  cfg.RUV2.TxnCnt,
 		}
-		baselineTiDBRU := ruv2Metrics.CalculateRUValues(weights)
-
 		tracker := resultset.NewCursorRUV2Tracker(reporter, "rg1", ruv2Metrics, ruDetails, weights)
+		require.Equal(t, int64(3), ruv2Metrics.ResourceManagerReadCnt())
+		baselineTiDBRU := ruv2Metrics.CalculateRUValues(weights)
 		resultsetRS := resultset.New(&mockCursorTrackerRecordSet{}, nil)
 		resultset.AttachCursorRUV2Tracker(resultsetRS, tracker)
 		resultset.ReportCursorRUV2Delta(resultsetRS, 6)
@@ -231,6 +272,12 @@ func TestCursorWithParams(t *testing.T) {
 		require.Equal(t, expectedCursorDelta, reporter.tidbRUV2)
 		require.Equal(t, 0.0, reporter.tikvRUV2)
 		require.Equal(t, 0.0, reporter.tiflashRU)
+
+		postBaselineTiDBRU := ruv2Metrics.CalculateRUValues(weights)
+		ruDetails.AddRUV2(&kvrpcpb.RUV2{WriteRpcCount: 4})
+		resultset.ReportCursorRUV2Delta(resultsetRS, 0)
+		expectedPendingRawDelta := ruv2Metrics.CalculateRUValues(weights) - postBaselineTiDBRU
+		require.Equal(t, expectedCursorDelta+expectedPendingRawDelta, reporter.tidbRUV2)
 
 		ruDetails.AddTiKVRUV2(7)
 		ruDetails.UpdateTiFlash(&rmpb.Consumption{RRU: 5, WRU: 8})

@@ -22,6 +22,10 @@ const (
 	TiDBProcedureLastErrorSQL = "sp_last_error_sql"
 	// TiDBEnableDutySeparationMode indicates if enable the mode of duty separation.
 	TiDBEnableDutySeparationMode = "tidb_enable_duty_separation_mode"
+	// TiDBEnableUDVSubstitute indicates whether to enable user defined variable substitute.
+	TiDBEnableUDVSubstitute = "tidb_enable_udv_substitute"
+	// TiDBEnableSPParamSubstitute indicates whether to enable stored procedure parameter substitute.
+	TiDBEnableSPParamSubstitute = "tidb_enable_sp_param_substitute"
 
 	// TiDBCreateFromSelectUsingImport indicates whether to use import into to create table as select.
 	TiDBCreateFromSelectUsingImport = "tidb_create_from_select_using_import"

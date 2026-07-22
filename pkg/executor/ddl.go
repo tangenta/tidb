@@ -227,6 +227,8 @@ func (e *DDLExec) Next(ctx context.Context, _ *chunk.Chunk) (err error) {
 		err = e.executeDropSequence(x)
 	case *ast.AlterSequenceStmt:
 		err = e.executeAlterSequence(x)
+	case *ast.CreateMaskingPolicyStmt:
+		err = e.executeCreateMaskingPolicy(x)
 	case *ast.CreatePlacementPolicyStmt:
 		err = e.executeCreatePlacementPolicy(x)
 	case *ast.DropPlacementPolicyStmt:
@@ -469,7 +471,8 @@ func (e *DDLExec) executeRecoverTable(s *ast.RecoverTableStmt) error {
 		return infoschema.ErrTableExists.GenWithStack("Table '%-.192s' already been recover to '%-.192s', can't be recover repeatedly", tblInfo.Name.O, tbl.Meta().Name.O)
 	}
 
-	m := domain.GetDomain(e.Ctx()).GetSnapshotMeta(job.StartTS)
+	snapshotTS := ddl.GetRecoverSnapshotTS(job)
+	m := domain.GetDomain(e.Ctx()).GetSnapshotMeta(snapshotTS)
 	autoIDs, err := m.GetAutoIDAccessors(job.SchemaID, job.TableID).Get()
 	if err != nil {
 		return err
@@ -479,7 +482,7 @@ func (e *DDLExec) executeRecoverTable(s *ast.RecoverTableStmt) error {
 		SchemaID:      job.SchemaID,
 		TableInfo:     tblInfo,
 		DropJobID:     job.ID,
-		SnapshotTS:    job.StartTS,
+		SnapshotTS:    snapshotTS,
 		AutoIDs:       autoIDs,
 		OldSchemaName: job.GetSchemaName(),
 		OldTableName:  tblInfo.Name,
@@ -507,14 +510,15 @@ func (e *DDLExec) getRecoverTableByJobID(s *ast.RecoverTableStmt, dom *domain.Do
 		return nil, nil, errors.Errorf("Job %v type is %v, not dropped/truncated table", job.ID, job.Type)
 	}
 
+	snapshotTS := ddl.GetRecoverSnapshotTS(job)
 	// Check GC safe point for getting snapshot infoSchema.
-	err = gcutil.ValidateSnapshot(e.Ctx(), job.StartTS)
+	err = gcutil.ValidateSnapshot(e.Ctx(), snapshotTS)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Get the snapshot infoSchema before drop table.
-	snapInfo, err := dom.GetSnapshotInfoSchema(job.StartTS)
+	snapInfo, err := dom.GetSnapshotInfoSchema(snapshotTS)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -534,7 +538,7 @@ func (e *DDLExec) getRecoverTableByJobID(s *ast.RecoverTableStmt, dom *domain.Do
 }
 
 // GetDropOrTruncateTableInfoFromJobs gets the dropped/truncated table information from DDL jobs,
-// it will use the `start_ts` of DDL job as snapshot to get the dropped/truncated table information.
+// it will use the recover snapshot of DDL job to get the dropped/truncated table information.
 func GetDropOrTruncateTableInfoFromJobs(jobs []*model.Job, gcSafePoint uint64, dom *domain.Domain, fn func(*model.Job, *model.TableInfo) (bool, error)) (bool, error) {
 	getTable := func(startTS uint64, schemaID int64, tableID int64) (*model.TableInfo, error) {
 		snapMeta := dom.GetSnapshotMeta(startTS)
@@ -637,7 +641,8 @@ func (e *DDLExec) executeFlashbackTable(s *ast.FlashBackTableStmt) error {
 		return infoschema.ErrTableExists.GenWithStack("Table '%-.192s' already been flashback to '%-.192s', can't be flashback repeatedly", s.Table.Name.O, tbl.Meta().Name.O)
 	}
 
-	m := domain.GetDomain(e.Ctx()).GetSnapshotMeta(job.StartTS)
+	snapshotTS := ddl.GetRecoverSnapshotTS(job)
+	m := domain.GetDomain(e.Ctx()).GetSnapshotMeta(snapshotTS)
 	autoIDs, err := m.GetAutoIDAccessors(job.SchemaID, job.TableID).Get()
 	if err != nil {
 		return err
@@ -647,7 +652,7 @@ func (e *DDLExec) executeFlashbackTable(s *ast.FlashBackTableStmt) error {
 		SchemaID:      job.SchemaID,
 		TableInfo:     tblInfo,
 		DropJobID:     job.ID,
-		SnapshotTS:    job.StartTS,
+		SnapshotTS:    snapshotTS,
 		AutoIDs:       autoIDs,
 		OldSchemaName: job.GetSchemaName(),
 		OldTableName:  s.Table.Name,
@@ -696,15 +701,17 @@ func (e *DDLExec) getRecoverDBByName(schemaName ast.CIStr) (recoverSchemaInfo *m
 	dom := domain.GetDomain(e.Ctx())
 	fn := func(jobs []*model.Job) (bool, error) {
 		for _, job := range jobs {
-			// Check GC safe point for getting snapshot infoSchema.
-			err = gcutil.ValidateSnapshotWithGCSafePoint(job.StartTS, gcSafePoint)
-			if err != nil {
-				return false, err
-			}
 			if job.Type != model.ActionDropSchema {
 				continue
 			}
-			snapMeta := dom.GetSnapshotMeta(job.StartTS)
+
+			snapshotTS := ddl.GetRecoverSnapshotTS(job)
+			// Check GC safe point for getting snapshot infoSchema.
+			err = gcutil.ValidateSnapshotWithGCSafePoint(snapshotTS, gcSafePoint)
+			if err != nil {
+				return false, err
+			}
+			snapMeta := dom.GetSnapshotMeta(snapshotTS)
 			schemaInfo, err := snapMeta.GetDatabase(job.SchemaID)
 			if err != nil {
 				return false, err
@@ -722,7 +729,7 @@ func (e *DDLExec) getRecoverDBByName(schemaName ast.CIStr) (recoverSchemaInfo *m
 				DBInfo:              schemaInfo,
 				LoadTablesOnExecute: true,
 				DropJobID:           job.ID,
-				SnapshotTS:          job.StartTS,
+				SnapshotTS:          snapshotTS,
 				OldSchemaName:       schemaName,
 			}
 			return true, nil
@@ -817,6 +824,10 @@ func (e *DDLExec) executeAlterSequence(s *ast.AlterSequenceStmt) error {
 
 func (e *DDLExec) executeCreatePlacementPolicy(s *ast.CreatePlacementPolicyStmt) error {
 	return e.ddlExecutor.CreatePlacementPolicy(e.Ctx(), s)
+}
+
+func (e *DDLExec) executeCreateMaskingPolicy(s *ast.CreateMaskingPolicyStmt) error {
+	return e.ddlExecutor.CreateMaskingPolicy(e.Ctx(), s)
 }
 
 func (e *DDLExec) executeDropPlacementPolicy(s *ast.DropPlacementPolicyStmt) error {

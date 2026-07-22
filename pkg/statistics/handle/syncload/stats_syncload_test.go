@@ -76,6 +76,15 @@ func TestConcurrentLoadHist(t *testing.T) {
 }
 
 func TestConcurrentLoadHistTimeout(t *testing.T) {
+	originConfig := config.GetGlobalConfig()
+	newConfig := config.NewConfig()
+	newConfig.Performance.StatsLoadConcurrency = -1
+	newConfig.Performance.StatsLoadQueueSize = 1
+	config.StoreGlobalConfig(newConfig)
+	t.Cleanup(func() {
+		config.StoreGlobalConfig(originConfig)
+	})
+
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 
 	testKit := testkit.NewTestKit(t, store)
@@ -114,6 +123,8 @@ func TestConcurrentLoadHistTimeout(t *testing.T) {
 		neededColumns = append(neededColumns, model.StatsLoadItem{TableItemID: model.TableItemID{TableID: tableInfo.ID, ID: col.ID, IsIndex: false}, FullLoad: true})
 	}
 	h.SendLoadRequests(stmtCtx, neededColumns, 0) // set timeout to 0 so task will go to timeout channel
+	// Give the outer wait a longer deadline so it observes the request error instead of racing it.
+	stmtCtx.StatsLoad.Timeout = time.Second
 	rs := h.SyncWaitStatsLoad(stmtCtx)
 	require.Error(t, rs)
 	stat = h.GetPhysicalTableStats(tableInfo.ID, tableInfo)
@@ -383,7 +394,7 @@ func TestSyncLoadOnObjectWhichCanNotFoundInStorage(t *testing.T) {
 	tk.MustExec("insert into t values (1,1,1),(2,2,2),(3,3,3)")
 	tk.MustExec("analyze table t columns a, b")
 	tbl, err := dom.InfoSchema().TableByName(context.Background(), ast.NewCIStr("test"), ast.NewCIStr("t"))
-	require.NoError(t, h.InitStatsLite(context.TODO()))
+	require.NoError(t, h.InitStatsLite(context.TODO(), dom.InfoSchema()))
 	require.NoError(t, err)
 	require.NotNil(t, tbl)
 	tblInfo := tbl.Meta()
@@ -427,7 +438,7 @@ func TestSyncLoadOnObjectWhichCanNotFoundInStorage(t *testing.T) {
 
 	// Analyze c then test sync load again
 	tk.MustExec("analyze table t columns a, b, c")
-	require.NoError(t, h.InitStatsLite(context.TODO()))
+	require.NoError(t, h.InitStatsLite(context.TODO(), dom.InfoSchema()))
 	tk.MustExec("select * from t where a >= 1 and b = 2 and c = 3 and d = 4")
 	require.Eventually(t, func() bool {
 		statsTbl, ok = h.Get(tblInfo.ID)

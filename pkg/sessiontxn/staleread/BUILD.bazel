@@ -28,7 +28,6 @@ go_library(
         "//pkg/sessionctx/variable",
         "//pkg/sessiontxn",
         "//pkg/sessiontxn/internal",
-        "//pkg/store/driver/txn",
         "//pkg/table/temptable",
         "//pkg/types",
         "//pkg/util/dbterror/plannererrors",
@@ -51,6 +50,7 @@ go_test(
     shard_count = 12,
     deps = [
         ":staleread",
+        "//pkg/config/kerneltype",
         "//pkg/domain",
         "//pkg/infoschema",
         "//pkg/kv",

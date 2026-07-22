@@ -118,6 +118,10 @@ type UserRecord struct {
 	UserAttributesInfo
 
 	AuthenticationString string
+	// AdditionalAuthString holds the MySQL-compatible secondary
+	// ("additional") password hash decoded from user_attributes.$.additional_password.
+	// Empty when the user has no secondary password.
+	AdditionalAuthString string
 	Privileges           mysql.PrivilegeType
 	AccountLocked        bool // A role record when this field is true
 	AuthPlugin           string
@@ -389,11 +393,12 @@ type MySQLPrivilege struct {
 	// This means that DB-records are organized in both a
 	// slice (p.DB) and a Map (p.DBMap).
 
-	user         bTree[itemUser]
-	db           bTree[itemDB]
-	tablesPriv   bTree[itemTablesPriv]
-	columnsPriv  bTree[itemColumnsPriv]
-	defaultRoles bTree[itemDefaultRole]
+	user           bTree[itemUser]
+	db             bTree[itemDB]
+	tablesPriv     bTree[itemTablesPriv]
+	columnsPriv    bTree[itemColumnsPriv]
+	ColumnsPrivMap map[string][]columnsPrivRecord // Accelerate ColumnsPriv searching
+	defaultRoles   bTree[itemDefaultRole]
 
 	globalPriv  bTree[itemGlobalPriv]
 	dynamicPriv bTree[itemDynamicPriv]
@@ -689,6 +694,7 @@ func (p *MySQLPrivilege) merge(diff *MySQLPrivilege, userList map[string]struct{
 		}
 	}
 	ret.columnsPriv.BTreeG = columnsPriv
+	ret.buildColumnsPrivMap()
 
 	routinePriv := p.routinePriv.Clone()
 	for u := range userList {
@@ -871,7 +877,7 @@ func compareHost(x, y string) int {
 		if x == "%" && y == "%" {
 			return 0
 		}
-		if y == `%` {
+		if y == "%" {
 			return -1
 		}
 		// x == '%'
@@ -879,14 +885,14 @@ func compareHost(x, y string) int {
 	}
 
 	// The empty string '' also means “any host” but sorts after '%'.
-	if x == `` || y == `` {
-		if x == `` && y == `` {
+	if x == "" || y == "" {
+		if x == "" && y == "" {
 			return 0
 		}
 		if y == "" {
 			return -1
 		}
-		// x == ``
+		// x == ""
 		return 1
 	}
 
@@ -1030,9 +1036,23 @@ func (p *MySQLPrivilege) LoadTablesPrivTable(exec sqlexec.SQLExecutor) error {
 	return nil
 }
 
+func (p *MySQLPrivilege) buildColumnsPrivMap() {
+	columnsPrivMap := make(map[string][]columnsPrivRecord, p.columnsPriv.Len())
+	columnsPriv := p.columnsPriv.Clone()
+	columnsPriv.Ascend(func(itm itemColumnsPriv) bool {
+		columnsPrivMap[itm.username] = slices.Clone(itm.data)
+		return true
+	})
+	p.ColumnsPrivMap = columnsPrivMap
+}
+
 // LoadColumnsPrivTable loads the mysql.columns_priv table from database.
 func (p *MySQLPrivilege) LoadColumnsPrivTable(exec sqlexec.SQLExecutor) error {
-	return loadTable(exec, sqlLoadColumnsPrivTable, p.decodeColumnsPrivTableRow(nil))
+	if err := loadTable(exec, sqlLoadColumnsPrivTable, p.decodeColumnsPrivTableRow(nil)); err != nil {
+		return err
+	}
+	p.buildColumnsPrivMap()
+	return nil
 }
 
 // LoadDefaultRoles loads the mysql.columns_priv table from database.
@@ -1189,6 +1209,17 @@ func (p *MySQLPrivilege) decodeUserTableRow(userList map[string]struct{}) func(c
 						return err
 					}
 					value.ResourceGroup = strings.Clone(resourceGroup)
+				}
+				pathExpr, err = types.ParseJSONPathExpr("$.additional_password")
+				if err != nil {
+					return err
+				}
+				if additionalBJ, found := bj.Extract([]types.JSONPathExpression{pathExpr}); found {
+					additional, err := additionalBJ.Unquote()
+					if err != nil {
+						return err
+					}
+					value.AdditionalAuthString = strings.Clone(additional)
 				}
 				passwordLocking := PasswordLocking{}
 				if err := passwordLocking.ParseJSON(bj); err != nil {
@@ -1545,10 +1576,12 @@ func (record *tablesPrivRecord) match(user, host, db, table string) bool {
 }
 
 func (record *columnsPrivRecord) match(user, host, db, table, col string) bool {
+	// `SELECT COUNT(*) ...` requires a column-level SELECT privilege of any column,
+	// so we add a special case "*" here
 	return record.baseRecord.match(user, host) &&
 		strings.EqualFold(record.DB, db) &&
 		strings.EqualFold(record.TableName, table) &&
-		(strings.EqualFold(record.ColumnName, col) || col == "*")
+		(strings.EqualFold(record.ColumnName, col) || col == "*" && (record.ColumnPriv&mysql.SelectPriv > 0))
 }
 
 // patternMatch matches "%" the same way as ".*" in regular expression, for example,
@@ -1670,7 +1703,21 @@ func (p *MySQLPrivilege) matchTables(user, host, db, table string) *tablesPrivRe
 	return nil
 }
 
-func (p *MySQLPrivilege) matchColumns(user, host, db, table, column string) *columnsPrivRecord {
+// MatchColumns is exported only for test
+func (p *MySQLPrivilege) MatchColumns(user, host, db, table, column string) *columnsPrivRecord {
+	if p.ColumnsPrivMap != nil {
+		if records, exists := p.ColumnsPrivMap[user]; exists {
+			for i := range records {
+				record := &records[i]
+				if record.match(user, host, db, table, column) {
+					return record
+				}
+			}
+			return nil
+		}
+		return nil
+	}
+
 	item, exists := p.columnsPriv.Get(itemColumnsPriv{username: user})
 	if exists {
 		for i := range item.data {
@@ -1778,7 +1825,7 @@ func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, u
 	}
 
 	for _, r := range roleList {
-		columnRecord := p.matchColumns(r.Username, r.Hostname, db, table, column)
+		columnRecord := p.MatchColumns(r.Username, r.Hostname, db, table, column)
 		if columnRecord != nil {
 			columnPriv |= columnRecord.ColumnPriv
 		}
@@ -2420,6 +2467,13 @@ func (h *Handle) Get() *MySQLPrivilege {
 // UpdateAll loads all the users' privilege info from kv storage.
 func (h *Handle) UpdateAll() error {
 	priv := newMySQLPrivilege()
+	// Propagate the sysvar accessor like updateUsers does: decodeUserTableRow
+	// resolves legacy empty-plugin rows via default_authentication_plugin, and
+	// without the accessor a full reload (e.g. FLUSH PRIVILEGES) would resolve
+	// those rows as mysql_native_password while the lazy per-user path resolves
+	// them via the configured default — the same row would authenticate
+	// differently depending on which path loaded it.
+	priv.globalVars = h.globalVars
 	res, err := h.sctx.Get()
 	if err != nil {
 		return errors.Trace(err)

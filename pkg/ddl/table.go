@@ -44,6 +44,7 @@ import (
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/gcutil"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 )
 
@@ -95,7 +96,7 @@ func (w *worker) onDropTableOrView(jobCtx *jobContext, job *model.Job) (ver int6
 	case model.StateDeleteOnly:
 		tblInfo.State = model.StateNone
 		oldIDs := getPartitionIDs(tblInfo)
-		ruleIDs := append(getPartitionRuleIDs(job.SchemaName, tblInfo), fmt.Sprintf(label.TableIDFormat, label.IDPrefix, job.SchemaName, tblInfo.Name.L))
+		ruleIDs := append(getPartitionRuleIDs(jobCtx.store.GetCodec(), job.SchemaName, tblInfo), label.NewRuleID(jobCtx.store.GetCodec(), job.SchemaName, tblInfo.Name.L, ""))
 
 		args.OldPartitionIDs = oldIDs
 		ver, err = updateVersionAndTableInfo(jobCtx, job, tblInfo, originalState != tblInfo.State)
@@ -133,6 +134,11 @@ func (w *worker) onDropTableOrView(jobCtx *jobContext, job *model.Job) (ver int6
 
 		if err := deleteTableAffinityGroupsInPD(jobCtx, tblInfo, nil); err != nil {
 			logutil.DDLLogger().Error("failed to delete affinity groups from PD", zap.Error(err), zap.Int64("tableID", tblInfo.ID))
+		}
+
+		// Clean up masking policies associated with the dropped table.
+		if err := w.dropMaskingPoliciesOnTable(jobCtx, tblInfo.ID); err != nil {
+			return ver, errors.Wrapf(err, "failed to drop masking policies on table %d", tblInfo.ID)
 		}
 
 		// Finish this job.
@@ -273,7 +279,7 @@ func (w *worker) recoverTable(
 	recoverInfo *model.RecoverTableInfo,
 ) (ver int64, err error) {
 	// TODO(lower_case_table_names): support case sensitive db name in label.
-	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(recoverInfo.TableInfo, recoverInfo.OldSchemaName.L, recoverInfo.OldTableName.L)
+	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(w.store.GetCodec(), recoverInfo.TableInfo, recoverInfo.OldSchemaName.L, recoverInfo.OldTableName.L)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Wrapf(err, "failed to get old label rules from PD")
@@ -305,7 +311,7 @@ func (w *worker) recoverTable(
 		}
 	})
 
-	err = updateLabelRules(job, recoverInfo.TableInfo, oldRules, tableRuleID, partRuleIDs, oldRuleIDs, recoverInfo.TableInfo.ID)
+	err = updateLabelRules(w.store.GetCodec(), job.SchemaName, recoverInfo.TableInfo, oldRules, tableRuleID, partRuleIDs, oldRuleIDs, recoverInfo.TableInfo.ID)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Wrapf(err, "failed to update the label rule to PD")
@@ -524,13 +530,13 @@ func (w *worker) onTruncateTable(jobCtx *jobContext, job *model.Job) (ver int64,
 		args.NewPartIDsWithPolicy = newIDs
 	}
 
-	tableRuleID, partRuleIDs, _, oldRules, err := getOldLabelRules(tblInfo, job.SchemaName, tblInfo.Name.L)
+	tableRuleID, partRuleIDs, _, oldRules, err := getOldLabelRules(jobCtx.store.GetCodec(), tblInfo, job.SchemaName, tblInfo.Name.L)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return 0, errors.Wrapf(err, "failed to get old label rules from PD")
 	}
 
-	err = updateLabelRules(job, tblInfo, oldRules, tableRuleID, partRuleIDs, []string{}, args.NewTableID)
+	err = updateLabelRules(jobCtx.store.GetCodec(), job.SchemaName, tblInfo, oldRules, tableRuleID, partRuleIDs, []string{}, args.NewTableID)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return 0, errors.Wrapf(err, "failed to update the label rule to PD")
@@ -557,6 +563,13 @@ func (w *worker) onTruncateTable(jobCtx *jobContext, job *model.Job) (ver int64,
 	}
 
 	tblInfo.ID = args.NewTableID
+
+	// Update masking policy table_id from old to new. Column IDs stay the same.
+	oldTableID := oldTblInfo.ID
+	if err := w.updateMaskingPolicyTableIDAfterTruncate(jobCtx, oldTableID, tblInfo.ID); err != nil {
+		job.State = model.JobStateCancelled
+		return ver, errors.Trace(err)
+	}
 
 	// build table & partition bundles if any.
 	bundles, err := placement.NewFullTableBundles(metaMut, tblInfo)
@@ -777,7 +790,7 @@ func verifyNoOverflowShardBits(s *sess.Pool, tbl table.Table, shardRowIDBits uin
 	return nil
 }
 
-func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
+func (w *worker) onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	args, err := model.GetRenameTableArgs(job)
 	if err != nil {
 		// Invalid arguments, cancel this job.
@@ -811,7 +824,7 @@ func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	}
 
 	oldTableName := tblInfo.Name
-	ver, err = checkAndRenameTables(metaMut, job, tblInfo, args)
+	ver, err = checkAndRenameTables(jobCtx, metaMut, job, tblInfo, args)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
@@ -821,6 +834,17 @@ func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
+	// Update masking policy names after table rename.
+	is := jobCtx.infoCache.GetLatest()
+	newDB, ok := is.SchemaByID(newSchemaID)
+	if !ok {
+		job.State = model.JobStateCancelled
+		return ver, infoschema.ErrDatabaseNotExists.GenWithStackByArgs(fmt.Sprintf("schema-ID: %v", newSchemaID))
+	}
+	if err = w.updateMaskingPolicyNamesAfterRename(jobCtx.stepCtx, tblInfo.ID,
+		oldSchemaName, newDB.Name, oldTableName, tableName); err != nil {
+		return ver, errors.Wrapf(err, "failed to update masking policy names after table rename")
+	}
 	ver, err = updateSchemaVersion(jobCtx, job, fkh.getLoadedTables()...)
 	if err != nil {
 		return ver, errors.Trace(err)
@@ -829,7 +853,7 @@ func onRenameTable(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	return ver, nil
 }
 
-func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
+func (w *worker) onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	args, err := model.GetRenameTablesArgs(job)
 	if err != nil {
 		job.State = model.JobStateCancelled
@@ -843,6 +867,7 @@ func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 
 	fkh := newForeignKeyHelper()
 	metaMut := jobCtx.metaMut
+	is := jobCtx.infoCache.GetLatest()
 	for _, info := range args.RenameTableInfos {
 		job.TableID = info.TableID
 		job.TableName = info.OldTableName.L
@@ -856,7 +881,7 @@ func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 			return ver, errors.Trace(err)
 		}
 
-		ver, err := checkAndRenameTables(metaMut, job, tblInfo, info)
+		ver, err := checkAndRenameTables(jobCtx, metaMut, job, tblInfo, info)
 		if err != nil {
 			return ver, errors.Trace(err)
 		}
@@ -865,6 +890,16 @@ func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 			info.OldSchemaName, info.OldTableName, info.NewTableName, info.NewSchemaID)
 		if err != nil {
 			return ver, errors.Trace(err)
+		}
+		// Update masking policy names after table rename.
+		newDB, ok := is.SchemaByID(info.NewSchemaID)
+		if !ok {
+			job.State = model.JobStateCancelled
+			return ver, infoschema.ErrDatabaseNotExists.GenWithStackByArgs(fmt.Sprintf("schema-ID: %v", info.NewSchemaID))
+		}
+		if err = w.updateMaskingPolicyNamesAfterRename(jobCtx.stepCtx, tblInfo.ID,
+			info.OldSchemaName, newDB.Name, info.OldTableName, info.NewTableName); err != nil {
+			return ver, errors.Wrapf(err, "failed to update masking policy names after table rename")
 		}
 	}
 
@@ -876,7 +911,7 @@ func onRenameTables(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 	return ver, nil
 }
 
-func checkAndRenameTables(t *meta.Mutator, job *model.Job, tblInfo *model.TableInfo, args *model.RenameTableArgs) (ver int64, _ error) {
+func checkAndRenameTables(jobCtx *jobContext, t *meta.Mutator, job *model.Job, tblInfo *model.TableInfo, args *model.RenameTableArgs) (ver int64, _ error) {
 	err := t.DropTableOrView(args.OldSchemaID, tblInfo.ID)
 	if err != nil {
 		job.State = model.JobStateCancelled
@@ -893,7 +928,7 @@ func checkAndRenameTables(t *meta.Mutator, job *model.Job, tblInfo *model.TableI
 	})
 
 	oldTableName := tblInfo.Name
-	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(tblInfo, args.OldSchemaName.L, oldTableName.L)
+	tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err := getOldLabelRules(jobCtx.store.GetCodec(), tblInfo, args.OldSchemaName.L, oldTableName.L)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Wrapf(err, "failed to get old label rules from PD")
@@ -918,7 +953,12 @@ func checkAndRenameTables(t *meta.Mutator, job *model.Job, tblInfo *model.TableI
 		return ver, errors.Trace(err)
 	}
 
-	err = updateLabelRules(job, tblInfo, oldRules, tableRuleID, partRuleIDs, oldRuleIDs, tblInfo.ID)
+	newDBInfo, err := t.GetDatabase(args.NewSchemaID)
+	if err != nil {
+		job.State = model.JobStateCancelled
+		return ver, errors.Trace(err)
+	}
+	err = updateLabelRules(jobCtx.store.GetCodec(), newDBInfo.Name.L, tblInfo, oldRules, tableRuleID, partRuleIDs, oldRuleIDs, tblInfo.ID)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Wrapf(err, "failed to update the label rule to PD")
@@ -1628,12 +1668,12 @@ func onAlterTablePlacement(jobCtx *jobContext, job *model.Job) (ver int64, err e
 	return ver, nil
 }
 
-func getOldLabelRules(tblInfo *model.TableInfo, oldSchemaName, oldTableName string) (tableRuleID string, partRuleIDs, oldRuleIDs []string, oldRules map[string]*label.Rule, err error) {
-	tableRuleID = fmt.Sprintf(label.TableIDFormat, label.IDPrefix, oldSchemaName, oldTableName)
+func getOldLabelRules(codec tikv.Codec, tblInfo *model.TableInfo, oldSchemaName, oldTableName string) (tableRuleID string, partRuleIDs, oldRuleIDs []string, oldRules map[string]*label.Rule, err error) {
+	tableRuleID = label.NewRuleID(codec, oldSchemaName, oldTableName, "")
 	oldRuleIDs = []string{tableRuleID}
 	if tblInfo.GetPartitionInfo() != nil {
 		for _, def := range tblInfo.GetPartitionInfo().Definitions {
-			partRuleIDs = append(partRuleIDs, fmt.Sprintf(label.PartitionIDFormat, label.IDPrefix, oldSchemaName, oldTableName, def.Name.L))
+			partRuleIDs = append(partRuleIDs, label.NewRuleID(codec, oldSchemaName, oldTableName, def.Name.L))
 		}
 	}
 
@@ -1642,7 +1682,7 @@ func getOldLabelRules(tblInfo *model.TableInfo, oldSchemaName, oldTableName stri
 	return tableRuleID, partRuleIDs, oldRuleIDs, oldRules, err
 }
 
-func updateLabelRules(job *model.Job, tblInfo *model.TableInfo, oldRules map[string]*label.Rule, tableRuleID string, partRuleIDs, oldRuleIDs []string, tID int64) error {
+func updateLabelRules(codec tikv.Codec, newSchemaName string, tblInfo *model.TableInfo, oldRules map[string]*label.Rule, tableRuleID string, partRuleIDs, oldRuleIDs []string, tID int64) error {
 	if oldRules == nil {
 		return nil
 	}
@@ -1650,7 +1690,7 @@ func updateLabelRules(job *model.Job, tblInfo *model.TableInfo, oldRules map[str
 	if tblInfo.GetPartitionInfo() != nil {
 		for idx, def := range tblInfo.GetPartitionInfo().Definitions {
 			if r, ok := oldRules[partRuleIDs[idx]]; ok {
-				newRules = append(newRules, r.Clone().Reset(job.SchemaName, tblInfo.Name.L, def.Name.L, def.ID))
+				newRules = append(newRules, r.Clone().Reset(codec, newSchemaName, tblInfo.Name.L, def.Name.L, def.ID))
 			}
 		}
 	}
@@ -1661,7 +1701,7 @@ func updateLabelRules(job *model.Job, tblInfo *model.TableInfo, oldRules map[str
 				ids = append(ids, def.ID)
 			}
 		}
-		newRules = append(newRules, r.Clone().Reset(job.SchemaName, tblInfo.Name.L, "", ids...))
+		newRules = append(newRules, r.Clone().Reset(codec, newSchemaName, tblInfo.Name.L, "", ids...))
 	}
 
 	patch := label.NewRulePatch(newRules, oldRuleIDs)

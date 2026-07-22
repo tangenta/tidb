@@ -947,7 +947,11 @@ const (
 	ErrEngineAttributeNotSupported                           = 3981
 	ErrJSONInBooleanContext                                  = 3986
 	ErrTableWithoutPrimaryKey                                = 3750
-	ErrForeignKeyWithCreateAsSelect                          = 3978
+	// Dual-password (RETAIN CURRENT PASSWORD / DISCARD OLD PASSWORD) — match MySQL 8.0
+	// error numbers from mysql/mysql-server share/messages_to_clients.txt.
+	ErrSecondPasswordCannotBeEmpty            = 3878
+	ErrPasswordCannotBeRetainedOnPluginChange = 3894
+	ErrCurrentPasswordCannotBeRetained        = 3895
 	// MariaDB errors.
 	ErrSPvarNonintegerType                  = 4008
 	ErrOnlyOneDefaultPartionAllowed         = 4030
@@ -1159,6 +1163,8 @@ const (
 	ErrForbiddenDDL                       = 8267
 	ErrMaskingPolicyExists                = 8268
 	ErrMaskingPolicyNotExists             = 8269
+	ErrMaskingPolicyExprInvalidColumn     = 8275
+	ErrDDLAutoPausedByKVDiskFull          = 8276
 
 	// Resource group errors.
 	ErrResourceGroupExists                    = 8248
@@ -1176,17 +1182,7 @@ const (
 	ErrStorageClassInvalidSpec                  = 8271
 	ErrModifyColumnReferencedByPartialCondition = 8272
 	ErrCheckPartialIndexWithoutFastCheck        = 8273
-	// Enterprise Edit errors.
-	ErrRowLabelUnAccessible = 8800
-	ErrInvalidValueOfType   = 8801
-
-	// LBAC errors.
-	ErrLBACInvalid       = 8802
-	ErrLBACNotFound      = 8803
-	ErrLBACAlreadyExists = 8804
-
-	// 8805 ~ 8809 are reserved for tablegroup errors.
-	ErrProcedureDisabled = 8810
+	ErrMaxKeysReadExceeded                      = 8274
 
 	// [8800, 8900) are reserved for a downstream fork
 
@@ -1205,4 +1201,5 @@ const (
 	ErrTiFlashServerTimeout      = 9012
 	ErrTiFlashServerBusy         = 9013
 	ErrTiFlashBackfillIndex      = 9014
+	ErrUserPrefixMismatch        = 20003
 )

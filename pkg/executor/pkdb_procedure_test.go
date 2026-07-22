@@ -2929,8 +2929,8 @@ func TestRoutineOperationsWithMixedCaseSchema(t *testing.T) {
 	`).Check(testkit.Rows("f1"))
 
 	tk.MustExec("create user routine_case_user")
-	tk.MustExec("grant execute on procedure foo.p to routine_case_user")
-	tk.MustExec("grant execute on function foo.f to routine_case_user")
+	tk.MustExec("grant execute on procedure Foo.p to routine_case_user")
+	tk.MustExec("grant execute on function Foo.f to routine_case_user")
 
 	tk.MustExec("drop procedure foo.p")
 	tk.MustExec("drop function foo.f")

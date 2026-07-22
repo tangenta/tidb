@@ -89,7 +89,7 @@ var (
 	mIncIDPrefix           = "IID"
 	mRandomIDPrefix        = "TARID"
 	mBootstrapKey          = []byte("BootstrapKey")
-	mBootstrapEEKey        = []byte("BootstrapEEKey")
+	mStarterBootstrapKey   = []byte("StarterBootstrapKey")
 	mSchemaDiffPrefix      = "Diff"
 	mPolicies              = []byte("Policies")
 	mPolicyPrefix          = "Policy"
@@ -159,6 +159,8 @@ var (
 	ErrMaskingPolicyExists = dbterror.ClassMeta.NewStd(errno.ErrMaskingPolicyExists)
 	// ErrMaskingPolicyNotExists is the error for masking policy not exists.
 	ErrMaskingPolicyNotExists = dbterror.ClassMeta.NewStd(errno.ErrMaskingPolicyNotExists)
+	// ErrMaskingPolicyExprInvalidColumn is the error for masking policy expression referencing non-target column.
+	ErrMaskingPolicyExprInvalidColumn = dbterror.ClassMeta.NewStd(errno.ErrMaskingPolicyExprInvalidColumn)
 	// ErrResourceGroupExists is the error for resource group exists.
 	ErrResourceGroupExists = dbterror.ClassMeta.NewStd(errno.ErrResourceGroupExists)
 	// ErrResourceGroupNotExists is the error for resource group not exists.
@@ -186,6 +188,8 @@ const (
 	// will create 52 physical tables.
 	// Note: DDL related tables are created separately, see DDLTableVersion.
 	BaseNextGenBootTableVersion NextGenBootTableVersion = 1
+	// MaskingPolicyNextGenBootTableVersion adds mysql.tidb_masking_policy.
+	MaskingPolicyNextGenBootTableVersion NextGenBootTableVersion = 2
 )
 
 // DDLTableVersion is to display ddl related table versions
@@ -2067,9 +2071,15 @@ func (m *Mutator) FinishBootstrap(version int64) error {
 	return errors.Trace(err)
 }
 
-// FinishBootstrapEE finishes bootstrap.
-func (m *Mutator) FinishBootstrapEE(version int64) error {
-	err := m.txn.Set(mBootstrapEEKey, []byte(strconv.FormatInt(version, 10)))
+// GetStarterBootstrapVersion returns the completed starter bootstrap version.
+func (m *Mutator) GetStarterBootstrapVersion() (int64, error) {
+	value, err := m.txn.GetInt64(mStarterBootstrapKey)
+	return value, errors.Trace(err)
+}
+
+// FinishStarterBootstrap records the completed starter bootstrap version.
+func (m *Mutator) FinishStarterBootstrap(version int64) error {
+	err := m.txn.Set(mStarterBootstrapKey, []byte(strconv.FormatInt(version, 10)))
 	return errors.Trace(err)
 }
 

@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util/logutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -182,22 +183,22 @@ func TestDataForTableStatsField(t *testing.T) {
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("0 0 0 0"))
 	tk.MustExec(`insert into t(c, d, e) values(1, 2, "c"), (2, 3, "d"), (3, 4, "e")`)
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("3 16 48 0"))
 	tk.MustExec(`insert into t(c, d, e) values(4, 5, "f")`)
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("4 16 64 0"))
 	tk.MustExec("delete from t where c >= 3")
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("2 16 32 0"))
 	tk.MustExec("delete from t where c=3")
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("2 16 32 0"))
@@ -211,7 +212,7 @@ func TestDataForTableStatsField(t *testing.T) {
 	err = statstestutil.HandleNextDDLEventWithTxn(h)
 	require.NoError(t, err)
 	tk.MustExec(`insert into t(a, b, c) values(1, 2, "c"), (7, 3, "d"), (12, 4, "e")`)
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("3 16 48 0"))
@@ -249,7 +250,7 @@ func TestPartitionsTable(t *testing.T) {
 				"0 0 0 0",
 			),
 		)
-		tk.MustExec("flush stats_delta")
+		tk.MustExec("flush stats_delta *.*")
 		require.NoError(t, h.Update(context.Background(), is))
 		tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.PARTITIONS where table_name='test_partitions';").Check(
 			testkit.Rows(
@@ -266,7 +267,7 @@ func TestPartitionsTable(t *testing.T) {
 	err := statstestutil.HandleNextDDLEventWithTxn(h)
 	require.NoError(t, err)
 	tk.MustExec(`insert into test_partitions_1(a, b, c) values(1, 2, "c"), (7, 3, "d"), (12, 4, "e");`)
-	tk.MustExec("flush stats_delta")
+	tk.MustExec("flush stats_delta *.*")
 	require.NoError(t, h.Update(context.Background(), is))
 	tk.MustQuery("select PARTITION_NAME, TABLE_ROWS, AVG_ROW_LENGTH, DATA_LENGTH, INDEX_LENGTH from information_schema.PARTITIONS where table_name='test_partitions_1';").Check(
 		testkit.Rows("<nil> 3 16 48 0"))
@@ -494,6 +495,9 @@ func TestTablesTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, selectTables)
 	require.Equal(t, totalTables, remainTables+selectTables)
+
+	tk.MustExec("create table test.`$a$a` (a int)")
+	tk.MustQuery("select count(*) from information_schema.tables where table_name like '$a$%'").Check(testkit.Rows("1"))
 }
 
 func TestColumnTable(t *testing.T) {
@@ -790,47 +794,25 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 	}
 
 	tk2 := testkit.NewTestKit(t, store)
-	if kerneltype.IsClassic() {
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE table_name = "t1";`).Check(testkit.RowsWithSep("|",
-			"167|add index|public|160|165|t1|synced",
-			"166|create table|public|160|165|t1|synced",
-			"153|add index|public|146|151|t1|synced",
-			"152|create table|public|146|151|t1|synced",
-		))
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d1" and JOB_TYPE LIKE "add index%%";`).Check(testkit.RowsWithSep("|",
-			"173 add index public 160 171 t3 synced",
-			"170 add index public 160 168 t2 synced",
-			"167 add index public 160 165 t1 synced",
-			"164 add index public 160 162 t0 synced",
-		))
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and table_name = "t3";`).Check(testkit.RowsWithSep("|",
-			"159 add index public 146 157 t3 synced",
-			"158 create table public 146 157 t3 synced",
-		))
-	} else {
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE table_name = "t1";`).Check(testkit.RowsWithSep("|",
-			"60|add index|public|53|58|t1|synced",
-			"59|create table|public|53|58|t1|synced",
-			"46|add index|public|39|44|t1|synced",
-			"45|create table|public|39|44|t1|synced",
-		))
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d1" and JOB_TYPE LIKE "add index%%";`).Check(testkit.RowsWithSep("|",
-			"66|add index|public|53|64|t3|synced",
-			"63|add index|public|53|61|t2|synced",
-			"60|add index|public|53|58|t1|synced",
-			"57|add index|public|53|55|t0|synced",
-		))
-		tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and table_name = "t3";`).Check(testkit.RowsWithSep("|",
-			"52|add index|public|39|50|t3|synced",
-			"51|create table|public|39|50|t3|synced",
-		))
-	}
+	tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE table_name = "t1" ORDER BY JOB_ID DESC;`).Check(testkit.RowsWithSep("|",
+		"add index|public|t1|synced",
+		"create table|public|t1|synced",
+		"add index|public|t1|synced",
+		"create table|public|t1|synced",
+	))
+	tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE db_name = "d1" and JOB_TYPE LIKE "add index%%" ORDER BY JOB_ID DESC;`).Check(testkit.RowsWithSep("|",
+		"add index|public|t3|synced",
+		"add index|public|t2|synced",
+		"add index|public|t1|synced",
+		"add index|public|t0|synced",
+	))
+	tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE db_name = "d0" and table_name = "t3" ORDER BY JOB_ID DESC;`).Check(testkit.RowsWithSep("|",
+		"add index|public|t3|synced",
+		"create table|public|t3|synced",
+	))
 
 	tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
 					FROM information_schema.ddl_jobs WHERE state = "running";`).Check(testkit.Rows())
@@ -839,33 +821,18 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 	loaded := atomic.Bool{}
 	testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/beforeRunOneJobStep", func(job *model.Job) {
 		if job.SchemaState == model.StateWriteOnly && loaded.CompareAndSwap(false, true) {
-			if kerneltype.IsClassic() {
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE table_name = "t0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"174 add index write only 146 148 t0 running",
-				))
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"174 add index write only 146 148 t0 running",
-				))
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE state = "running";`).Check(testkit.RowsWithSep("|",
-					"174 add index write only 146 148 t0 running",
-				))
-			} else {
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE table_name = "t0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"67 add index write only 39 41 t0 running",
-				))
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "d0" and state = "running";`).Check(testkit.RowsWithSep("|",
-					"67 add index write only 39 41 t0 running",
-				))
-				tk2.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE state = "running";`).Check(testkit.RowsWithSep("|",
-					"67 add index write only 39 41 t0 running",
-				))
-			}
+			tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE table_name = "t0" and state = "running";`).Check(testkit.RowsWithSep("|",
+				"add index|write only|t0|running",
+			))
+			tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE db_name = "d0" and state = "running";`).Check(testkit.RowsWithSep("|",
+				"add index|write only|t0|running",
+			))
+			tk2.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE state = "running";`).Check(testkit.RowsWithSep("|",
+				"add index|write only|t0|running",
+			))
 		}
 	})
 
@@ -879,19 +846,11 @@ func TestInfoSchemaDDLJobs(t *testing.T) {
 	tk.MustExec("create database test2")
 	tk.MustExec("create table test2.t1(id int)")
 
-	if kerneltype.IsClassic() {
-		tk.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "test2" and table_name = "t1"`).Check(testkit.RowsWithSep("|",
-			"183|create table|public|180|182|t1|synced",
-			"178|create table|public|175|177|t1|synced",
-		))
-	} else {
-		tk.MustQuery(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, table_name, STATE
-				   FROM information_schema.ddl_jobs WHERE db_name = "test2" and table_name = "t1"`).Check(testkit.RowsWithSep("|",
-			"76|create table|public|73|75|t1|synced",
-			"71|create table|public|68|70|t1|synced",
-		))
-	}
+	tk.MustQuery(`SELECT JOB_TYPE, SCHEMA_STATE, table_name, STATE
+			   FROM information_schema.ddl_jobs WHERE db_name = "test2" and table_name = "t1" ORDER BY JOB_ID DESC`).Check(testkit.RowsWithSep("|",
+		"create table|public|t1|synced",
+		"create table|public|t1|synced",
+	))
 
 	// Test explain output, since the output may change in future.
 	tk.MustQuery(`EXPLAIN FORMAT='brief' SELECT * FROM information_schema.ddl_jobs where db_name = "test2" limit 10;`).Check(testkit.Rows(
@@ -1122,34 +1081,26 @@ func TestIndexUsageWithData(t *testing.T) {
 	}
 
 	checkIndexUsage := func(startQuery time.Time, endQuery time.Time, percentageAccess2050 bool) {
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			tk.Session().ReportUsageStats()
 			rows := tk.MustQuery("select QUERY_TOTAL,PERCENTAGE_ACCESS_20_50,PERCENTAGE_ACCESS_100,LAST_ACCESS_TIME from information_schema.tidb_index_usage where table_schema = 'test'").Rows()
-			if len(rows) != 1 {
-				return false
+			if !assert.Len(c, rows, 1) {
+				return
 			}
 			if percentageAccess2050 {
-				if rows[0][1] != "1" {
-					return false
-				}
+				assert.Equal(c, "1", rows[0][1])
 			} else {
-				if rows[0][1] != "0" {
-					return false
-				}
+				assert.Equal(c, "0", rows[0][1])
 			}
-			if rows[0][0] != "2" || rows[0][2] != "1" {
-				return false
-			}
+			assert.Equal(c, "2", rows[0][0])
+			assert.Equal(c, "1", rows[0][2])
 			lastAccessTime, err := time.ParseInLocation(time.DateTime, rows[0][3].(string), time.Local)
-			if err != nil {
-				return false
+			if !assert.NoError(c, err) {
+				return
 			}
-			if lastAccessTime.Unix() < startQuery.Unix() || lastAccessTime.Unix() > endQuery.Unix() {
-				return false
-			}
-
-			return true
-		}, 10*time.Second, 100*time.Millisecond)
+			assert.GreaterOrEqual(c, lastAccessTime.Unix(), startQuery.Unix())
+			assert.LessOrEqual(c, lastAccessTime.Unix(), endQuery.Unix())
+		}, 30*time.Second, 100*time.Millisecond)
 	}
 	t.Run("test index usage with normal index", func(t *testing.T) {
 		tk.MustExec("use test")

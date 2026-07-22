@@ -150,7 +150,7 @@ func (e *ctasStepExecutor) runOnSubmitter(ctx context.Context, meta *ddl.CTASLoa
 		return newCTASDistTaskError("CTAS disttask session helpers are not initialized")
 	}
 
-	baseSctx, err := CreateSessionWithStore(e.param.Store)
+	baseSctx, err := CreateSessionWithStore(e.param.TaskRuntime.Store())
 	if err != nil {
 		return err
 	}
@@ -408,7 +408,7 @@ func buildCTASSelectExecutor(
 	if !ok {
 		return nil, nil, nil, newCTASDistTaskErrorf("unexpected CTAS select plan type %T", selectPlan)
 	}
-	builder := newExecutorBuilder(selectSctx, snapshotIS, nil)
+	builder := newExecutorBuilder(ctx, selectSctx, snapshotIS, nil)
 	selectExec := builder.build(selectPlan)
 	if builder.err != nil {
 		return nil, nil, nil, builder.err

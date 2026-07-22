@@ -26,7 +26,7 @@ import (
 	rmpb "github.com/pingcap/kvproto/pkg/resource_manager"
 	"github.com/pingcap/tidb/pkg/resourcegroup"
 	pd "github.com/tikv/pd/client"
-	"github.com/tikv/pd/client/clients/metastorage"
+	metastorage "github.com/tikv/pd/client/clients/metastorage"
 	"github.com/tikv/pd/client/opt"
 )
 
@@ -93,13 +93,11 @@ func (m *mockResourceManagerClient) AddResourceGroup(_ context.Context, group *r
 	if err != nil {
 		return "", err
 	}
-	m.eventCh <- &metastorage.WatchResponse{
-		Events: []*meta_storagepb.Event{{
-			Type: meta_storagepb.Event_PUT,
-			Kv: &meta_storagepb.KeyValue{
-				Value: value,
-			}}},
-	}
+	m.eventCh <- &metastorage.WatchResponse{Events: []*meta_storagepb.Event{{
+		Type: meta_storagepb.Event_PUT,
+		Kv: &meta_storagepb.KeyValue{
+			Value: value,
+		}}}}
 
 	return "Success!", nil
 }
@@ -113,13 +111,11 @@ func (m *mockResourceManagerClient) ModifyResourceGroup(_ context.Context, group
 	if err != nil {
 		return "", err
 	}
-	m.eventCh <- &metastorage.WatchResponse{
-		Events: []*meta_storagepb.Event{{
-			Type: meta_storagepb.Event_PUT,
-			Kv: &meta_storagepb.KeyValue{
-				Value: value,
-			}}},
-	}
+	m.eventCh <- &metastorage.WatchResponse{Events: []*meta_storagepb.Event{{
+		Type: meta_storagepb.Event_PUT,
+		Kv: &meta_storagepb.KeyValue{
+			Value: value,
+		}}}}
 	return "Success!", nil
 }
 
@@ -132,13 +128,11 @@ func (m *mockResourceManagerClient) DeleteResourceGroup(_ context.Context, name 
 	if err != nil {
 		return "", err
 	}
-	m.eventCh <- &metastorage.WatchResponse{
-		Events: []*meta_storagepb.Event{{
-			Type: meta_storagepb.Event_DELETE,
-			Kv: &meta_storagepb.KeyValue{
-				Value: value,
-			}}},
-	}
+	m.eventCh <- &metastorage.WatchResponse{Events: []*meta_storagepb.Event{{
+		Type: meta_storagepb.Event_DELETE,
+		Kv: &meta_storagepb.KeyValue{
+			Value: value,
+		}}}}
 	return "Success!", nil
 }
 

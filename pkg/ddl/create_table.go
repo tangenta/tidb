@@ -532,6 +532,9 @@ func checkTableInfoValidWithStmt(ctx *metabuild.Context, tbInfo *model.TableInfo
 		if err := checkPartitionDefinitionConstraints(ctx.GetExprCtx(), tbInfo); err != nil {
 			return errors.Trace(err)
 		}
+		if err := rebuildStorageClassForPartitions(tbInfo, tbInfo.Partition.Definitions); err != nil {
+			return errors.Trace(err)
+		}
 		if s.Partition != nil {
 			if err := checkPartitionFuncType(ctx.GetExprCtx(), s.Partition.Expr, s.Table.Schema.O, tbInfo); err != nil {
 				return errors.Trace(err)
@@ -626,12 +629,14 @@ func checkColumnarIndexIfNeedTiFlashReplica(store kv.Storage, dbName ast.CIStr, 
 	}
 
 	if tblInfo.TiFlashReplica == nil || tblInfo.TiFlashReplica.Count == 0 {
-		replicas, err := infoschema.GetTiFlashStoreCount(store)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if replicas == 0 {
-			return errors.Trace(dbterror.ErrUnsupportedAddColumnarIndex.FastGenByArgs("unsupported TiFlash store count is 0"))
+		if config.GetGlobalConfig().CSE.IsTiFlashEnabled() {
+			replicas, err := infoschema.GetTiFlashStoreCount(store)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if replicas == 0 {
+				return errors.Trace(dbterror.ErrUnsupportedAddColumnarIndex.FastGenByArgs("unsupported TiFlash store count is 0"))
+			}
 		}
 
 		// Always try to set to 1 as the default replica count.
@@ -967,6 +972,11 @@ func extractAutoRandomBitsFromColDef(colDef *ast.ColumnDef) (shardBits, rangeBit
 func handleTableOptions(options []*ast.TableOption, tbInfo *model.TableInfo) error {
 	var ttlOptionsHandled bool
 
+	engineAttribute, hasEngineAttribute, engineAttributeErr := GetEngineAttributeFromStorageClassTableOptions(options)
+	if engineAttributeErr != nil {
+		return engineAttributeErr
+	}
+
 	for _, op := range options {
 		switch op.Tp {
 		case ast.TableOptionAutoIncrement:
@@ -1031,14 +1041,18 @@ func handleTableOptions(options []*ast.TableOption, tbInfo *model.TableInfo) err
 				return errors.Trace(dbterror.ErrInvalidTableAffinity.GenWithStackByArgs(fmt.Sprintf("'%s'", op.StrValue)))
 			}
 			tbInfo.Affinity = affinity
-		case ast.TableOptionEngineAttribute:
-			return errors.Trace(dbterror.ErrUnsupportedEngineAttribute)
 		case ast.TableOptionEncryption:
 			enableEncryption := strings.ToUpper(op.StrValue) == "Y"
 			if enableEncryption && !vardef.EnableEAL.Load() {
 				return errEALIsOff
 			}
 			tbInfo.Encryption = enableEncryption
+		case ast.TableOptionEngineAttribute, ast.TableOptionStorageClass:
+		}
+	}
+	if hasEngineAttribute {
+		if err := handleEngineAttributeForCreateTable(engineAttribute, tbInfo); err != nil {
+			return errors.Trace(err)
 		}
 	}
 	shardingBits := shardingBits(tbInfo)
@@ -1789,7 +1803,7 @@ func addIndexForForeignKey(ctx *metabuild.Context, tbInfo *model.TableInfo) erro
 		if handleCol != nil && len(fk.Cols) == 1 && handleCol.Name.L == fk.Cols[0].L {
 			continue
 		}
-		if model.FindIndexByColumns(tbInfo, tbInfo.Indices, fk.Cols...) != nil {
+		if model.FindIndexByColumnsForForeignKey(tbInfo, tbInfo.Indices, fk.Cols...) != nil {
 			continue
 		}
 		idxName := fk.Name

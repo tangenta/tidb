@@ -37,7 +37,7 @@ func (d *testRestartDomain) Close() {
 	d.closeOnce.Do(func() { close(d.closedCh) })
 }
 
-func (*testRestartDomain) CloseKSSessMgr(string) {}
+func (*testRestartDomain) GetSchemaLease() time.Duration { return 0 }
 
 func TestWatchRestartCompactedMissedPut(t *testing.T) {
 	if !intest.InTest {
@@ -144,7 +144,7 @@ func (d *testBlockingRestartDomain) Close() {
 	close(d.closedCh)
 }
 
-func (*testBlockingRestartDomain) CloseKSSessMgr(string) {}
+func (*testBlockingRestartDomain) GetSchemaLease() time.Duration { return 0 }
 
 func (d *testBlockingRestartDomain) release() {
 	d.releaseOnce.Do(func() { close(d.unblockCh) })

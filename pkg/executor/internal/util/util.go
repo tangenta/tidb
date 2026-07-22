@@ -16,6 +16,7 @@ package util
 
 import (
 	"io/fs"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,6 +27,17 @@ import (
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/stretchr/testify/require"
 )
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// GenerateRandomString returns a random string with specified length
+func GenerateRandomString(length int) string {
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
 
 // GetFunctionName returns the function name
 func GetFunctionName() string {

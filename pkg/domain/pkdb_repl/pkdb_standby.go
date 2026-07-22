@@ -161,9 +161,9 @@ var (
 
 type domainCloser interface {
 	Close()
-	// CloseKSSessMgr is not used. Just add some domain methods to this interface to avoid
+	// GetSchemaLease is not used. Just add some domain methods to this interface to avoid
 	// the implementation of domainCloser is not Domain.
-	CloseKSSessMgr(string)
+	GetSchemaLease() time.Duration
 }
 
 // WatchStandby should be called after InitStandby.

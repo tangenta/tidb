@@ -214,11 +214,29 @@ func recordAbortTxnDuration(sessVars *variable.SessionVars, isInternal bool) {
 }
 
 func finishStmt(ctx context.Context, se *session, meetsErr error, sql sqlexec.Statement) error {
-	failpoint.Inject("finishStmtError", func() {
-		failpoint.Return(errors.New("occur an error after finishStmt"))
-	})
 	sessVars := se.sessionVars
-	if !sql.IsReadOnly(sessVars) {
+	failpoint.Inject("finishStmtError", func(val failpoint.Value) {
+		failCurrentSession := true
+		switch v := val.(type) {
+		case int:
+			failCurrentSession = uint64(v) == sessVars.ConnectionID
+		case int64:
+			failCurrentSession = uint64(v) == sessVars.ConnectionID
+		case uint64:
+			failCurrentSession = v == sessVars.ConnectionID
+		case float64:
+			failCurrentSession = uint64(v) == sessVars.ConnectionID
+		}
+		if failCurrentSession {
+			failpoint.Return(errors.New("occur an error after finishStmt"))
+		}
+	})
+	readOnly := sql.IsReadOnly(sessVars)
+	if !readOnly && meetsErr == nil && shouldCheckConnectionAliveBeforeCommit(sessVars, sql) {
+		sessVars.SQLKiller.CheckConnectionAlive()
+		meetsErr = sessVars.SQLKiller.HandleSignal()
+	}
+	if !readOnly {
 		if meetsErr == nil && sessVars.TxnCtx.CouldRetry {
 			// Add only retry-safe write statements to StmtHistory.
 			// LOAD DATA LOCAL INFILE uses a one-shot client file stream via
@@ -265,6 +283,30 @@ func isLoadDataLocal(sql sqlexec.Statement) bool {
 		return s.FileLocRef == ast.FileLocClient
 	}
 	return false
+}
+
+// Avoid probing the socket on fast OLTP DML. This matches SQLKiller's normal
+// connection-alive throttle, while still covering long statements that reach
+// the disconnect-before-commit race without hitting another checkpoint.
+const minConnectionAliveCheckBeforeCommitDuration = time.Second
+
+func shouldCheckConnectionAliveBeforeCommit(sessVars *variable.SessionVars, sql sqlexec.Statement) bool {
+	if !sessVars.IsAutocommit() || sessVars.InTxn() {
+		return false
+	}
+	if !sessVars.StartTime.IsZero() && time.Since(sessVars.StartTime) < minConnectionAliveCheckBeforeCommitDuration {
+		return false
+	}
+	stmt, err := resolvePreparedStmt(sql.GetStmtNode(), sessVars)
+	if err != nil || stmt == nil {
+		return false
+	}
+	switch stmt.(type) {
+	case *ast.InsertStmt, *ast.UpdateStmt, *ast.DeleteStmt:
+		return true
+	default:
+		return false
+	}
 }
 
 func autoCommitAfterStmt(ctx context.Context, se *session, meetsErr error, sql sqlexec.Statement) error {

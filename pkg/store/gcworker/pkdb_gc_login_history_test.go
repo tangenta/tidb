@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	pdgc "github.com/tikv/pd/client/clients/gc"
+	"github.com/tikv/pd/client/pkg/caller"
 )
 
 func setEnableLogHistoryStatus(enable bool) {
@@ -77,6 +78,10 @@ type mockPDClient struct {
 
 func (m mockPDClient) GetGCInternalController(uint32) pdgc.InternalController {
 	return nil
+}
+
+func (m mockPDClient) WithCallerComponent(_ caller.Component) pd.Client {
+	return m
 }
 
 func TestTickGCSysTableAfterInterval(t *testing.T) {

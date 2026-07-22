@@ -386,6 +386,13 @@ func newBatchPointGetPlan(
 			for index, inner := range x.Values {
 				// permutations is used to match column and value.
 				permIndex := permutations[index]
+				// Record the column type for every position, not just the ones
+				// that are parameter markers in this (the first) row. A later
+				// row may hold a marker where this row holds a literal, and the
+				// plan-cache range rebuild needs a non-nil type for that column.
+				if initTypes {
+					indexTypes[permIndex] = &colInfos[index].FieldType
+				}
 				switch innerX := inner.(type) {
 				case *driver.ValueExpr:
 					dval := getPointGetValue(stmtCtx, colInfos[index], &innerX.Datum)
@@ -408,9 +415,6 @@ func newBatchPointGetPlan(
 					}
 					values[permIndex] = *dval
 					valuesParams[permIndex] = con
-					if initTypes {
-						indexTypes[permIndex] = &colInfos[index].FieldType
-					}
 				default:
 					return nil
 				}

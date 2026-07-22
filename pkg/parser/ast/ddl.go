@@ -526,6 +526,9 @@ const (
 	ColumnOptionStorage
 	ColumnOptionAutoRandom
 	ColumnOptionSecondaryEngineAttribute
+	// MariaDB period markers for restore only; no engine semantics.
+	ColumnOptionMariaDBRowStart
+	ColumnOptionMariaDBRowEnd
 	ColumnOptionEncryption
 	ColumnOptionSecuredWith
 )
@@ -687,6 +690,10 @@ func (n *ColumnOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("SECONDARY_ENGINE_ATTRIBUTE")
 		ctx.WritePlain(" = ")
 		ctx.WriteString(n.StrValue)
+	case ColumnOptionMariaDBRowStart:
+		ctx.WriteKeyWord("GENERATED ALWAYS AS ROW START")
+	case ColumnOptionMariaDBRowEnd:
+		ctx.WriteKeyWord("GENERATED ALWAYS AS ROW END")
 	case ColumnOptionSecuredWith:
 		ctx.WriteKeyWord("SECURED WITH ")
 		ctx.WriteName(n.StrValue)
@@ -2795,6 +2802,7 @@ const (
 	TableOptionTTLEnable
 	TableOptionTTLJobInterval
 	TableOptionEngineAttribute
+	TableOptionStorageClass
 	TableOptionSecondaryEngineAttribute
 	TableOptionAutoextendSize
 	TableOptionPageChecksum
@@ -2848,6 +2856,10 @@ const (
 	TableOptionCharsetWithConvertTo    uint64 = 1
 )
 
+// TableOptionCompressionNone is the string value of TableOptionCompression
+// which means the table is not compressed.
+const TableOptionCompressionNone = "NONE"
+
 const (
 	// TableAffinityLevelNone means no affinity.
 	TableAffinityLevelNone = "none"
@@ -2894,6 +2906,14 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		} else {
 			ctx.WritePlain("''")
 		}
+	case TableOptionEngineAttribute:
+		ctx.WriteKeyWord("ENGINE_ATTRIBUTE ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.StrValue)
+	case TableOptionStorageClass:
+		ctx.WriteKeyWord("STORAGE_CLASS ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.StrValue)
 	case TableOptionCharset:
 		if n.UintValue == TableOptionCharsetWithConvertTo {
 			ctx.WriteKeyWord("CONVERT TO ")

@@ -170,6 +170,37 @@ func TestLoadColumnsPrivTable(t *testing.T) {
 	require.Equal(t, mysql.SelectPriv, columnsPriv[1].ColumnPriv)
 }
 
+func TestMatchColumns(t *testing.T) {
+	store := createStoreAndPrepareDB(t)
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use mysql;")
+	tk.MustExec("delete from columns_priv")
+	tk.MustExec(`INSERT INTO mysql.columns_priv VALUES ("%", "db", "user", "table", "c1", "2017-01-04 16:33:42.235831", "Insert,Update")`)
+	tk.MustExec(`INSERT INTO mysql.columns_priv VALUES ("%", "db", "user", "table", "c2", "2017-01-04 16:33:42.235831", "Select")`)
+
+	p := privileges.NewMySQLPrivilege()
+	se := tk.Session()
+	require.NoError(t, p.LoadColumnsPrivTable(se.GetSQLExecutor()))
+	col := p.MatchColumns("user", "%", "db", "table", "c1")
+	require.NotNil(t, col)
+	col = p.MatchColumns("user", "%", "db", "table", "*")
+	require.NotNil(t, col)
+
+	p = privileges.NewMySQLPrivilege()
+	tk.MustExec("delete from columns_priv")
+	tk.MustExec("flush privileges")
+	tk.MustExec(`INSERT INTO mysql.columns_priv VALUES ("%", "db", "user", "table", "c1", "2017-01-04 16:33:42.235831", "Insert,Update")`)
+	tk.MustExec(`INSERT INTO mysql.columns_priv VALUES ("%", "db", "user", "table", "c2", "2017-01-04 16:33:42.235831", "References")`)
+	require.NoError(t, p.LoadColumnsPrivTable(se.GetSQLExecutor()))
+	col = p.MatchColumns("user", "%", "db", "table", "c1")
+	require.NotNil(t, col)
+	col = p.MatchColumns("user", "%", "db", "table", "c2")
+	require.NotNil(t, col)
+	col = p.MatchColumns("user", "%", "db", "table", "*")
+	require.Nil(t, col)
+}
+
 func TestLoadDefaultRoleTable(t *testing.T) {
 	store := createStoreAndPrepareDB(t)
 
@@ -396,6 +427,24 @@ func TestFindAllUserEffectiveRoles(t *testing.T) {
 
 func TestSortUserTable(t *testing.T) {
 	p := privileges.NewMySQLPrivilege()
+
+	p.SetUser([]privileges.UserRecord{
+		privileges.NewUserRecord(`%`, "root"),
+		privileges.NewUserRecord(`localhost`, "root"),
+		privileges.NewUserRecord("h1.example.net", "root"),
+		privileges.NewUserRecord("192.168.%", "root"),
+		privileges.NewUserRecord("192.168.199.%", "root"),
+	})
+	p.SortUserTable()
+	result := []privileges.UserRecord{
+		privileges.NewUserRecord("h1.example.net", "root"),
+		privileges.NewUserRecord(`localhost`, "root"),
+		privileges.NewUserRecord("192.168.199.%", "root"),
+		privileges.NewUserRecord("192.168.%", "root"),
+		privileges.NewUserRecord(`%`, "root"),
+	}
+	checkUserRecord(t, p.User(), result)
+
 	p.SetUser([]privileges.UserRecord{
 		privileges.NewUserRecord(`%`, "root"),
 		privileges.NewUserRecord(`%`, "jeffrey"),
@@ -403,7 +452,7 @@ func TestSortUserTable(t *testing.T) {
 		privileges.NewUserRecord("localhost", ""),
 	})
 	p.SortUserTable()
-	result := []privileges.UserRecord{
+	result = []privileges.UserRecord{
 		privileges.NewUserRecord("localhost", ""),
 		privileges.NewUserRecord("localhost", "root"),
 		privileges.NewUserRecord(`%`, "jeffrey"),

@@ -92,7 +92,6 @@ func TestRUV2SessionParserTotalDoesNotLeakAcrossStandaloneParse(t *testing.T) {
 
 		dctx := se.GetDistSQLCtx()
 		require.Same(t, se.sessionVars.RUV2Metrics, dctx.RUV2Metrics)
-		require.NotNil(t, dctx.RUV2RPCInterceptor)
 	})
 
 	t.Run("internal others bypass skips parser ru accounting", func(t *testing.T) {
@@ -165,6 +164,38 @@ func TestCrossKSSessionDistSQLCtxDoesNotExposeTypedNilRUReporter(t *testing.T) {
 	require.True(t, dctx.RUConsumptionReporter == nil)
 }
 
+func TestDistSQLCtxPagingSizeBytesRequiresHardCappedResourceGroup(t *testing.T) {
+	store, dom := CreateStoreAndBootstrap(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	defer dom.Close()
+
+	oldRCEnabled := vardef.EnableResourceControl.Load()
+	vardef.EnableResourceControl.Store(true)
+	defer vardef.EnableResourceControl.Store(oldRCEnabled)
+
+	se, err := createSession(store)
+	require.NoError(t, err)
+	MustExec(t, se, "create resource group rg_paging_capped ru_per_sec=1000")
+	MustExec(t, se, "create resource group rg_paging_unlimited ru_per_sec=1000 burstable=unlimited")
+
+	const pagingSizeBytes = 4 * 1024 * 1024
+	se.sessionVars.PagingSizeBytes = pagingSizeBytes
+
+	check := func(resourceGroupName string, rcEnabled bool, expected int) {
+		vardef.EnableResourceControl.Store(rcEnabled)
+		se.sessionVars.StmtCtx.ResetForRetry()
+		se.sessionVars.StmtCtx.ResourceGroupName = resourceGroupName
+		require.Equal(t, expected, se.GetDistSQLCtx().PagingSizeBytes)
+	}
+
+	check("default", true, 0)
+	MustExec(t, se, "alter resource group `default` ru_per_sec=1000 burstable=off")
+	check("default", true, pagingSizeBytes)
+	check("rg_paging_capped", true, pagingSizeBytes)
+	check("rg_paging_unlimited", true, 0)
+	check("rg_paging_capped", false, 0)
+}
+
 func TestRUV2MetricsIsolatedPerStatementInExplicitTxn(t *testing.T) {
 	store, dom := CreateStoreAndBootstrap(t)
 	defer func() { require.NoError(t, store.Close()) }()
@@ -198,9 +229,8 @@ func TestRUV2MetricsIsolatedPerStatementInExplicitTxn(t *testing.T) {
 	require.NoError(t, err)
 	metrics2 := se.sessionVars.RUV2Metrics
 
-	// Each statement must get a fresh RUV2Metrics object so that the
-	// interceptor bound during execution targets the current statement,
-	// not a previous one.
+	// Each statement must get a fresh RUV2Metrics object so that RUv2 accounting
+	// stays isolated per statement, not reused from a previous one.
 	require.NotNil(t, metrics2)
 	require.NotSame(t, metricsBegin, metrics1, "stmt1 should have different metrics from BEGIN")
 	require.NotSame(t, metrics1, metrics2, "stmt2 should have different metrics from stmt1")

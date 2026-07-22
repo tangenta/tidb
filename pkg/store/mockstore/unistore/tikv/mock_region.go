@@ -1249,7 +1249,6 @@ func (c gcStatesClient) GetGCState(ctx context.Context, opts ...pdgc.GCStatesAPI
 	for barrierID, barrierTS := range internalState.gcBarriers {
 		gcBarriers = append(gcBarriers, pdgc.NewGCBarrierInfo(barrierID, barrierTS, pdgc.TTLNeverExpire, startTime))
 	}
-
 	return pdgc.NewGCStateWithGCBarriers(c.keyspaceID, internalState.txnSafePoint, internalState.gcSafePoint, gcBarriers), nil
 }
 
@@ -1261,6 +1260,6 @@ func (c gcStatesClient) DeleteGlobalGCBarrier(ctx context.Context, barrierID str
 	panic("unimplemented")
 }
 
-func (c gcStatesClient) GetAllKeyspacesGCStates(context.Context, ...pdgc.GCStatesAPIOption) (pdgc.ClusterGCStates, error) {
+func (c gcStatesClient) GetAllKeyspacesGCStates(ctx context.Context, opts ...pdgc.GCStatesAPIOption) (pdgc.ClusterGCStates, error) {
 	panic("unimplemented")
 }

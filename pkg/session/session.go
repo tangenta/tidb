@@ -27,6 +27,7 @@ import (
 	stderrs "errors"
 	"fmt"
 	"iter"
+	"maps"
 	"math"
 	"math/rand"
 	"regexp"
@@ -45,6 +46,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/pkg/bindinfo"
 	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/config/deploymode"
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/ddl/placement"
@@ -66,6 +68,7 @@ import (
 	"github.com/pingcap/tidb/pkg/expression/sessionexpr"
 	"github.com/pingcap/tidb/pkg/extension"
 	"github.com/pingcap/tidb/pkg/extension/extensionimpl"
+	"github.com/pingcap/tidb/pkg/extworkload"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	infoschemactx "github.com/pingcap/tidb/pkg/infoschema/context"
 	"github.com/pingcap/tidb/pkg/infoschema/issyncer"
@@ -111,7 +114,6 @@ import (
 	"github.com/pingcap/tidb/pkg/statistics/handle/usage/indexusage"
 	kvstore "github.com/pingcap/tidb/pkg/store"
 	storeerr "github.com/pingcap/tidb/pkg/store/driver/error"
-	drivertxn "github.com/pingcap/tidb/pkg/store/driver/txn"
 	"github.com/pingcap/tidb/pkg/store/helper"
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tblctx"
@@ -138,7 +140,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/sqlescape"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
 	"github.com/pingcap/tidb/pkg/util/syncutil"
-	"github.com/pingcap/tidb/pkg/util/timeutil"
 	"github.com/pingcap/tidb/pkg/util/topsql"
 	topsqlstate "github.com/pingcap/tidb/pkg/util/topsql/state"
 	"github.com/pingcap/tidb/pkg/util/topsql/stmtstats"
@@ -149,6 +150,7 @@ import (
 	"github.com/tikv/client-go/v2/trace"
 	"github.com/tikv/client-go/v2/txnkv/transaction"
 	tikvutil "github.com/tikv/client-go/v2/util"
+	gouberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -1347,7 +1349,7 @@ func getSessionFactoryInternal(store kv.Storage, createSessFn func(store kv.Stor
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		err = se.sessionVars.SetSystemVar(vardef.MaxAllowedPacket, strconv.FormatUint(vardef.DefMaxAllowedPacket, 10))
+		err = se.sessionVars.SetSystemVar(vardef.MaxAllowedPacket, strconv.FormatUint(config.GetMaxAllowedPacket(), 10))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -2442,6 +2444,7 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 func (s *session) executeStmtImpl(ctx context.Context, stmtNode ast.StmtNode) (sqlexec.RecordSet, error) {
 	r, ctx := tracing.StartRegionEx(ctx, "session.ExecuteStmt")
 	defer r.End()
+	ctx = execdetails.ContextWithMissingExecDetailsInitialized(ctx)
 
 	if err := s.PrepareTxnCtx(ctx, stmtNode); err != nil {
 		return nil, err
@@ -2463,10 +2466,6 @@ func (s *session) executeStmtImpl(ctx context.Context, stmtNode ast.StmtNode) (s
 		return nil, err
 	}
 	ruv2Metrics := execdetails.RUV2MetricsFromContext(ctx)
-	if ruv2Metrics == nil {
-		ruv2Metrics = execdetails.NewRUV2Metrics()
-		ctx = context.WithValue(ctx, execdetails.RUV2MetricsCtxKey, ruv2Metrics)
-	}
 	sessVars.RUV2Metrics = ruv2Metrics
 	bypass := shouldBypass(ctx, stmtNode, sessVars)
 	if ruv2Metrics != nil {
@@ -2792,6 +2791,10 @@ func shouldBypass(ctx context.Context, stmtNode ast.StmtNode, sessVars *variable
 	switch kv.GetInternalSourceType(ctx) {
 	case kv.InternalTxnOthers:
 		return true
+	// InternalTxnStats marks ANALYZE KV requests as background work. Since ANALYZE
+	// has no statement-level RU v2 charge yet, bypass TiDB-side RU v2 only for
+	// ANALYZE statements. Client-go still applies request-level bypass by
+	// request source and cop request type.
 	case kv.InternalTxnStats:
 		return isNextGenForRUV2() && isAnalyzeStatementForRUV2(stmtNode, sessVars)
 	default:
@@ -2868,18 +2871,11 @@ func (s *session) validateStatementReadOnlyInStaleness(stmtNode ast.StmtNode) er
 	return nil
 }
 
-// fileTransInConnKeys contains the keys of queries that will be handled by handleFileTransInConn.
-var fileTransInConnKeys = []fmt.Stringer{
-	executor.LoadDataVarKey,
-	executor.LoadStatsVarKey,
-	executor.PlanReplayerLoadVarKey,
-}
-
 func (s *session) hasFileTransInConn() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, k := range fileTransInConnKeys {
+	for k := range executor.FileTransInConnHandlers {
 		v := s.mu.values[k]
 		if v != nil {
 			return true
@@ -3206,6 +3202,37 @@ func (s *session) PrepareStmt(sql string) (stmtID uint32, paramCount int, fields
 	if err = sessiontxn.GetTxnManager(s).AdviseWarmup(); err != nil {
 		return
 	}
+
+	var dedupKey string
+	if s.sessionVars.EnableCachePrepareStmt {
+		// Session-level prepare dedup cache: if the same SQL text has been prepared
+		// before in this session (with the same charset/collation/currentDB), reuse
+		// the already-built PlanCacheStmt and skip the expensive Preprocess+Build.
+		charset, collation := s.sessionVars.GetCharsetInfo()
+		dedupKey = variable.PrepareDedupCacheKey(sql, charset, collation, s.sessionVars.CurrentDB, s.sessionVars.SQLMode)
+		if v := s.sessionVars.GetPrepareStmtDedupCache(dedupKey); v != nil {
+			cached := v.(*plannercore.PrepareStmtCacheEntry)
+			is := sessiontxn.GetTxnManager(s).GetTxnInfoSchema()
+			if cached.Stmt.SchemaVersion == is.SchemaMetaVersion() {
+				newStmt, rebuildErr := s.rebuildFromPrepareCache(ctx, cached, sql, charset, collation)
+				if rebuildErr == nil {
+					stmtID = s.sessionVars.GetNextPreparedStmtID()
+					if err = s.sessionVars.AddPreparedStmt(stmtID, newStmt); err != nil {
+						s.rollbackOnError(ctx)
+						return
+					}
+					paramCount = cached.ParamCount
+					fields = cached.Fields
+					s.rollbackOnError(ctx)
+					return
+				}
+				// Re-parse or rebuild failed; fall through to the full prepare path.
+				logutil.Logger(ctx).Warn("prepare stmt dedup cache rebuild failed, fallback to full prepare", zap.Error(rebuildErr))
+			}
+			// Schema version changed; fall through and re-cache below.
+		}
+	}
+
 	prepareExec := executor.NewPrepareExec(s, sql)
 	err = prepareExec.Next(ctx, nil)
 	// Rollback even if err is nil.
@@ -3214,7 +3241,105 @@ func (s *session) PrepareStmt(sql string) (stmtID uint32, paramCount int, fields
 	if err != nil {
 		return
 	}
+
+	// Store the result in the dedup cache for future Prepares of the same SQL.
+	if s.sessionVars.EnableCachePrepareStmt {
+		if prepareExec.Stmt != nil {
+			s.sessionVars.SetPrepareStmtDedupCache(dedupKey, &plannercore.PrepareStmtCacheEntry{
+				Stmt:       prepareExec.Stmt.(*plannercore.PlanCacheStmt),
+				Fields:     prepareExec.Fields,
+				ParamCount: prepareExec.ParamCount,
+			})
+		}
+	}
 	return prepareExec.ID, prepareExec.ParamCount, prepareExec.Fields, nil
+}
+
+// rebuildFromPrepareCache constructs a new PlanCacheStmt from a cached entry,
+// re-parsing the SQL to obtain an independent AST (with fresh ParamMarkerExpr
+// nodes) while skipping only the expensive PlanBuilder.Build step.
+// Preprocess is still executed to build a fresh ResolveCtx whose tableNames map
+// is keyed by the new AST's TableName pointers; reusing the cached ResolveCtx
+// would cause nil-deref panics on plan-cache miss because the old pointer keys
+// would not match the newly-parsed AST nodes.
+func (s *session) rebuildFromPrepareCache(
+	ctx context.Context,
+	cached *plannercore.PrepareStmtCacheEntry,
+	sql, charset, collation string,
+) (*plannercore.PlanCacheStmt, error) {
+	stmts, _, err := s.ParseSQL(ctx, sql,
+		parser.CharsetConnection(charset),
+		parser.CollationConnection(collation),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, errors.New("unexpected statement count after re-parse")
+	}
+	stmtNode := stmts[0]
+
+	// Extract fresh param markers from the new AST and initialise them to NULL.
+	markers := plannercore.ExtractAndSortParamMarkers(stmtNode)
+
+	is := sessiontxn.GetTxnManager(s).GetTxnInfoSchema()
+
+	// Run Preprocess to build a fresh ResolveCtx aligned with the new AST.
+	// This is the only way to populate ResolveCtx.tableNames with the new
+	// AST's *ast.TableName pointer keys without re-running the full Build.
+	ret := &plannercore.PreprocessorReturn{InfoSchema: is}
+	nodeW := resolve.NewNodeW(stmtNode)
+	if err = plannercore.Preprocess(ctx, s, nodeW, plannercore.InPrepare,
+		plannercore.WithPreprocessorReturn(ret)); err != nil {
+		return nil, err
+	}
+	// Defensive: if schema changed between our earlier check and Preprocess,
+	// fall through to the full prepare path.
+	if ret.InfoSchema.SchemaMetaVersion() != cached.Stmt.SchemaVersion {
+		return nil, errors.New("schema version changed during rebuild")
+	}
+
+	newStmt := &plannercore.PlanCacheStmt{
+		// Fields derived from the new AST:
+		PreparedAst: &ast.Prepared{
+			Stmt:     stmtNode,
+			StmtType: cached.Stmt.PreparedAst.StmtType,
+		},
+		Params: markers,
+
+		// Fresh ResolveCtx whose tableNames keys match the new AST pointers.
+		ResolveCtx: nodeW.GetResolveContext(),
+
+		// Immutable fields – safe to share with the cached template:
+		StmtDB:              cached.Stmt.StmtDB,
+		StmtText:            cached.Stmt.StmtText,
+		VisitInfos:          cached.Stmt.VisitInfos,
+		NormalizedSQL:       cached.Stmt.NormalizedSQL,
+		SQLDigest:           cached.Stmt.SQLDigest,
+		ForUpdateRead:       cached.Stmt.ForUpdateRead,
+		SnapshotTSEvaluator: cached.Stmt.SnapshotTSEvaluator,
+		StmtCacheable:       cached.Stmt.StmtCacheable,
+		UncacheableReason:   cached.Stmt.UncacheableReason,
+		SchemaVersion:       cached.Stmt.SchemaVersion,
+
+		// Mutable containers – clone so each stmt has independent state:
+		RelateVersion: maps.Clone(cached.Stmt.RelateVersion),
+		// PointGet is zeroed (per-execution executor state must not leak).
+		// NormalizedPlan / PlanDigest are left as zero values; they will be
+		// populated on the first plan-cache miss during Execute.
+	}
+
+	// Walk the new AST to populate limits, hasSubquery, and tables.
+	// These fields hold pointers into the AST, so they must refer to the
+	// newly-parsed tree rather than the cached one.
+	plannercore.CollectPlanCacheStmtInfo(ctx, is, newStmt, stmtNode)
+
+	// dbName and tbls are only read during Execute (not written to by
+	// CollectPlanCacheStmtInfo since that populates tables, not tbls).
+	// Clone them so that planCachePreprocess can safely replace tbls[i].
+	newStmt.SetDBNameAndTbls(cached.Stmt.DBName(), cached.Stmt.Tbls())
+
+	return newStmt, nil
 }
 
 // ExecutePreparedStmt executes a prepared statement.
@@ -3361,7 +3486,11 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 				ruConsumptionReporter = rgCtl
 			}
 		}
-		return &distsqlctx.DistSQLContext{
+		pagingSizeBytes := vars.PagingSizeBytes
+		if pagingSizeBytes > 0 && (!vardef.EnableResourceControl.Load() || !resourceGroupAllowsPagingSizeBytes(dom, sc.ResourceGroupName)) {
+			pagingSizeBytes = 0
+		}
+		ret := &distsqlctx.DistSQLContext{
 			WarnHandler:     sc.WarnHandler,
 			InRestrictedSQL: sc.InRestrictedSQL,
 			Client:          s.GetClient(),
@@ -3372,7 +3501,6 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 			KVVars:                 vars.KVVars,
 			KvExecCounter:          sc.KvExecCounter,
 			RUV2Metrics:            vars.RUV2Metrics,
-			RUV2RPCInterceptor:     drivertxn.NewStatementRUV2RPCInterceptor(vars.RUV2Metrics),
 			SessionMemTracker:      vars.MemTracker,
 
 			Location:         sc.TimeZone(),
@@ -3401,6 +3529,7 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 			EnablePaging:                  vars.EnablePaging,
 			MinPagingSize:                 vars.MinPagingSize,
 			MaxPagingSize:                 vars.MaxPagingSize,
+			PagingSizeBytes:               pagingSizeBytes,
 			RequestSourceType:             vars.RequestSourceType,
 			ExplicitRequestSourceType:     vars.ExplicitRequestSourceType,
 			StoreBatchSize:                vars.StoreBatchSize,
@@ -3410,6 +3539,7 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 			RUConsumptionReporter:         ruConsumptionReporter,
 			TiKVClientReadTimeout:         vars.GetTiKVClientReadTimeout(),
 			MaxExecutionTime:              vars.GetMaxExecutionTime(),
+			MaxKeysRead:                   vars.GetMaxKeysRead(),
 
 			ReplicaClosestReadThreshold: vars.ReplicaClosestReadThreshold,
 			ConnectionID:                vars.ConnectionID,
@@ -3417,6 +3547,10 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 
 			ExecDetails: &sc.SyncExecDetails,
 		}
+		if ret.MaxKeysRead > 0 {
+			ret.MaxKeysReadCounter = new(gouberatomic.Uint64)
+		}
+		return ret
 	})
 
 	// Check if the runaway checker is updated. This is to avoid that evaluating a non-correlated subquery
@@ -3428,10 +3562,22 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 	}
 	if dctx.RUV2Metrics != vars.RUV2Metrics {
 		dctx.RUV2Metrics = vars.RUV2Metrics
-		dctx.RUV2RPCInterceptor = drivertxn.NewStatementRUV2RPCInterceptor(vars.RUV2Metrics)
 	}
 
 	return dctx
+}
+
+func resourceGroupAllowsPagingSizeBytes(dom *domain.Domain, resourceGroupName string) bool {
+	if dom == nil || resourceGroupName == "" {
+		return false
+	}
+	if rgCtl := dom.ResourceGroupsController(); rgCtl != nil {
+		if state, ok := rgCtl.GetResourceGroupRuntimeState(resourceGroupName); ok {
+			return state.HasLimitedBurst
+		}
+	}
+	rg, ok := dom.InfoSchema().ResourceGroupByName(ast.NewCIStr(resourceGroupName))
+	return ok && rg.GetBurstLimitAdjusted() >= 0
 }
 
 // GetRangerCtx returns the context used in `ranger` related functions
@@ -3846,7 +3992,7 @@ func (s *session) MatchIdentity(ctx context.Context, username, remoteHost string
 		return user, nil
 	}
 	// This error will not be returned to the user, access denied will be instead
-	return nil, fmt.Errorf("could not find matching user in MatchIdentity: %s, %s", username, remoteHost)
+	return nil, errors.Wrapf(sessionapi.ErrIdentityNotFound, "could not find matching user in MatchIdentity: %s, %s", username, remoteHost)
 }
 
 // AuthWithoutVerification is required by the ResetConnection RPC
@@ -4095,6 +4241,64 @@ func InitDDLTables(store kv.Storage) error {
 	})
 }
 
+// initBootstrapDependentTables creates system tables that classic kernel upgrade
+// DDL may consult before the ordinary upgrade DDL reaches their creation step.
+func initBootstrapDependentTables(store kv.Storage, ver int64) error {
+	// This is only for classic upgrades from below version260. Fresh bootstrap and
+	// next-gen create the table elsewhere. After version260, the table may have been renamed.
+	if !kerneltype.IsClassic() || ver <= notBootstrapped || ver >= version260 || currentBootstrapVersion < version260 {
+		return nil
+	}
+
+	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnDDL)
+	return kv.RunInNewTxn(ctx, store, true, func(ctx context.Context, txn kv.Transaction) error {
+		t := meta.NewMutator(txn)
+		dbID, err := t.CreateMySQLDatabaseIfNotExists()
+		if err != nil {
+			return err
+		}
+		return createAndSplitTablesIfNotExists(ctx, store, t, dbID, systemTablesOfMaskingPolicyNextGenVersion)
+	})
+}
+
+func createAndSplitTablesIfNotExists(
+	ctx context.Context,
+	store kv.Storage,
+	t *meta.Mutator,
+	dbID int64,
+	tables []TableBasicInfo,
+) error {
+	// InitDDLTables creates tables and updates its version in the same transaction.
+	// This helper has no such version, so a retry must skip tables created earlier.
+	existingTables, err := t.ListTables(ctx, dbID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	existingNames := make(map[string]struct{}, len(existingTables))
+	for _, tblInfo := range existingTables {
+		existingNames[tblInfo.Name.L] = struct{}{}
+	}
+
+	missingTables := make([]TableBasicInfo, 0, len(tables))
+	for _, tbl := range tables {
+		if _, ok := existingNames[tbl.Name]; ok {
+			continue
+		}
+		missingTables = append(missingTables, tbl)
+	}
+	if len(missingTables) == 0 {
+		return nil
+	}
+	tableIDs, err := t.GenGlobalIDs(len(missingTables))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for i, id := range tableIDs {
+		missingTables[i].ID = id
+	}
+	return createAndSplitTables(store, t, dbID, missingTables)
+}
+
 func createAndSplitTables(store kv.Storage, t *meta.Mutator, dbID int64, tables []TableBasicInfo) error {
 	var (
 		tableIDs = make([]int64, 0, len(tables))
@@ -4283,13 +4487,16 @@ func BootstrapSession4DistExecution(store kv.Storage) (*domain.Domain, error) {
 // - start domain and other routines.
 func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsImpl func(store kv.Storage, cnt int) ([]*session, error)) (*domain.Domain, error) {
 	ver := getStoreBootstrapVersionWithCache(store)
+	failpoint.InjectCall("afterGetStoreBootstrapVersion", ver)
 	if kv.IsUserKS(store) {
+		targetVer := currentBootstrapVersion
 		systemKSVer := mustGetStoreBootstrapVersion(kvstore.GetSystemStorage())
 		if systemKSVer == notBootstrapped {
 			logutil.BgLogger().Fatal("SYSTEM keyspace is not bootstrapped")
-		} else if ver > systemKSVer {
-			logutil.BgLogger().Fatal("bootstrap version of user keyspace must be smaller or equal to that of SYSTEM keyspace",
-				zap.Int64("user", ver), zap.Int64("system", systemKSVer))
+		} else if targetVer > systemKSVer {
+			logutil.BgLogger().Fatal("bootstrap version of user keyspace must be smaller or equal to that of SYSTEM keyspace. if you are upgrading user keyspace, please make sure to upgrade SYSTEM keyspace first",
+				zap.Int64("userCurr", ver), zap.Int64("userTarget", targetVer),
+				zap.Int64("system", systemKSVer))
 		}
 	}
 
@@ -4324,11 +4531,30 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	verEE := getStoreEEBootstrapVersionWithCache(store)
 	startMode := ddl.Normal
 	if ver < currentBootstrapVersion || verEE < currentEEBootstrapVersion {
-		startMode = runInBootstrapSession(store, ver, verEE)
+		startMode, err = runInBootstrapSession(store, ver, verEE)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		logutil.BgLogger().Info("cluster already bootstrapped", zap.Int64("version", ver))
 		err = InitMDLVariable(store)
 		if err != nil {
+			return nil, err
+		}
+	}
+	skipInitGlobalVarFromSystemDB := false
+	failpoint.Inject("skipInitGlobalVarFromSystemDB", func(val failpoint.Value) {
+		skipInitGlobalVarFromSystemDB = val.(bool)
+	})
+	if !skipInitGlobalVarFromSystemDB {
+		if err = initGlobalVarFromSystemDB(ctx, store); err != nil {
+			return nil, err
+		}
+	}
+
+	// Initialize persisted collation and time zone before starter SQL starts a full domain.
+	if deploymode.IsStarter() {
+		if err = upgradeStarterBootstrap(store); err != nil {
 			return nil, err
 		}
 	}
@@ -4367,7 +4593,6 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	if concurrency < 0 { // it is only for test, in the production, negative value is illegal.
 		concurrency = 0
 	}
-
 	ses, err := createSessionsImpl(store, 10)
 	if err != nil {
 		return nil, err
@@ -4385,20 +4610,6 @@ func bootstrapSessionImpl(ctx context.Context, store kv.Storage, createSessionsI
 	for i := range ses {
 		ses[i].GetSessionVars().InRestrictedSQL = true
 	}
-
-	// get system tz from mysql.tidb
-	tz, err := ses[0].getTableValue(ctx, mysql.TiDBTable, tidbSystemTZ)
-	if err != nil {
-		return nil, err
-	}
-	timeutil.SetSystemTZ(tz)
-
-	// get the flag from `mysql`.`tidb` which indicating if new collations are enabled.
-	newCollationEnabled, err := loadCollationParameter(ctx, ses[0])
-	if err != nil {
-		return nil, err
-	}
-	collate.SetNewCollationEnabledForTest(newCollationEnabled)
 
 	lowerCaseTableNames, err := loadLowerCaseTableNames(ctx, ses[0])
 	if err != nil {
@@ -4600,7 +4811,7 @@ func getStartMode(ver, verEE int64) ddl.StartMode {
 // If no bootstrap and storage is remote, we must use a little lease time to
 // bootstrap quickly, after bootstrapped, we will reset the lease time.
 // TODO: Using a bootstrap tool for doing this may be better later.
-func runInBootstrapSession(store kv.Storage, ver, verEE int64) ddl.StartMode {
+func runInBootstrapSession(store kv.Storage, ver, verEE int64) (ddl.StartMode, error) {
 	startMode := getStartMode(ver, verEE)
 	startTime := time.Now()
 	defer func() {
@@ -4617,6 +4828,8 @@ func runInBootstrapSession(store kv.Storage, ver, verEE int64) ddl.StartMode {
 			logutil.BgLogger().Fatal("[upgrade] get owner lock failed", zap.Error(err))
 		}
 		defer releaseFn()
+		// Recheck the version and create the table under the upgrade lock so that only
+		// one TiDB can do this at a time.
 		currVer := mustGetStoreBootstrapVersion(store)
 		currEEVersion := mustGetStoreEEBootstrapVersion(store)
 		if currVer >= currentBootstrapVersion && currEEVersion >= currentEEBootstrapVersion {
@@ -4627,6 +4840,23 @@ func runInBootstrapSession(store kv.Storage, ver, verEE int64) ddl.StartMode {
 			// TODO remove this after we can refactor below code out in this case.
 			logutil.BgLogger().Info("[upgrade] already upgraded by other nodes, switch to normal mode")
 			startMode = ddl.Normal
+		} else {
+			if deploymode.IsStarter() {
+				shouldTerminate, err := extworkload.AbortGCV2ForUpgrade(context.Background(), extworkload.GetManagerFromStore(store))
+				if err != nil {
+					logutil.BgLogger().Fatal("abort GCV2 worker failed", zap.Error(err))
+				}
+				if shouldTerminate {
+					if intest.InTest {
+						return startMode, nil
+					}
+					releaseFn()
+					logutil.BgLogger().Fatal("GCV2 worker aborted before bootstrap upgrade")
+				}
+			}
+			if err := initBootstrapDependentTables(store, currVer); err != nil {
+				return startMode, errors.Trace(err)
+			}
 		}
 	}
 	s, err := createSession(store)
@@ -4669,8 +4899,7 @@ func runInBootstrapSession(store kv.Storage, ver, verEE int64) ddl.StartMode {
 		infosync.MockGlobalServerInfoManagerEntry.Close()
 	}
 	domap.Delete(store)
-
-	return startMode
+	return startMode, nil
 }
 
 func createSessions(store kv.Storage, cnt int) ([]*session, error) {
@@ -4916,7 +5145,7 @@ func (s *session) loadCommonGlobalVariablesIfNeeded() error {
 	if s.Value(sessionctx.Initing) != nil {
 		// When running bootstrap or upgrade, we should not access global storage.
 		// But we need to init max_allowed_packet to use concat function during bootstrap or upgrade.
-		err := vars.SetSystemVar(vardef.MaxAllowedPacket, strconv.FormatUint(vardef.DefMaxAllowedPacket, 10))
+		err := vars.SetSystemVar(vardef.MaxAllowedPacket, strconv.FormatUint(config.GetMaxAllowedPacket(), 10))
 		if err != nil {
 			logutil.BgLogger().Error("set system variable max_allowed_packet error", zap.Error(err))
 		}
@@ -5138,7 +5367,7 @@ func logStmt(execStmt *executor.ExecStmt, s *session) {
 			isCrucial = false
 		}
 	case *ast.CreateUserStmt, *ast.DropUserStmt, *ast.AlterUserStmt, *ast.SetPwdStmt, *ast.GrantStmt,
-		*ast.RevokeStmt, *ast.AlterTableStmt, *ast.CreateDatabaseStmt, *ast.CreateTableStmt,
+		*ast.RevokeStmt, *ast.AlterTableStmt, *ast.AlterDatabaseStmt, *ast.CreateDatabaseStmt, *ast.CreateTableStmt,
 		*ast.DropDatabaseStmt, *ast.DropTableStmt, *ast.RenameTableStmt, *ast.TruncateTableStmt,
 		*ast.RenameUserStmt, *ast.CreateBindingStmt, *ast.DropBindingStmt, *ast.SetBindingStmt, *ast.BRIEStmt:
 		isCrucial = true
@@ -5703,6 +5932,13 @@ func (s *session) usePipelinedDmlOrWarn(ctx context.Context) bool {
 		return false
 	}
 	if stmtCtx.IsReadOnly {
+		return false
+	}
+	// The Starter deploy mode schedules background workloads on separate worker
+	// instances that do not support the pipelined protocol, so fall back to the
+	// standard path there.
+	if deploymode.IsStarter() {
+		stmtCtx.AppendWarning(errors.New("Pipelined DML is not supported in this deployment. Fallback to standard mode"))
 		return false
 	}
 	vars := s.GetSessionVars()

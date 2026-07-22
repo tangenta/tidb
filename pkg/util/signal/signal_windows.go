@@ -28,7 +28,7 @@ import (
 func SetupUSR1Handler() {}
 
 // SetupSignalHandler setup signal handler for TiDB Server
-func SetupSignalHandler(shutdownFunc func(os.Signal)) {
+func SetupSignalHandler(shutdownFunc func(sig os.Signal)) {
 	//todo deal with dump goroutine stack on windows
 	closeSignalChan := make(chan os.Signal, 1)
 	signal.Notify(closeSignalChan,
@@ -42,4 +42,14 @@ func SetupSignalHandler(shutdownFunc func(os.Signal)) {
 		logutil.BgLogger().Info("got signal to exit", zap.Stringer("signal", sig))
 		shutdownFunc(sig)
 	}()
+}
+
+// TiDBExit sends a signal to the current process.
+func TiDBExit(sig syscall.Signal) {
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		return
+	}
+	// Best effort; Windows does not support POSIX signal shutdown semantics.
+	_ = p.Signal(sig)
 }
