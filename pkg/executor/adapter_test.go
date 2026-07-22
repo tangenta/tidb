@@ -503,7 +503,7 @@ func TestFinishExecuteStmtSyncsTiDBRUV2FromRUDetails(t *testing.T) {
 		WriteKeys: 3,
 		WriteSize: 66,
 	}
-	sessVars.StmtCtx.SyncExecDetails.MergeExecDetails(commitDetails)
+	sessVars.StmtCtx.SyncExecDetails.MergeExecDetails(nil, commitDetails)
 	// Build expected metrics by cloning the current state and manually adding
 	// the pending counters (without draining ruDetails, since FinishExecuteStmt will drain).
 	expected := sessVars.RUV2Metrics.Clone()

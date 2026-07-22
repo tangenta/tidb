@@ -76,6 +76,15 @@ func TestConcurrentLoadHist(t *testing.T) {
 }
 
 func TestConcurrentLoadHistTimeout(t *testing.T) {
+	originConfig := config.GetGlobalConfig()
+	newConfig := config.NewConfig()
+	newConfig.Performance.StatsLoadConcurrency = -1
+	newConfig.Performance.StatsLoadQueueSize = 1
+	config.StoreGlobalConfig(newConfig)
+	t.Cleanup(func() {
+		config.StoreGlobalConfig(originConfig)
+	})
+
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 
 	testKit := testkit.NewTestKit(t, store)
@@ -114,6 +123,8 @@ func TestConcurrentLoadHistTimeout(t *testing.T) {
 		neededColumns = append(neededColumns, model.StatsLoadItem{TableItemID: model.TableItemID{TableID: tableInfo.ID, ID: col.ID, IsIndex: false}, FullLoad: true})
 	}
 	h.SendLoadRequests(stmtCtx, neededColumns, 0) // set timeout to 0 so task will go to timeout channel
+	// Give the outer wait a longer deadline so it observes the request error instead of racing it.
+	stmtCtx.StatsLoad.Timeout = time.Second
 	rs := h.SyncWaitStatsLoad(stmtCtx)
 	require.Error(t, rs)
 	stat = h.GetPhysicalTableStats(tableInfo.ID, tableInfo)

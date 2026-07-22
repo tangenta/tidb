@@ -1501,6 +1501,30 @@ func TestVisitInfo(t *testing.T) {
 			},
 		},
 		{
+			sql: "ADMIN SHOW DDL",
+			ans: []visitInfo{
+				{mysql.ExtendedPriv, "", "", "", plannererrors.ErrSpecificAccessDenied, false, []string{"ADMIN_VIEW"}, false},
+			},
+		},
+		{
+			sql: "ADMIN SHOW DDL JOBS 20",
+			ans: []visitInfo{
+				{mysql.ExtendedPriv, "", "", "", plannererrors.ErrSpecificAccessDenied, false, []string{"ADMIN_VIEW"}, false},
+			},
+		},
+		{
+			sql: "ADMIN SHOW DDL JOB QUERIES LIMIT 1",
+			ans: []visitInfo{
+				{mysql.ExtendedPriv, "", "", "", plannererrors.ErrSpecificAccessDenied, false, []string{"ADMIN_VIEW"}, false},
+			},
+		},
+		{
+			sql: "ADMIN CANCEL DDL JOBS 1",
+			ans: []visitInfo{
+				{mysql.SuperPriv, "", "", "", nil, false, nil, false},
+			},
+		},
+		{
 			sql: "GRANT rolename TO user1",
 			ans: []visitInfo{
 				{mysql.ExtendedPriv, "", "", "", plannererrors.ErrSpecificAccessDenied, false, []string{"ROLE_ADMIN"}, false},

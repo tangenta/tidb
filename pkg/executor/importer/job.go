@@ -162,11 +162,7 @@ func (j *JobInfo) IsSourceFileSizeUnknown() bool {
 	return j.Status == JobStatusRunning && j.Step == JobStepPreparing
 }
 
-// GetJob returns the job with the given id if the user has privilege.
-// hasSuperPriv: whether the user has super privilege.
-// If the user has super privilege, the user can show or operate all jobs,
-// else the user can only show or operate his own jobs.
-func GetJob(ctx context.Context, conn sqlexec.SQLExecutor, jobID int64, user string, hasSuperPriv bool) (*JobInfo, error) {
+func getJob(ctx context.Context, conn sqlexec.SQLExecutor, jobID int64) (*JobInfo, error) {
 	ctx = util.WithInternalSourceType(ctx, kv.InternalImportInto)
 
 	sql := baseQuerySQL + ` WHERE id = %?`
@@ -187,8 +183,26 @@ func GetJob(ctx context.Context, conn sqlexec.SQLExecutor, jobID int64, user str
 	if err != nil {
 		return nil, err
 	}
-	if !hasSuperPriv && info.CreatedBy != user {
-		return nil, plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
+	return info, nil
+}
+
+// GetJob returns the job with the given id if the user has privilege.
+// hasElevatedPrivilege: whether the user has elevated privilege.
+// If isCancel is true, the user can operate all jobs only with SUPER privilege,
+// else the user can show all jobs with IMPORT_JOB_VIEW or SUPER privilege.
+func GetJob(ctx context.Context, conn sqlexec.SQLExecutor, jobID int64, user string, hasElevatedPrivilege bool, isCancel ...bool) (*JobInfo, error) {
+	info, err := getJob(ctx, conn, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if len(isCancel) > 0 && isCancel[0] {
+		if !hasElevatedPrivilege && info.CreatedBy != user {
+			return nil, plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
+		}
+		return info, nil
+	}
+	if !hasElevatedPrivilege && info.CreatedBy != user {
+		return nil, plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or IMPORT_JOB_VIEW")
 	}
 	return info, nil
 }
@@ -478,10 +492,10 @@ func GetJobsByGroupKey(ctx context.Context, conn sqlexec.SQLExecutor, user, grou
 }
 
 // GetAllViewableJobs gets all viewable jobs.
-func GetAllViewableJobs(ctx context.Context, conn sqlexec.SQLExecutor, user string, hasSuperPriv bool) ([]*JobInfo, error) {
+func GetAllViewableJobs(ctx context.Context, conn sqlexec.SQLExecutor, user string, hasElevatedPrivilege bool) ([]*JobInfo, error) {
 	sql := baseQuerySQL
 	args := []any{}
-	if !hasSuperPriv {
+	if !hasElevatedPrivilege {
 		sql += " WHERE created_by = %?"
 		args = append(args, user)
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	pdhttp "github.com/tikv/pd/client/http"
+	"github.com/tikv/pd/client/pkg/caller"
 )
 
 type workflowHistoryStorage struct {
@@ -46,6 +47,10 @@ type workflowHistoryPDClient struct {
 	pd.Client
 
 	calls []pd.ListLogReplWorkflowsOptions
+}
+
+func (c *workflowHistoryPDClient) WithCallerComponent(_ caller.Component) pd.Client {
+	return c
 }
 
 func (c *workflowHistoryPDClient) ListLogReplWorkflows(

@@ -269,7 +269,7 @@ func TestDumpTextValue(t *testing.T) {
 }
 
 func TestDumpTextIntervalValue(t *testing.T) {
-	dp := NewResultEncoder(charset.CharsetUTF8MB4)
+	dp := textrow.NewResultEncoder(charset.CharsetUTF8MB4)
 
 	columns := []*Info{{
 		Type:    mysql.TypeLong,

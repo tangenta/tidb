@@ -58,9 +58,8 @@ func TestExplainForConnectionLocalTemporaryTableNoPanic(t *testing.T) {
 			tk1Process := tk1.Session().ShowProcess()
 			tk2.Session().SetSessionManager(&testkit.MockSessionManager{PS: []*sessmgr.ProcessInfo{tk1Process}})
 
-			err := tk2.ExecToErr(fmt.Sprintf("explain for connection %d", tk1Process.ID))
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "is not found in current session infoschema")
+			explainFor := tk2.MustQuery(fmt.Sprintf("explain for connection %d", tk1Process.ID))
+			require.Contains(t, fmt.Sprint(explainFor.Rows()), testCase.expectedPlan)
 		})
 	}
 }

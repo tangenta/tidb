@@ -150,7 +150,7 @@ func (s *statsSyncLoad) SendLoadRequests(sc *stmtctx.StatementContext, neededHis
 	return nil
 }
 
-// SyncWaitStatsLoad sync waits loading of neededColumns and return false if timeout
+// SyncWaitStatsLoad waits for requested statistics and returns any request or overall wait error.
 func (*statsSyncLoad) SyncWaitStatsLoad(sc *stmtctx.StatementContext) error {
 	if len(sc.StatsLoad.NeededItems) <= 0 {
 		return nil
@@ -180,14 +180,14 @@ func (*statsSyncLoad) SyncWaitStatsLoad(sc *stmtctx.StatementContext) error {
 			// not the stats loading error
 			if result.Err != nil {
 				errorMsgs = append(errorMsgs, result.Err.Error())
-			} else {
-				val := result.Val.(stmtctx.StatsLoadResult)
-				// this error is from the stats loading error
-				if val.HasError() {
-					errorMsgs = append(errorMsgs, val.ErrorMsg())
-				}
-				delete(resultCheckMap, val.Item)
+				return result.Err
 			}
+			val := result.Val.(stmtctx.StatsLoadResult)
+			// this error is from the stats loading error
+			if val.HasError() {
+				errorMsgs = append(errorMsgs, val.ErrorMsg())
+			}
+			delete(resultCheckMap, val.Item)
 		case <-timer.C:
 			metrics.SyncLoadCounter.Inc()
 			metrics.SyncLoadTimeoutCounter.Inc()

@@ -1,4 +1,4 @@
-package ddl
+package ddl_test
 
 import (
 	"sync"

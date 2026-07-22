@@ -1898,6 +1898,7 @@ func (b *PlanBuilder) buildPrepare(x *ast.PrepareStmt) base.Plan {
 func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (base.Plan, error) {
 	var ret base.Plan
 	var err error
+	var requiresAdminView bool
 	switch as.Tp {
 	case ast.AdminCheckTable, ast.AdminCheckIndex:
 		ret, err = b.buildAdminCheckTable(ctx, as)
@@ -1930,6 +1931,7 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (base.P
 		p := &ShowDDL{}
 		p.SetSchemaAndNames(buildShowDDLFields())
 		ret = p
+		requiresAdminView = true
 	case ast.AdminShowDDLJobs:
 		p := logicalop.LogicalShowDDLJobs{JobNumber: as.JobNumber}.Init(b.ctx)
 		p.SetSchemaAndNames(buildShowDDLJobsFields())
@@ -1943,6 +1945,7 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (base.P
 				return nil, err
 			}
 		}
+		requiresAdminView = true
 	case ast.AdminCancelDDLJobs:
 		p := &CancelDDLJobs{JobIDs: as.JobIDs}
 		p.SetSchemaAndNames(buildCancelDDLJobsFields())
@@ -1968,10 +1971,12 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (base.P
 		p := &ShowDDLJobQueries{JobIDs: as.JobIDs}
 		p.SetSchemaAndNames(buildShowDDLJobQueriesFields())
 		ret = p
+		requiresAdminView = true
 	case ast.AdminShowDDLJobQueriesWithRange:
 		p := &ShowDDLJobQueriesWithRange{Limit: as.LimitSimple.Count, Offset: as.LimitSimple.Offset}
 		p.SetSchemaAndNames(buildShowDDLJobQueriesWithRangeFields())
 		ret = p
+		requiresAdminView = true
 	case ast.AdminShowSlow:
 		p := &ShowSlow{ShowSlow: as.ShowSlow}
 		p.SetSchemaAndNames(buildShowSlowSchema())
@@ -2018,6 +2023,12 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (base.P
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if requiresAdminView {
+		err := plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or ADMIN_VIEW")
+		b.visitInfo = appendDynamicVisitInfo(b.visitInfo, []string{"ADMIN_VIEW"}, false, err)
+		return ret, nil
 	}
 
 	// Admin command can only be executed by administrator.

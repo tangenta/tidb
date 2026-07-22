@@ -14,6 +14,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
@@ -2928,8 +2929,8 @@ func TestRoutineOperationsWithMixedCaseSchema(t *testing.T) {
 	`).Check(testkit.Rows("f1"))
 
 	tk.MustExec("create user routine_case_user")
-	tk.MustExec("grant execute on procedure foo.p to routine_case_user")
-	tk.MustExec("grant execute on function foo.f to routine_case_user")
+	tk.MustExec("grant execute on procedure Foo.p to routine_case_user")
+	tk.MustExec("grant execute on function Foo.f to routine_case_user")
 
 	tk.MustExec("drop procedure foo.p")
 	tk.MustExec("drop function foo.f")
@@ -4339,6 +4340,18 @@ func TestLoadableFunctionMockedSelectOnTable(t *testing.T) {
 	tk.MustQuery("select udf_tbl(id) from t_udf_tbl order by id").Check(
 		testkit.Rows("2", "3", "4"),
 	)
+
+	tk.Session().GetSessionVars().SetProjectionConcurrency(4)
+	rows := tk.MustQuery("explain analyze select sum(udf_tbl(id)) from t_udf_tbl").Rows()
+	projectionFound := false
+	for _, row := range rows {
+		if !strings.Contains(row[0].(string), "Projection") {
+			continue
+		}
+		projectionFound = true
+		require.Contains(t, row[5], "Concurrency:OFF")
+	}
+	require.True(t, projectionFound)
 }
 
 func TestLoadableFunctionMockedInitFailure(t *testing.T) {
@@ -4377,6 +4390,34 @@ func TestLoadableFunctionMockedReloadFromMySQLFunc(t *testing.T) {
 	tk.MustQuery("select udf_reload(1)").Check(testkit.Rows("2"))
 	tk.MustExec("drop procedure reload_udf_p")
 	tk.MustExec("drop function udf_reload")
+}
+
+func TestLoadableFunctionMockedReconcileOnSchemaCacheHit(t *testing.T) {
+	restore := expression.SetLoadUDFHookForTest(expression.MockLoadUDFForTest)
+	t.Cleanup(restore)
+
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.InProcedure()
+	tk.MustExec("use test")
+
+	tk.MustExec("create function udf_reconcile returns integer soname 'udf1.so'")
+	tk.MustQuery("select udf_reconcile(1)").Check(testkit.Rows("2"))
+	tk.MustQuery("select name from mysql.func where name='udf_reconcile'").Check(testkit.Rows("udf_reconcile"))
+
+	// Simulate a restarted TiDB: the process-local loadable UDF registry is
+	// empty while mysql.func still keeps the persisted metadata. Mark the
+	// reconcile flag as needed, then reload without changing the schema version
+	// so the loader takes the schema-cache-hit path.
+	expression.DropLoadableFunction("udf_reconcile")
+	tk.MustGetErrCode("select udf_reconcile(1)", 1305)
+	dom := domain.GetDomain(tk.Session())
+	require.NotNil(t, dom)
+	dom.MarkLoadableFunctionReconcileNeededForTest()
+	require.NoError(t, dom.Reload())
+
+	tk.MustQuery("select udf_reconcile(1)").Check(testkit.Rows("2"))
+	tk.MustExec("drop function udf_reconcile")
 }
 
 func TestLoadableFunctionMockedConcurrentSelect(t *testing.T) {

@@ -436,9 +436,6 @@ func (tracker *TableTracker) modifyExistingColumn(newColDef *ast.ColumnDef, pos 
 	if err := checkModifyColumnWithGeneratedColumnsConstraint(mockTbl.Cols(), oldColName); err != nil {
 		return err
 	}
-	if err := checkDropColumnWithPartitionConstraint(mockTbl, oldColName); err != nil {
-		return err
-	}
 	oldCol := table.ToColumn(oldColInfo.Clone())
 	newCol := table.ToColumn(&model.ColumnInfo{
 		Offset:                oldCol.Offset,
@@ -464,6 +461,9 @@ func (tracker *TableTracker) modifyExistingColumn(newColDef *ast.ColumnDef, pos 
 	}
 	err := checkModifyTypes(tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
 	if err != nil {
+		return err
+	}
+	if err := checkPartitionModifiableColumn(tracker.sctx, tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo); err != nil {
 		return err
 	}
 	indexFlags := oldColInfo.GetFlag() & (mysql.PriKeyFlag | mysql.UniqueKeyFlag | mysql.MultipleKeyFlag)
@@ -495,9 +495,6 @@ func (tracker *TableTracker) changeExistingColumn(oldColName ast.CIStr, newColDe
 	if newColDef.Name.Name.L != oldColName.L && errG != nil {
 		return errG
 	}
-	if err := checkDropColumnWithPartitionConstraint(mockTbl, oldColName); err != nil {
-		return err
-	}
 	oldCol := table.ToColumn(oldColInfo.Clone())
 	newCol := table.ToColumn(&model.ColumnInfo{
 		Offset:                oldCol.Offset,
@@ -523,6 +520,9 @@ func (tracker *TableTracker) changeExistingColumn(oldColName ast.CIStr, newColDe
 	}
 	err := checkModifyTypes(tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo, isColumnWithIndex(oldCol.Name.L, tracker.tableInfo.Indices))
 	if err != nil {
+		return err
+	}
+	if err := checkPartitionModifiableColumn(tracker.sctx, tracker.tableInfo, oldCol.ColumnInfo, newCol.ColumnInfo); err != nil {
 		return err
 	}
 	indexFlags := oldColInfo.GetFlag() & (mysql.PriKeyFlag | mysql.UniqueKeyFlag | mysql.MultipleKeyFlag)

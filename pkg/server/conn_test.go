@@ -210,11 +210,11 @@ func TestReadHandshakeGatewayTLSAttrStarter(t *testing.T) {
 		peerPort:     "4000",
 		serverHost:   "127.0.0.1",
 	}
-	ctx, err := srv.driver.OpenCtx(cc.connectionID, cc.capability, cc.collation, "", nil, nil)
+	ctx, err := srv.driver.OpenCtx(cc.connectionID, cc.capability, cc.collation, "", nil, nil, nil)
 	require.NoError(t, err)
 	cc.SetCtx(ctx)
 
-	err = cc.readOptionalSSLRequestAndHandshakeResponse(context.Background())
+	err = cc.readOptionalSecureRequestAndHandshakeResponse(context.Background())
 	require.Error(t, err)
 	require.False(t, errors.ErrorEqual(err, servererr.ErrSecureTransportRequired))
 	require.NotNil(t, cc.tlsConnState)
@@ -2160,7 +2160,7 @@ func TestMaxAllowedPacket(t *testing.T) {
 		})
 
 		store := testkit.CreateMockStore(t)
-		tc, err := NewTiDBDriver(store).OpenCtx(1, 0, mysql.DefaultCollationID, "", nil, nil)
+		tc, err := NewTiDBDriver(store).OpenCtx(1, 0, mysql.DefaultCollationID, "", nil, nil, nil)
 		require.NoError(t, err)
 		require.False(t, tc.GetSessionVars().CommonGlobalLoaded)
 		require.Equal(t, uint64(maxAllowedPacket), tc.GetSessionVars().MaxAllowedPacket)

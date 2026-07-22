@@ -16,6 +16,7 @@ package issyncer
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/ngaut/pools"
@@ -97,6 +98,8 @@ type Loader struct {
 	// CachedTable need internal session to access some system tables, such as
 	// mysql.table_cache_meta
 	sysExecutorFactory func() (pools.Resource, error)
+
+	loadableFunctionReconcileNeeded atomic.Bool
 }
 
 func newLoader(store kv.Storage, infoCache *infoschema.InfoCache, deferFn *deferFn, filter Filter) *Loader {
@@ -133,6 +136,27 @@ func (l *Loader) initFields(
 ) {
 	l.autoidClient = autoidClient
 	l.sysExecutorFactory = sysExecutorFactory
+	l.loadableFunctionReconcileNeeded.Store(true)
+}
+
+func (l *Loader) reconcileLoadableFunctionsIfNeeded(isSnapshot bool, force bool) error {
+	if isSnapshot || l.crossKS {
+		return nil
+	}
+	if !force && !l.loadableFunctionReconcileNeeded.Load() {
+		return nil
+	}
+	reconciled, err := infoschema.ReloadLoadableFunctions(l.sysExecutorFactory)
+	if err != nil {
+		l.loadableFunctionReconcileNeeded.Store(true)
+		return err
+	}
+	if reconciled {
+		l.loadableFunctionReconcileNeeded.Store(false)
+	} else {
+		l.loadableFunctionReconcileNeeded.Store(true)
+	}
+	return nil
 }
 
 // LoadWithTS loads info schema at startTS.
@@ -195,6 +219,9 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 		l.infoCache.Insert(is, schemaTs)
 
 		if !isV1V2Switch {
+			if err := l.reconcileLoadableFunctionsIfNeeded(isSnapshot, false); err != nil {
+				return nil, false, currentSchemaVersion, nil, err
+			}
 			return is, true, 0, nil, nil
 		}
 	}
@@ -213,6 +240,9 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 			infoschema_metrics.LoadSchemaDurationLoadDiff.Observe(time.Since(startTime).Seconds())
 			isV2, _ := infoschema.IsV2(is)
 			l.infoCache.Insert(is, schemaTs)
+			if err := l.reconcileLoadableFunctionsIfNeeded(isSnapshot, false); err != nil {
+				return nil, false, currentSchemaVersion, nil, err
+			}
 			l.logger.Info("diff load InfoSchema success",
 				zap.Bool("isV2", isV2),
 				zap.Int64("currVer", currentSchemaVersion),
@@ -272,7 +302,7 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 	}
 	builder := infoschema.NewBuilder(l, schemaCacheSize, l.sysExecutorFactory, data, useV2).
 		WithCrossKS(l.crossKS).
-		WithLoadableFunctionReload(!isSnapshot)
+		WithLoadableFunctionReload(false)
 	err = builder.InitWithDBInfos(schemas, policies, resourceGroups, maskingPolicies, neededSchemaVersion)
 	if err != nil {
 		return nil, false, currentSchemaVersion, nil, err
@@ -292,6 +322,9 @@ func (l *Loader) LoadWithTS(startTS uint64, isSnapshot bool) (infoschema.InfoSch
 		l.logger.Info("infoschema v1/v2 switch")
 	} else {
 		l.infoCache.Insert(is, schemaTs)
+	}
+	if err := l.reconcileLoadableFunctionsIfNeeded(isSnapshot, true); err != nil {
+		return nil, false, currentSchemaVersion, nil, err
 	}
 	return is, false, currentSchemaVersion, nil, nil
 }

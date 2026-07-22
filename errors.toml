@@ -2221,6 +2221,11 @@ error = '''
 Unknown background task name '%-.192s'
 '''
 
+["executor:8274"]
+error = '''
+tidb_max_keys_read limit exceeded
+'''
+
 ["executor:8800"]
 error = '''
 This row has a unaccessible label, row label [%s], user label [%s]
@@ -2229,11 +2234,6 @@ This row has a unaccessible label, row label [%s], user label [%s]
 ["executor:8810"]
 error = '''
 Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`
-'''
-
-["executor:8274"]
-error = '''
-tidb_max_keys_read limit exceeded
 '''
 
 ["expression:1139"]
