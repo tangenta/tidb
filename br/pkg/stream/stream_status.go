@@ -25,6 +25,7 @@ import (
 	. "github.com/pingcap/tidb/br/pkg/streamhelper"
 	"github.com/pingcap/tidb/br/pkg/utils"
 	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/util/engine"
 	"github.com/pingcap/tidb/pkg/util/httputil"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -334,7 +335,9 @@ func MaybeQPS(ctx context.Context, mgr PDInfoProvider, client *http.Client) (flo
 	qpsMap := new(sync.Map)
 	eg, _ := errgroup.WithContext(ctx)
 	getQPS := func(s *metapb.Store) error {
-		if s.GetState() != metapb.StoreState_Up {
+		// Preserve the existing Up-store sampling behavior.
+		// Replicator stores do not expose the BR metrics endpoint.
+		if s.GetState() != metapb.StoreState_Up || engine.IsReplicator(s) {
 			return nil
 		}
 		statusAddr := s.StatusAddress

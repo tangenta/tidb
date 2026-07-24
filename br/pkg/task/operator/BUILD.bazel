@@ -71,16 +71,22 @@ go_library(
 go_test(
     name = "operator_test",
     timeout = "short",
-    srcs = ["crr_checkpoint_test.go"],
+    srcs = [
+        "crr_checkpoint_test.go",
+        "pkdb_force_flush_test.go",
+    ],
     embed = [":operator"],
     flaky = True,
-    shard_count = 4,
+    shard_count = 5,
     deps = [
         "//br/pkg/metautil",
         "//br/pkg/task",
         "//pkg/objstore",
         "//pkg/objstore/storeapi",
+        "@com_github_pingcap_kvproto//pkg/metapb",
         "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//require",
+        "@com_github_tikv_pd_client//:client",
+        "@com_github_tikv_pd_client//opt",
     ],
 )
