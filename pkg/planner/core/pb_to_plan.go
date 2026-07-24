@@ -80,6 +80,8 @@ func (b *PBPlanBuilder) pbToPhysicalPlan(e *tipb.Executor, subPlan base.Physical
 		p, err = b.pbToAgg(e, true)
 	case tipb.ExecType_TypeKill:
 		p, err = b.pbToKill(e)
+	case tipb.ExecType_TypeExplainForConnection:
+		p, err = b.pbToExplainForConnection(e)
 	case tipb.ExecType_TypeBroadcastQuery:
 		p, err = b.pbToBroadcastQuery(e)
 	default:
@@ -306,6 +308,13 @@ func (*PBPlanBuilder) pbToKill(e *tipb.Executor) (base.PhysicalPlan, error) {
 	}
 	simple := &Simple{Statement: node, IsFromRemote: true, ResolveCtx: resolve.NewContext()}
 	return &PhysicalPlanWrapper{Inner: simple}, nil
+}
+
+func (b *PBPlanBuilder) pbToExplainForConnection(e *tipb.Executor) (base.PhysicalPlan, error) {
+	if e.ExplainForConnection == nil {
+		return nil, errors.New("missing explain for connection executor")
+	}
+	return &PhysicalPlanWrapper{Inner: NewExplainForConnection(b.sctx, e.ExplainForConnection.ConnectionId)}, nil
 }
 
 func (b *PBPlanBuilder) pbToBroadcastQuery(e *tipb.Executor) (base.PhysicalPlan, error) {

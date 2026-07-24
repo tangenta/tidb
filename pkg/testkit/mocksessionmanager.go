@@ -15,6 +15,7 @@
 package testkit
 
 import (
+	"context"
 	"crypto/tls"
 	"maps"
 	"sync"
@@ -42,6 +43,8 @@ type MockSessionManager struct {
 	ConAttrs map[uint64]map[string]string
 
 	internalSessions map[any]struct{}
+
+	GetProcessInfoForExplainFn func(context.Context, sessmgr.ExplainProcessInfoContext, uint64) (*sessmgr.ProcessInfo, error)
 }
 
 // ShowTxnList is to show txn list.
@@ -103,6 +106,18 @@ func (msm *MockSessionManager) GetProcessInfo(id uint64) (*sessmgr.ProcessInfo, 
 		}
 	}
 	return &sessmgr.ProcessInfo{}, false
+}
+
+// GetProcessInfoForExplain implements sessmgr.ExplainProcessInfoFetcher.
+func (msm *MockSessionManager) GetProcessInfoForExplain(ctx context.Context, execCtx sessmgr.ExplainProcessInfoContext, id uint64) (*sessmgr.ProcessInfo, error) {
+	if msm.GetProcessInfoForExplainFn != nil {
+		return msm.GetProcessInfoForExplainFn(ctx, execCtx, id)
+	}
+	pi, ok := msm.GetProcessInfo(id)
+	if !ok {
+		return nil, nil
+	}
+	return pi, nil
 }
 
 // GetSession returns the mocked frontend session for the connection ID.

@@ -15,12 +15,15 @@
 package sessmgr
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
 	"time"
 
+	distsqlctx "github.com/pingcap/tidb/pkg/distsql/context"
+	infoschemacontext "github.com/pingcap/tidb/pkg/infoschema/context"
 	"github.com/pingcap/tidb/pkg/infoschema/issyncer/mdldef"
 	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -287,4 +290,17 @@ type Manager interface {
 	// This returns a map with the processid as key and the value is another map
 	// with the key and value of each available status variable.
 	GetStatusVars() map[uint64]map[string]string
+}
+
+// ExplainProcessInfoContext provides the session state needed to fetch remote
+// EXPLAIN FOR CONNECTION payloads through TiDB internal RPCs.
+type ExplainProcessInfoContext interface {
+	GetDistSQLCtx() *distsqlctx.DistSQLContext
+	GetInfoSchema() infoschemacontext.MetaOnlyInfoSchema
+}
+
+// ExplainProcessInfoFetcher is an optional extension for session managers that
+// can resolve EXPLAIN FOR CONNECTION payloads beyond the local TiDB instance.
+type ExplainProcessInfoFetcher interface {
+	GetProcessInfoForExplain(ctx context.Context, execCtx ExplainProcessInfoContext, id uint64) (*ProcessInfo, error)
 }
