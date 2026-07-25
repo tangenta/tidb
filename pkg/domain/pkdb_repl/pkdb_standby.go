@@ -119,6 +119,14 @@ func disableStandbyModeInternal() {
 	logutil.BgLogger().Info("standby mode is disabled")
 }
 
+func setStandbyMode(enabled bool) {
+	if enabled {
+		enableStandbyMode()
+		return
+	}
+	disableStandbyMode()
+}
+
 // InitStandby will initialize standby mode and update a global variable for
 // later usage of WatchStandby.
 func InitStandby(ctx context.Context, etcdCli *clientv3.Client) {
@@ -142,9 +150,7 @@ func InitStandby(ctx context.Context, etcdCli *clientv3.Client) {
 		}
 	}
 
-	if len(resp.Kvs) > 0 && string(resp.Kvs[0].Value) == "1" {
-		enableStandbyMode()
-	}
+	setStandbyMode(len(resp.Kvs) > 0 && string(resp.Kvs[0].Value) == "1")
 	watchRevision = resp.Header.Revision
 }
 
@@ -168,8 +174,6 @@ type domainCloser interface {
 
 // WatchStandby should be called after InitStandby.
 func WatchStandby(ctx context.Context, etcdCli *clientv3.Client) {
-	defer disableStandbyModeInternal()
-
 	if etcdCli == nil {
 		return
 	}
@@ -234,16 +238,7 @@ func syncStandbyStateFromEtcd(ctx context.Context, etcdCli *clientv3.Client) err
 }
 
 func handleLatestStandbyEvent(event *clientv3.Event) {
-	if event.Type == mvccpb.PUT && string(event.Kv.Value) == "1" {
-		if standbyBlockingCh.Load() == nil {
-			enableStandbyMode()
-		}
-		return
-	}
-
-	if standbyBlockingCh.Load() != nil {
-		disableStandbyMode()
-	}
+	setStandbyMode(event.Type == mvccpb.PUT && string(event.Kv.Value) == "1")
 }
 
 func sleep(exitCh <-chan struct{}, d time.Duration) {
