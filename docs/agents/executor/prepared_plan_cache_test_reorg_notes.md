@@ -121,7 +121,7 @@ Current split:
 - `pkg/executor/test/plancache/plan_cache_test.go`
 - `.agents/skills/tidb-test-guidelines/references/executor-case-map.md`
 
-`BUILD.bazel` was intentionally left untouched because the reorg stayed within existing files. That avoided a `make bazel_prepare` round and kept the diff smaller.
+No build metadata changes were needed because the reorg stayed within existing files. That kept the diff smaller.
 
 ### Why this note exists
 

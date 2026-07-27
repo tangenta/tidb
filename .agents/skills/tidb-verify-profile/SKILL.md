@@ -35,4 +35,3 @@ Mandatory trigger phrases are defined in `AGENTS.md` -> `Quick Decision Matrix`.
 Use only when scope or user request requires expensive checks.
 
 - Examples: CI reproduction, broad refactor confidence, change scope requiring RealTiKV.
-- Never run `make bazel_lint_changed` unless the user explicitly requests it.

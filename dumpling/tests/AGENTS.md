@@ -78,6 +78,3 @@ server on `127.0.0.1:3306` for cases that target MySQL.
 - If unrelated blocks in the same case require unavailable local services, a
   focused TiDB-only reproduction may be useful while iterating, but report that
   the official case target was not fully run.
-- `make bazel_prepare` is not required for changes limited to Dumpling shell
-  integration tests or this file. Re-check root `AGENTS.md` if Go files, Bazel
-  metadata, or module files are also changed.

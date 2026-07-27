@@ -33,6 +33,5 @@ Regression coverage:
 - `LEFT JOIN`/`RIGHT JOIN` null-side checks verify outer joins do not incorrectly reuse inner-join remapping.
 
 Validation commands:
-- `make bazel_prepare`
 - `go test ./pkg/planner/core/casetest/schema -run ^TestSchemaCannotFindColumnRegression$ -tags=intest,deadlock`
 - `make lint`
