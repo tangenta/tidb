@@ -5389,6 +5389,9 @@ func (b *PlanBuilder) buildDistributeTable(node *ast.DistributeTableStmt) (base.
 }
 
 func (b *PlanBuilder) buildSplitRegion(node *ast.SplitRegionStmt) (base.Plan, error) {
+	err := plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
+	b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", err)
+
 	tnW := b.resolveCtx.GetTableName(node.Table)
 	if tnW.TableInfo.TempTableType != model.TempTableNone {
 		return nil, plannererrors.ErrOptOnTemporaryTable.GenWithStackByArgs("split table")
