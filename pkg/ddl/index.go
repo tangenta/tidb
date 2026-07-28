@@ -1214,6 +1214,7 @@ func (w *worker) onCreateIndex(jobCtx *jobContext, job *model.Job, isPK bool) (v
 	}
 
 	originalState := allIndexInfos[0].State
+	replacePrimaryKey := isPK && len(args.IndexArgs) == 1 && len(allIndexInfos) == 1 && pkdbIsReplacePrimaryKeyJob(job)
 
 SwitchIndexState:
 	switch allIndexInfos[0].State {
@@ -1298,15 +1299,24 @@ SwitchIndexState:
 			intest.Assert(job.MultiSchemaInfo == nil, "multi schema change shouldn't reach here")
 			w.startAnalyzeAndWait(job, tblInfo)
 		case model.AnalyzeStateDone, model.AnalyzeStateSkipped, model.AnalyzeStateTimeout, model.AnalyzeStateFailed:
-			// Set column index flag.
-			for _, indexInfo := range allIndexInfos {
-				AddIndexColumnFlag(tblInfo, indexInfo)
-				if isPK {
-					if err = UpdateColsNull2NotNull(tblInfo, indexInfo); err != nil {
-						return ver, errors.Trace(err)
-					}
+			if replacePrimaryKey {
+				if err = UpdateColsNull2NotNull(tblInfo, allIndexInfos[0]); err != nil {
+					return ver, errors.Trace(err)
 				}
-				indexInfo.State = model.StatePublic
+				if err = pkdbCutoverReplacePrimaryKey(tblInfo, allIndexInfos[0], pkdbOldPrimaryKeyID(job)); err != nil {
+					return ver, errors.Trace(err)
+				}
+			} else {
+				// Set column index flag.
+				for _, indexInfo := range allIndexInfos {
+					AddIndexColumnFlag(tblInfo, indexInfo)
+					if isPK {
+						if err = UpdateColsNull2NotNull(tblInfo, indexInfo); err != nil {
+							return ver, errors.Trace(err)
+						}
+					}
+					indexInfo.State = model.StatePublic
+				}
 			}
 
 			// Inject the failpoint to prevent the progress of index creation.
@@ -2140,10 +2150,16 @@ func onDropIndex(jobCtx *jobContext, job *model.Job) (ver int64, _ error) {
 				isColumnarIndex = true
 			}
 			indexInfo.State = model.StateNone
-			// Set column index flag.
-			DropIndexColumnFlag(tblInfo, indexInfo)
-			RemoveDependentHiddenColumns(tblInfo, indexInfo)
-			removeIndexInfo(tblInfo, indexInfo)
+			if pkdbShouldRebuildPublicIndexColumnFlagsAfterDrop(job, indexInfo) {
+				RemoveDependentHiddenColumns(tblInfo, indexInfo)
+				removeIndexInfo(tblInfo, indexInfo)
+				pkdbRebuildPublicIndexColumnFlags(tblInfo)
+			} else {
+				// Set column index flag.
+				DropIndexColumnFlag(tblInfo, indexInfo)
+				RemoveDependentHiddenColumns(tblInfo, indexInfo)
+				removeIndexInfo(tblInfo, indexInfo)
+			}
 			indexIDs = append(indexIDs, indexInfo.ID)
 		}
 
@@ -2265,7 +2281,7 @@ func checkDropIndex(infoCache *infoschema.InfoCache, t *meta.Mutator, job *model
 
 	indexInfos := make([]*model.IndexInfo, 0, len(args.IndexArgs))
 	for _, idxArg := range args.IndexArgs {
-		indexInfo := tblInfo.FindIndexByName(idxArg.IndexName.L)
+		indexInfo := pkdbFindIndexToDrop(tblInfo, idxArg)
 		if indexInfo == nil {
 			job.State = model.JobStateCancelled
 			return nil, nil, idxArg.IfExist, dbterror.ErrCantDropFieldOrKey.GenWithStack("index %s doesn't exist", idxArg.IndexName)

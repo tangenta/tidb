@@ -1060,40 +1060,48 @@ func (sub *SubJob) ToProxyJob(parentJob *Job, seq int) Job {
 		reorgMeta.Stage = sub.ReorgStage
 		reorgMeta.AnalyzeState = sub.AnalyzeState
 	}
+	var primaryKeyReplaceInfo *PKDBPrimaryKeyReplaceInfo
+	if parentJob.MultiSchemaInfo != nil {
+		primaryKeyReplaceInfo = parentJob.MultiSchemaInfo.PKDBPrimaryKeyReplaceInfo
+	}
 	return Job{
-		Version:         parentJob.Version,
-		ID:              parentJob.ID,
-		Type:            sub.Type,
-		SchemaID:        parentJob.SchemaID,
-		TableID:         parentJob.TableID,
-		SchemaName:      parentJob.SchemaName,
-		State:           sub.State,
-		Warning:         sub.Warning,
-		Error:           nil,
-		ErrorCount:      0,
-		RowCount:        sub.RowCount,
-		Mu:              sync.Mutex{},
-		NeedReorg:       sub.NeedReorg,
-		args:            sub.args,
-		RawArgs:         sub.RawArgs,
-		SchemaState:     sub.SchemaState,
-		SnapshotVer:     sub.SnapshotVer,
-		RealStartTS:     sub.RealStartTS,
-		StartTS:         parentJob.StartTS,
-		DependencyID:    parentJob.DependencyID,
-		Query:           parentJob.Query,
-		BinlogInfo:      parentJob.BinlogInfo,
-		ReorgMeta:       reorgMeta,
-		MultiSchemaInfo: &MultiSchemaInfo{Revertible: sub.Revertible, Seq: int32(seq)},
-		Priority:        parentJob.Priority,
-		SeqNum:          parentJob.SeqNum,
-		Charset:         parentJob.Charset,
-		Collate:         parentJob.Collate,
-		AdminOperator:   parentJob.AdminOperator,
-		ResumeReason:    parentJob.ResumeReason,
-		TraceInfo:       parentJob.TraceInfo,
-		SQLMode:         parentJob.SQLMode,
-		SessionVars:     parentJob.SessionVars,
+		Version:      parentJob.Version,
+		ID:           parentJob.ID,
+		Type:         sub.Type,
+		SchemaID:     parentJob.SchemaID,
+		TableID:      parentJob.TableID,
+		SchemaName:   parentJob.SchemaName,
+		State:        sub.State,
+		Warning:      sub.Warning,
+		Error:        nil,
+		ErrorCount:   0,
+		RowCount:     sub.RowCount,
+		Mu:           sync.Mutex{},
+		NeedReorg:    sub.NeedReorg,
+		args:         sub.args,
+		RawArgs:      sub.RawArgs,
+		SchemaState:  sub.SchemaState,
+		SnapshotVer:  sub.SnapshotVer,
+		RealStartTS:  sub.RealStartTS,
+		StartTS:      parentJob.StartTS,
+		DependencyID: parentJob.DependencyID,
+		Query:        parentJob.Query,
+		BinlogInfo:   parentJob.BinlogInfo,
+		ReorgMeta:    reorgMeta,
+		MultiSchemaInfo: &MultiSchemaInfo{
+			Revertible:                sub.Revertible,
+			Seq:                       int32(seq),
+			PKDBPrimaryKeyReplaceInfo: primaryKeyReplaceInfo,
+		},
+		Priority:      parentJob.Priority,
+		SeqNum:        parentJob.SeqNum,
+		Charset:       parentJob.Charset,
+		Collate:       parentJob.Collate,
+		AdminOperator: parentJob.AdminOperator,
+		ResumeReason:  parentJob.ResumeReason,
+		TraceInfo:     parentJob.TraceInfo,
+		SQLMode:       parentJob.SQLMode,
+		SessionVars:   parentJob.SessionVars,
 	}
 }
 
@@ -1139,6 +1147,11 @@ type MultiSchemaInfo struct {
 	Revertible bool      `json:"revertible"`
 	Seq        int32     `json:"seq"`
 
+	// PKDBPrimaryKeyReplaceInfo identifies a nonclustered primary-key replacement.
+	// It is persisted on the parent job and copied to proxy jobs so every owner can
+	// validate the replacement by immutable metadata identity.
+	PKDBPrimaryKeyReplaceInfo *PKDBPrimaryKeyReplaceInfo `json:"pkdb_primary_key_replace_info,omitempty"`
+
 	// SkipVersion is used to control whether generating a new schema version for a sub-job.
 	SkipVersion bool `json:"-"`
 
@@ -1153,6 +1166,11 @@ type MultiSchemaInfo struct {
 
 	RelativeColumns []ast.CIStr `json:"-"`
 	PositionColumns []ast.CIStr `json:"-"`
+}
+
+// PKDBPrimaryKeyReplaceInfo is the durable identity of a nonclustered primary-key replacement.
+type PKDBPrimaryKeyReplaceInfo struct {
+	OldPrimaryKeyID int64 `json:"old_primary_key_id"`
 }
 
 // AddForeignKeyInfo contains foreign key information.

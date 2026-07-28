@@ -117,6 +117,19 @@ func (e *executor) createPrimaryKeyWithTableInfo(
 		}},
 		OpType: model.OpAddIndex,
 	}
+	pkdbPrepareReplacePrimaryKeyArg(
+		tbl.Meta(),
+		currentTblInfo,
+		args.IndexArgs[0],
+		ctx.GetSessionVars().StmtCtx.MultiSchemaInfo,
+	)
+	if err = pkdbValidateNonclusteredPrimaryKeyReplacement(
+		ctx.GetSessionVars().EnableClusteredIndex,
+		indexOption,
+		ctx.GetSessionVars().StmtCtx.MultiSchemaInfo,
+	); err != nil {
+		return err
+	}
 
 	if err = initJobReorgMetaFromVariables(e.ctx, job, tbl, ctx); err != nil {
 		return err
