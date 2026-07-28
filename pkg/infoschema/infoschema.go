@@ -260,7 +260,7 @@ func newInfoSchema(r autoid.Requirement, factory func() (pools.Resource, error))
 		referredForeignKeyMap:       make(map[SchemaAndTableName][]*model.ReferredFKInfo),
 		maskingPolicyTableColumnMap: make(map[int64]map[int64]*model.MaskingPolicyInfo),
 		factory:                     factory,
-		triggerTableMap:       make(map[schemaAndTriggerName]triggerTable),
+		triggerTableMap:             make(map[schemaAndTriggerName]triggerTable),
 		r:                           r,
 	}
 }

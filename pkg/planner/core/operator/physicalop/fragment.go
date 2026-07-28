@@ -687,21 +687,36 @@ func (e *mppTaskGenerator) constructMPPTasksImpl(ctx context.Context, ts *Physic
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			req, allPartitionsIDs, err = e.constructMPPBuildTaskReqForPartitionedTable(ts, splitedRanges, partitions)
+			if len(ts.TiDBRowIDRangeOps) > 0 {
+				req, allPartitionsIDs = constructTiDBRowIDMPPBuildTaskReq(ts, partitions)
+			} else {
+				req, allPartitionsIDs, err = e.constructMPPBuildTaskReqForPartitionedTable(ts, splitedRanges, partitions)
+			}
 			for _, partitionKVRanges := range req.PartitionIDAndRanges {
 				e.KVRanges = append(e.KVRanges, partitionKVRanges.KeyRanges...)
 			}
 		} else {
 			singlePartTbl := tbl.GetPartition(ts.PhysicalTableID)
-			req, err = e.constructMPPBuildTaskForNonPartitionTable(singlePartTbl.GetPhysicalID(), ts.Table.IsCommonHandle, splitedRanges)
+			if len(ts.TiDBRowIDRangeOps) > 0 {
+				req = constructTiDBRowIDMPPBuildTaskForPhysicalTable(ts, singlePartTbl.GetPhysicalID())
+			} else {
+				req, err = e.constructMPPBuildTaskForNonPartitionTable(singlePartTbl.GetPhysicalID(), ts.Table.IsCommonHandle, splitedRanges)
+			}
 			e.KVRanges = append(e.KVRanges, req.KeyRanges...)
 		}
 	} else {
-		req, err = e.constructMPPBuildTaskForNonPartitionTable(ts.Table.ID, ts.Table.IsCommonHandle, splitedRanges)
+		if len(ts.TiDBRowIDRangeOps) > 0 {
+			req = constructTiDBRowIDMPPBuildTaskForPhysicalTable(ts, ts.Table.ID)
+		} else {
+			req, err = e.constructMPPBuildTaskForNonPartitionTable(ts.Table.ID, ts.Table.IsCommonHandle, splitedRanges)
+		}
 		e.KVRanges = append(e.KVRanges, req.KeyRanges...)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	if len(ts.TiDBRowIDRangeOps) > 0 && len(req.KeyRanges) == 0 && len(req.PartitionIDAndRanges) == 0 {
+		return nil, errEmptyTiDBRowIDMPPRange
 	}
 
 	// ttl is always 0, `tidb_mpp_store_fail_ttl` variable has been deprecated

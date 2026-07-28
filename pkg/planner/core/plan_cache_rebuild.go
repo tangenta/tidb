@@ -196,6 +196,9 @@ func convertConstant2Datum(ctx base.PlanContext, con *expression.Constant, targe
 }
 
 func buildRangeForTableScan(sctx base.PlanContext, ts *physicalop.PhysicalTableScan) (err error) {
+	if matched, err := rebuildTiDBRowIDTableScanRange(sctx, ts); matched {
+		return err
+	}
 	if ts.Table.IsCommonHandle {
 		pk := tables.FindPrimaryIndex(ts.Table)
 		pkCols := make([]*expression.Column, 0, len(pk.Columns))
@@ -269,6 +272,9 @@ func buildRangeForTableScan(sctx base.PlanContext, ts *physicalop.PhysicalTableS
 }
 
 func buildRangesForPointGet(sctx base.PlanContext, x *physicalop.PointGetPlan) (err error) {
+	if matched, err := rebuildTiDBRowIDPointGetRange(sctx, x); matched {
+		return err
+	}
 	if x.TblInfo.GetPartitionInfo() != nil {
 		if fixcontrol.GetBoolWithDefault(sctx.GetSessionVars().OptimizerFixControl, fixcontrol.Fix33031, false) {
 			return errors.NewNoStackError("Fix33031 fix-control set and partitioned table in cached Point Get plan")
@@ -339,6 +345,9 @@ func buildRangesForPointGet(sctx base.PlanContext, x *physicalop.PointGetPlan) (
 }
 
 func buildRangesForBatchGet(sctx base.PlanContext, x *physicalop.BatchPointGetPlan) (err error) {
+	if matched, err := rebuildTiDBRowIDBatchPointGetRange(sctx, x); matched {
+		return err
+	}
 	if x.TblInfo.GetPartitionInfo() != nil && fixcontrol.GetBoolWithDefault(sctx.GetSessionVars().OptimizerFixControl, fixcontrol.Fix33031, false) {
 		return errors.NewNoStackError("Fix33031 fix-control set and partitioned table in cached Batch Point Get plan")
 	}

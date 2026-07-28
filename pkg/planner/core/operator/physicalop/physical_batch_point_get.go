@@ -61,6 +61,10 @@ type PointGetPlan struct {
 	ProbeParents []base.PhysicalPlan `plan-cache-clone:"shallow"`
 	// explicit partition selection
 	PartitionNames []ast.CIStr `plan-cache-clone:"shallow"`
+	// TiDBRowIDCandidates is the immutable locator template used to rebuild
+	// Handle and PartitionIdx for each plan-cache execution.
+	TiDBRowIDCandidates            []expression.Expression
+	TiDBRowIDAllowedPartitionNames []ast.CIStr `plan-cache-clone:"shallow"`
 
 	DBName           string
 	schema           *expression.Schema `plan-cache-clone:"shallow"`
@@ -355,6 +359,9 @@ func (p *PointGetPlan) LoadTableStats(ctx sessionctx.Context) {
 // PrunePartitions will check which partition to use
 // returns true if no matching partition
 func (p *PointGetPlan) PrunePartitions(sctx sessionctx.Context) (bool, error) {
+	if len(p.TiDBRowIDCandidates) > 0 {
+		return p.IsTableDual, nil
+	}
 	pi := p.TblInfo.GetPartitionInfo()
 	if pi == nil {
 		return false, nil
@@ -496,6 +503,10 @@ type BatchPointGetPlan struct {
 	ProbeParents []base.PhysicalPlan
 	// explicit partition selection
 	PartitionNames []ast.CIStr `plan-cache-clone:"shallow"`
+	// TiDBRowIDCandidates is the immutable locator template used to rebuild
+	// Handles and PartitionIdxs for each plan-cache execution.
+	TiDBRowIDCandidates            []expression.Expression
+	TiDBRowIDAllowedPartitionNames []ast.CIStr `plan-cache-clone:"shallow"`
 
 	ctx              base.PlanContext
 	DBName           string
@@ -821,6 +832,9 @@ func (p *BatchPointGetPlan) getPartitionIdxs(sctx sessionctx.Context) []int {
 // slice of non-duplicated handles (or nil if IndexValues is used)
 // true if no matching partition (TableDual plan can be used)
 func (p *BatchPointGetPlan) PrunePartitionsAndValues(sctx sessionctx.Context) ([]kv.Handle, bool, error) {
+	if len(p.TiDBRowIDCandidates) > 0 {
+		return p.Handles, len(p.Handles) == 0, nil
+	}
 	pi := p.TblInfo.GetPartitionInfo()
 	if p.IndexInfo != nil && p.IndexInfo.Global {
 		// Reading from a global index, i.e. base table ID

@@ -680,8 +680,8 @@ func checkIndexJoinInnerTaskWithWindow(lw *logicalop.LogicalWindow, indexJoinPro
 
 // admitIndexJoinInnerChildPattern checks whether the current logical operator can
 // appear on the inner side of an index join build. It also keeps the legacy inner
-//// pattern compatibility checks when the current physical choosing is under an
-//// index join probe side.
+// pattern compatibility checks when the current physical choosing is under an
+// index join probe side.
 func admitIndexJoinInnerChildPattern(p base.LogicalPlan, indexJoinProp *property.IndexJoinRuntimeProp) bool {
 	switch x := p.GetBaseLogicalPlan().(*logicalop.BaseLogicalPlan).Self().(type) {
 	case *logicalop.DataSource:

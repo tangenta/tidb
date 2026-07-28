@@ -82,18 +82,30 @@ type MPPGather struct {
 	table    table.Table
 	kvRanges []kv.KeyRange
 	dummy    bool
+	// emptyTiDBRowIDRange marks a locator scan whose rebuilt raw ranges are
+	// empty. TiFlash cannot construct a task without a key range, so the gather
+	// returns an empty result without dispatching.
+	emptyTiDBRowIDRange bool
 
 	mppExec *mpp.ExecutorWithRetry
 }
 
 // Open implements the Executor Open interface.
 func (e *MPPGather) Open(ctx context.Context) (err error) {
+	if e.emptyTiDBRowIDRange {
+		e.kvRanges = nil
+		return nil
+	}
 	if e.dummy {
 		sender, ok := e.originalPlan.(*physicalop.PhysicalExchangeSender)
 		if !ok {
 			return errors.Errorf("unexpected plan type, expect: PhysicalExchangeSender, got: %s", e.originalPlan.TP())
 		}
 		_, e.kvRanges, _, err = physicalop.GenerateRootMPPTasks(e.Ctx(), e.startTS, 0, e.mppQueryID, sender, e.is)
+		if e.isEmptySingleSourceTiDBRowIDRange(err) {
+			e.emptyTiDBRowIDRange = true
+			return nil
+		}
 		return err
 	}
 	planIDs := collectPlanIDs(e.originalPlan, nil)
@@ -101,6 +113,12 @@ func (e *MPPGather) Open(ctx context.Context) (err error) {
 		if e.mppExec != nil {
 			// Ignore any errors during close process
 			_ = e.mppExec.Close()
+			e.mppExec = nil
+		}
+		if e.isEmptySingleSourceTiDBRowIDRange(err) {
+			e.emptyTiDBRowIDRange = true
+			e.kvRanges = nil
+			return nil
 		}
 		return err
 	}
@@ -112,7 +130,7 @@ func (e *MPPGather) Open(ctx context.Context) (err error) {
 // Next fills data into the chunk passed by its caller.
 func (e *MPPGather) Next(ctx context.Context, chk *chunk.Chunk) error {
 	chk.Reset()
-	if e.dummy {
+	if e.dummy || e.emptyTiDBRowIDRange {
 		return nil
 	}
 	if err := e.respIter.Next(ctx, chk); err != nil {

@@ -38,6 +38,8 @@ func FastClonePointGetForPlanCache(newCtx base.PlanContext, src, dst *physicalop
 	dst.Plan.SetSCtx(newCtx)
 	dst.ProbeParents = src.ProbeParents
 	dst.PartitionNames = src.PartitionNames
+	dst.TiDBRowIDCandidates = utilfuncp.CloneExpressionsForPlanCache(src.TiDBRowIDCandidates, dst.TiDBRowIDCandidates)
+	dst.TiDBRowIDAllowedPartitionNames = src.TiDBRowIDAllowedPartitionNames
 	dst.DBName = src.DBName
 	dst.SetSchema(src.Schema())
 	dst.TblInfo = src.TblInfo

@@ -100,9 +100,11 @@ func genPlanCloneForPlanCache(x any) ([]byte, error) {
 			continue
 		}
 		switch f.Type.String() {
-		case "[]int", "[]byte", "[]float", "[]bool", "[]uint32", "[]string": // simple slice
+		case "[]int", "[]int64", "[]byte", "[]float", "[]bool", "[]uint32", "[]string": // simple slice
 			c.write("cloned.%v = make(%v, len(op.%v))", f.Name, f.Type, f.Name)
 			c.write("copy(cloned.%v, op.%v)", f.Name, f.Name)
+		case "[]kv.KeyRange":
+			c.write("cloned.%v = cloneKeyRanges(op.%v)", f.Name, f.Name)
 		case "physicalop.BasePhysicalAgg":
 			fieldName := strings.Split(f.Type.String(), ".")[1]
 			c.write(`basePlan, baseOK := op.%v.CloneForPlanCacheWithSelf(newCtx, cloned)

@@ -30,18 +30,21 @@ import (
 
 var (
 	specialSafeFuncs = map[string]struct{}{
-		"builtinInIntSig":          {},
-		"builtinInStringSig":       {},
-		"builtinInRealSig":         {},
-		"builtinInDecimalSig":      {},
-		"builtinInTimeSig":         {},
-		"builtinInDurationSig":     {},
-		"builtinRealIsTrueSig":     {},
-		"builtinDecimalIsTrueSig":  {},
-		"builtinIntIsTrueSig":      {},
-		"builtinRealIsFalseSig":    {},
-		"builtinDecimalIsFalseSig": {},
-		"builtinIntIsFalseSig":     {},
+		"builtinInIntSig":                   {},
+		"builtinInStringSig":                {},
+		"builtinInRealSig":                  {},
+		"builtinInDecimalSig":               {},
+		"builtinInTimeSig":                  {},
+		"builtinInDurationSig":              {},
+		"builtinRealIsTrueSig":              {},
+		"builtinDecimalIsTrueSig":           {},
+		"builtinIntIsTrueSig":               {},
+		"builtinRealIsFalseSig":             {},
+		"builtinDecimalIsFalseSig":          {},
+		"builtinIntIsFalseSig":              {},
+		"builtinTiDBRowIDSig":               {},
+		"builtinTiDBRowIDPredicateSig":      {},
+		"builtinTiDBRowIDRangePredicateSig": {},
 		// NOTE: please make sure there are test cases for all functions here.
 	}
 )
@@ -110,7 +113,7 @@ func genBuiltinThreadSafeCode(exprCodeDir string) (safe, unsafe []byte) {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.HasPrefix(entry.Name(), "builtin_") &&
+		if (strings.HasPrefix(entry.Name(), "builtin_") || entry.Name() == "pkdb_builtin_tidb_row_id.go") &&
 			strings.HasSuffix(entry.Name(), ".go") &&
 			!strings.Contains(entry.Name(), "_test") {
 			files = append(files, entry.Name())

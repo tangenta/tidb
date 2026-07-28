@@ -119,6 +119,15 @@ type PhysicalTableScan struct {
 	DBName  ast.CIStr           `plan-cache-clone:"shallow"`
 	Ranges  []*ranger.Range     `plan-cache-clone:"shallow"`
 
+	// TiDBRowIDRangeOps and TiDBRowIDRangeBounds are the immutable raw-key
+	// range template. Physical IDs and key ranges are resolved for the current
+	// execution and bypass typed handle-range conversion in table readers.
+	TiDBRowIDRangeOps              []expression.TiDBRowIDRangeOp `plan-cache-clone:"shallow"`
+	TiDBRowIDRangeBounds           []expression.Expression
+	TiDBRowIDAllowedPartitionNames []ast.CIStr `plan-cache-clone:"shallow"`
+	TiDBRowIDRangePhysicalIDs      []int64
+	TiDBRowIDKeyRanges             []kv.KeyRange
+
 	TableAsName *ast.CIStr `plan-cache-clone:"shallow"`
 
 	PhysicalTableID int64
@@ -223,6 +232,7 @@ func GetOriginalPhysicalTableScan(ds *logicalop.DataSource, prop *property.Physi
 		FilterCondition: slices.Clone(path.TableFilters),
 		TableSplit:      ds.TableSplit,
 	}.Init(ds.SCtx(), ds.QueryBlockOffset())
+	setTiDBRowIDTableScanPath(ts, path)
 	ts.SetSchema(ds.Schema().Clone())
 	rowCount := path.CountAfterAccess
 	origRowCount := ds.StatsInfo().RowCount
@@ -313,6 +323,7 @@ func (p *PhysicalTableScan) Clone(newCtx base.PlanContext) (base.PhysicalPlan, e
 	}
 	clonedScan.Columns = sliceutil.DeepClone(p.Columns)
 	clonedScan.Ranges = sliceutil.DeepClone(p.Ranges)
+	cloneTiDBRowIDTableScanFields(clonedScan, p)
 	clonedScan.TableAsName = p.TableAsName
 	clonedScan.RangeInfo = p.RangeInfo
 	if p.runtimeFilterList != nil {
@@ -384,6 +395,7 @@ func (p *PhysicalTableScan) MemoryUsage() (sum int64) {
 	for _, rang := range p.Ranges {
 		sum += rang.MemUsage()
 	}
+	sum += tiDBRowIDTableScanMemoryUsage(p)
 	for _, col := range p.TblCols {
 		sum += col.MemoryUsage()
 	}

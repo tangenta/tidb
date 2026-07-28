@@ -4,7 +4,12 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/internal/exec"
 	plannercore "github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
+	"github.com/pingcap/tidb/pkg/planner/core/operator/physicalop"
 )
+
+func isEmptyTiDBRowIDRangeScan(scan *physicalop.PhysicalTableScan) bool {
+	return len(scan.TiDBRowIDRangeOps) > 0 && len(scan.TiDBRowIDKeyRanges) == 0
+}
 
 func (b *executorBuilder) pkdbBuild(p base.Plan) exec.Executor {
 	switch v := p.(type) {

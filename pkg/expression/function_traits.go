@@ -139,6 +139,7 @@ var IllegalFunctions4GeneratedColumns = map[string]struct{}{
 	ast.TiDBBoundedStaleness: {},
 	ast.TiDBCurrentTso:       {},
 	ast.TiDBIsDDLOwner:       {},
+	ast.TiDBRowID:            {},
 	ast.TiDBRowChecksum:      {},
 	ast.TiDBVersion:          {},
 	ast.UnixTimestamp:        {},

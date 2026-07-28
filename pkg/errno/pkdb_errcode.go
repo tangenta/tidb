@@ -19,4 +19,8 @@ const (
 	// ErrProcedureDisabled is the error code returned when stored procedures are disabled.
 	// Error codes 8805 through 8809 are reserved for tablegroup errors.
 	ErrProcedureDisabled = 8810
+	// ErrInvalidTiDBRowID is the error code for malformed TIDB_ROW_ID tokens.
+	ErrInvalidTiDBRowID = 8811
+	// ErrTiDBRowIDTableBinding is the error code for invalid TIDB_ROW_ID table bindings.
+	ErrTiDBRowIDTableBinding = 8812
 )

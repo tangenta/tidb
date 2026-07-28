@@ -693,6 +693,18 @@ func (er *expressionRewriter) Enter(inNode ast.Node) (ast.Node, bool) {
 			return inNode, true
 		})
 	case *ast.FuncCallExpr:
+		if v.FnName.L == ast.TiDBRowID {
+			return enterWithPlanCtx(func(planCtx *exprRewriterPlanCtx) (ast.Node, bool) {
+				expr, err := planCtx.builder.buildTiDBRowIDExpression(v, er.schema, planCtx.plan)
+				if err != nil {
+					er.err = err
+					return inNode, true
+				}
+				er.ctxStackAppend(expr, types.EmptyName)
+				er.collectTableSelectPrivs()
+				return inNode, true
+			})
+		}
 		er.asScalar = true
 		if _, ok := expression.DisableFoldFunctions[v.FnName.L]; ok {
 			er.disableFoldCounter++
@@ -1763,6 +1775,9 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		}
 	case *ast.FuncCallExpr:
 		switch v.FnName.L {
+		case ast.TiDBRowID:
+			// Rewritten in Enter before the binding identifier is visited as a
+			// normal column expression.
 		case ast.Grouping:
 			withPlanCtx(func(planCtx *exprRewriterPlanCtx) {
 				er.funcCallToExpressionWithPlanCtx(planCtx, v)
@@ -1786,9 +1801,13 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		if v.Op == opcode.LogicAnd || v.Op == opcode.LogicOr {
 			er.tryFoldCounter--
 		}
-		er.binaryOpToExpression(v)
+		if !er.tidbRowIDComparisonToExpression(v) {
+			er.binaryOpToExpression(v)
+		}
 	case *ast.BetweenExpr:
-		er.betweenToExpression(v)
+		if !er.tidbRowIDBetweenToExpression(v) {
+			er.betweenToExpression(v)
+		}
 	case *ast.CaseExpr:
 		if _, ok := expression.TryFoldFunctions["case"]; ok {
 			er.tryFoldCounter--
@@ -1855,7 +1874,9 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		er.rowToScalarFunc(v)
 	case *ast.PatternInExpr:
 		if v.Sel == nil {
-			er.inToExpression(len(v.List), v.Not, v.Type.DeepCopy())
+			if !er.tidbRowIDInToExpression(v) {
+				er.inToExpression(len(v.List), v.Not, v.Type.DeepCopy())
+			}
 		}
 	case *ast.PositionExpr:
 		withPlanCtx(func(planCtx *exprRewriterPlanCtx) {
@@ -3111,6 +3132,12 @@ func (er *expressionRewriter) collectPrivsForCount() {
 				plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", user, host, table))
 		}
 	}
+}
+
+func (b *PlanBuilder) collectTableSelectPrivilege(db, table string) {
+	user, host := auth.GetUserAndHostName(b.ctx.GetSessionVars().User)
+	b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SelectPriv, db, table, "",
+		plannererrors.ErrTableaccessDenied.FastGenByArgs("SELECT", user, host, table))
 }
 
 // Now TableName in expression only used by sequence function like nextval(seq).

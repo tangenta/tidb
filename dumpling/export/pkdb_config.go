@@ -3,7 +3,7 @@ package export
 import "github.com/pingcap/errors"
 
 const (
-	flagExportTiDBRowID          = "export-tidb-rowid"
+	flagExportTiDBRowID = "export-tidb-rowid"
 )
 
 // ParseExportTiDBRowIDMode parses export-tidb-rowid string to ExportTiDBRowIDMode

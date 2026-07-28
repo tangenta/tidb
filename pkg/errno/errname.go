@@ -1186,7 +1186,9 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrMaxKeysReadExceeded:                      mysql.Message("tidb_max_keys_read limit exceeded", nil),
 
 	// Enterprise Edit errors.
-	ErrProcedureDisabled: mysql.Message("Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`", nil),
+	ErrProcedureDisabled:     mysql.Message("Stored procedures are disabled. To enable, run `SET GLOBAL tidb_enable_procedure = ON`", nil),
+	ErrInvalidTiDBRowID:      mysql.Message("Invalid TIDB_ROW_ID token", nil),
+	ErrTiDBRowIDTableBinding: mysql.Message("TIDB_ROW_ID requires one eligible base table in the current query block", nil),
 
 	// Enterprise Edit errors.
 	ErrInvalidValueOfType: mysql.Message("Invalid %s value", nil),
