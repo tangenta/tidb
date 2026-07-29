@@ -41,6 +41,7 @@ var pkdbSysVars = []*SysVar{
 		},
 		IsHintUpdatableVerified: true,
 	},
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBImportIntoPrecheckConcurrency, Value: strconv.Itoa(vardef.DefTiDBImportIntoPrecheckConcurrency), Type: vardef.TypeUnsigned, MinValue: 1, MaxValue: vardef.MaxConfigurableConcurrency},
 	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBEnableSPPlanCache, Value: BoolToOnOff(vardef.DefTiDBEnableSPPlanCache), Type: vardef.TypeBool,
 		SetSession: func(s *SessionVars, val string) error {
 			s.EnableSPPlanCache = TiDBOptOn(val)

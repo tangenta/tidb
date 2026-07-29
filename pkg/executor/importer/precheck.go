@@ -45,7 +45,7 @@ var GetEtcdClient = store.NewEtcdCli
 //     1. there is no active job on the target table
 //     2. the total file size > 0
 //     3. if global sort, check required privileges
-//   - target table should be empty
+//     4. if import from file, target table should be empty
 //   - no CDC or PiTR tasks running
 //
 // we check them one by one, and return the first error we meet.
@@ -75,8 +75,10 @@ func (e *LoadDataController) checkRequirements(ctx context.Context, se sessionct
 			}
 		}
 	}
-	if err := e.checkTableEmpty(ctx, conn); err != nil {
-		return err
+	if e.DataSourceType == DataSourceTypeFile {
+		if err := e.checkTableEmpty(ctx, conn); err != nil {
+			return err
+		}
 	}
 	if !e.DisablePrecheck {
 		if err := e.checkCDCPiTRTasks(ctx, se); err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/config/kerneltype"
 	"github.com/pingcap/tidb/pkg/ddl/placement"
+	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
 	"github.com/pingcap/tidb/pkg/sessiontxn/staleread"
 	"github.com/pingcap/tidb/pkg/testkit"
@@ -431,7 +432,6 @@ func TestStalenessAndHistoryRead(t *testing.T) {
 	}
 	time1 := oracle.GetTimeFromTS(getCurrentTS())
 	time1TS := oracle.GoTimeToTS(time1)
-	schemaVer1 := tk.Session().GetInfoSchema().SchemaMetaVersion()
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (id int primary key);")
 	tk.MustExec(`drop table if exists t`)
@@ -440,7 +440,14 @@ func TestStalenessAndHistoryRead(t *testing.T) {
 	require.NoError(t, err)
 	time2 := waitTSAfter(oracle.GetTimeFromTS(lastCommitTS))
 	time2TS := oracle.GoTimeToTS(time2)
-	schemaVer2 := tk.Session().GetInfoSchema().SchemaMetaVersion()
+	dom := domain.GetDomain(tk.Session())
+	// Assert against the infoschema at the stale read timestamp instead of the latest session schema.
+	expectedIS1, err := dom.GetSnapshotInfoSchema(time1TS)
+	require.NoError(t, err)
+	expectedIS2, err := dom.GetSnapshotInfoSchema(time2TS)
+	require.NoError(t, err)
+	schemaVer1 := expectedIS1.SchemaMetaVersion()
+	schemaVer2 := expectedIS2.SchemaMetaVersion()
 
 	// test set txn as of will flush/mutex tidb_snapshot
 	tk.MustExec(fmt.Sprintf(`set @@tidb_snapshot="%s"`, time1.Format("2006-1-2 15:04:05.000")))

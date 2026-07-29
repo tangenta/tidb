@@ -29,6 +29,8 @@ const (
 
 	// TiDBCreateFromSelectUsingImport indicates whether to use import into to create table as select.
 	TiDBCreateFromSelectUsingImport = "tidb_create_from_select_using_import"
+	// TiDBImportIntoPrecheckConcurrency controls the worker concurrency of IMPORT INTO conflict precheck.
+	TiDBImportIntoPrecheckConcurrency = "tidb_import_into_precheck_concurrency"
 
 	// fusion mode related variables
 
@@ -63,6 +65,8 @@ const (
 	DefTiDBEnableSPParamSubstitute     = false
 	DefTiDBCreateFromSelectUsingImport = false
 	DefLowerCaseTableNames             = "2"
+
+	DefTiDBImportIntoPrecheckConcurrency = 8
 
 	// fusion mode related variables
 

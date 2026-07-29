@@ -312,6 +312,8 @@ type Plan struct {
 	DisablePrecheck       bool
 	GroupKey              string
 
+	PrecheckConcurrency int
+
 	// used for checksum in physical mode
 	DistSQLScanConcurrency int
 
@@ -1024,6 +1026,12 @@ func (p *Plan) initOptions(ctx context.Context, seCtx sessionctx.Context, option
 				p.MaxNodeCnt = scheduler.CalcMaxNodeCountByStoresNum(ctx, seCtx.GetStore())
 			}
 		}
+	}
+	if p.PrecheckConcurrency, err = getSessionIntSysVar(ctx, seCtx, vardef.TiDBImportIntoPrecheckConcurrency); err != nil {
+		return err
+	}
+	if p.PrecheckConcurrency <= 0 {
+		p.PrecheckConcurrency = vardef.DefTiDBImportIntoPrecheckConcurrency
 	}
 
 	// when split-file is set, data file will be split into chunks of 256 MiB.
@@ -1983,12 +1991,14 @@ func (e *LoadDataController) CreateColAssignSimpleExprs(ctx expression.BuildCont
 
 func (e *LoadDataController) getLocalBackendCfg(keyspace, pdAddr, dataDir string) ingestctrl.BackendConfig {
 	dupDetectEnabled := e.DataSourceType == DataSourceTypeQuery
+	conflictPrecheckConcurrency := e.PrecheckConcurrency
 	backendConfig := ingestctrl.BackendConfig{
 		PDAddr:                 pdAddr,
 		LocalStoreDir:          dataDir,
 		MaxConnPerStore:        config.DefaultRangeConcurrency,
 		ConnCompressType:       config.CompressionNone,
 		WorkerConcurrency:      *atomic.NewInt32(int32(e.ThreadCnt)),
+		PrecheckConcurrency:    conflictPrecheckConcurrency,
 		KVWriteBatchSize:       config.KVWriteBatchSize,
 		RegionSplitBatchSize:   config.DefaultRegionSplitBatchSize,
 		RegionSplitConcurrency: runtime.GOMAXPROCS(0),
