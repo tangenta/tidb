@@ -57,7 +57,6 @@ import (
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/expression/aggregation"
 	"github.com/pingcap/tidb/pkg/extension"
-	"github.com/pingcap/tidb/pkg/extension/enterprise/audit"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/metadef"
@@ -2786,6 +2785,10 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 		case strings.ToLower(infoschema.TableAuditLog), strings.ToLower(infoschema.ClusterTableAuditLog):
 			memTracker := memory.NewTracker(v.ID(), -1)
 			memTracker.AttachTo(b.sctx.GetSessionVars().StmtCtx.MemTracker)
+			logPath, logFormat := "", ""
+			if GetGlobalAuditLogPathAndType != nil {
+				logPath, logFormat = GetGlobalAuditLogPathAndType()
+			}
 			return &MemTableReaderExec{
 				BaseExecutor: exec.NewBaseExecutor(b.sctx, v.Schema(), v.ID()),
 				table:        v.Table,
@@ -2794,8 +2797,8 @@ func (b *executorBuilder) buildMemTable(v *physicalop.PhysicalMemTable) exec.Exe
 					outputCols: v.Columns,
 					extractor:  v.Extractor.(*plannercore.AuditLogExtractor),
 					memTracker: memTracker,
-					auditLog:   audit.GlobalLogManager.GetLogPath(),
-					logType:    audit.GlobalLogManager.GetLogFormat(),
+					auditLog:   logPath,
+					logType:    logFormat,
 				},
 			}
 		case strings.ToLower(infoschema.TableStorageStats):
@@ -6574,3 +6577,6 @@ func (b *executorBuilder) buildWorkloadRepoCreate(_ *plannercore.WorkloadRepoCre
 	base := exec.NewBaseExecutor(b.sctx, nil, 0)
 	return &WorkloadRepoCreateExec{base}
 }
+
+// GetGlobalAuditLogPathAndType is used to get audit log path and type
+var GetGlobalAuditLogPathAndType func() (string, string)
