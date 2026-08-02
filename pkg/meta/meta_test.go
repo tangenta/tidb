@@ -875,6 +875,14 @@ func TestIsTableInfoMustLoad(t *testing.T) {
 	require.True(t, meta.IsTableInfoMustLoad(b))
 
 	tableInfo = &model.TableInfo{
+		Triggers: []*model.TriggerInfo{{Name: ast.NewCIStr("trg")}},
+		State:    model.StatePublic,
+	}
+	b, err = json.Marshal(tableInfo)
+	require.NoError(t, err)
+	require.True(t, meta.IsTableInfoMustLoad(b))
+
+	tableInfo = &model.TableInfo{
 		ForeignKeys: []*model.FKInfo{{ID: 1}},
 		State:       model.StatePublic,
 	}

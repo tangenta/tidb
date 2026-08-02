@@ -264,6 +264,38 @@ func TestShowTriggerPrivilege(t *testing.T) {
 	tkTrig.MustQuery("show create trigger trg1").CheckAt([]int{0}, testkit.Rows("trg1"))
 }
 
+func TestShowCreateTriggerAfterInfoSchemaV2FullLoad(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+
+	dom, err := session.GetDomain(store)
+	require.NoError(t, err)
+
+	origSchemaCacheSize := tk.MustQuery("select @@global.tidb_schema_cache_size").Rows()[0][0].(string)
+	t.Cleanup(func() {
+		tk.MustExec("set global tidb_schema_cache_size = " + origSchemaCacheSize)
+	})
+
+	tk.MustExec("set global tidb_schema_cache_size = 0")
+	require.NoError(t, dom.Reload())
+	isV2, _ := infoschema.IsV2(dom.InfoSchema())
+	require.False(t, isV2)
+
+	tk.RefreshSession()
+	tk.MustExec("use test")
+	tk.MustExec("create table t(a int)")
+	tk.MustExec("create trigger trg before insert on t for each row set @x = 1")
+
+	tk.MustExec("set global tidb_schema_cache_size = 512MB")
+	require.NoError(t, dom.Reload())
+	isV2, _ = infoschema.IsV2(dom.InfoSchema())
+	require.True(t, isV2)
+
+	tk.RefreshSession()
+	tk.MustExec("use test")
+	tk.MustQuery("show create trigger trg").CheckAt([]int{0}, testkit.Rows("trg"))
+}
+
 func requireMySQLErrCode(t *testing.T, err error, errCode int) {
 	t.Helper()
 	require.Error(t, err)

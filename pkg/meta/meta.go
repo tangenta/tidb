@@ -1285,6 +1285,8 @@ type MustLoadFilterAttr struct {
 
 var checkAttributesInOrder = []MustLoadFilterAttr{
 	{Attr: `"partition":null`, LoadIfMissing: true},
+	// Trigger metadata is needed to rebuild the trigger name-to-table mapping during a full load.
+	{Attr: `"triggers":[`, LoadIfMissing: false},
 	{Attr: `"Lock":null`, LoadIfMissing: true},
 	{Attr: `"tiflash_replica":null`, LoadIfMissing: true},
 	{Attr: `"temp_table_type":0`, LoadIfMissing: true},
