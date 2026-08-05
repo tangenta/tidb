@@ -2153,6 +2153,44 @@ func TestDropColumnWithIndex(t *testing.T) {
 	tk.MustQuery(query).Check(testkit.Rows())
 }
 
+func TestAlterColumnWithGlobalAllowRemoveAutoInc(t *testing.T) {
+	store := testkit.CreateMockStore(t, mockstore.WithDDLChecker())
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("create table mc(a int key nonclustered auto_increment, b int)")
+	tk.MustGetErrCode("alter table mc modify column a bigint", errno.ErrUnsupportedDDLOperation)
+	tk.MustExec("set @@global.tidb_allow_remove_auto_inc = on")
+	tk.MustQuery("select @@tidb_allow_remove_auto_inc").Check(testkit.Rows("0"))
+	tk.MustQuery("select @@global.tidb_allow_remove_auto_inc").Check(testkit.Rows("1"))
+	tk.MustGetErrCode("alter table mc modify column a bigint", errno.ErrUnsupportedDDLOperation)
+
+	tk1 := testkit.NewTestKit(t, store)
+	tk1.MustExec("use test")
+	tk1.MustQuery("select @@tidb_allow_remove_auto_inc").Check(testkit.Rows("1"))
+	tk1.MustExec("alter table mc modify column a bigint")
+}
+
+func TestDropColumnWithGlobalAllowRemoveAutoInc(t *testing.T) {
+	store := testkit.CreateMockStore(t, mockstore.WithDDLChecker())
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("create table t(a int, b int auto_increment, c int, key(b))")
+	tk.MustGetErrCode("alter table t drop column b", errno.ErrUnsupportedDDLOperation)
+	tk.MustExec("set @@global.tidb_allow_remove_auto_inc = true")
+	tk.MustQuery("select @@tidb_allow_remove_auto_inc").Check(testkit.Rows("0"))
+	tk.MustQuery("select @@global.tidb_allow_remove_auto_inc").Check(testkit.Rows("1"))
+	tk.MustGetErrCode("alter table t drop column b", errno.ErrUnsupportedDDLOperation)
+
+	tk1 := testkit.NewTestKit(t, store)
+	tk1.MustExec("use test")
+	tk1.MustQuery("select @@tidb_allow_remove_auto_inc").Check(testkit.Rows("1"))
+	tk1.MustExec("alter table t drop column b")
+	query := queryIndexOnTable("test", "t")
+	tk.MustQuery(query).Check(testkit.Rows())
+}
+
 func TestDropColumnWithAutoInc(t *testing.T) {
 	store := testkit.CreateMockStore(t, mockstore.WithDDLChecker())
 

@@ -373,7 +373,7 @@ var defaultSysVars = []*SysVar{
 		s.lowResolutionTSO = TiDBOptOn(val)
 		return nil
 	}},
-	{Scope: vardef.ScopeSession, Name: vardef.TiDBAllowRemoveAutoInc, Value: BoolToOnOff(vardef.DefTiDBAllowRemoveAutoInc), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
+	{Scope: vardef.ScopeGlobal | vardef.ScopeSession, Name: vardef.TiDBAllowRemoveAutoInc, Value: BoolToOnOff(vardef.DefTiDBAllowRemoveAutoInc), Type: vardef.TypeBool, SetSession: func(s *SessionVars, val string) error {
 		s.AllowRemoveAutoInc = TiDBOptOn(val)
 		return nil
 	}},
