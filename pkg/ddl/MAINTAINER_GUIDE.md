@@ -281,6 +281,10 @@ Other sharp edges (review hotspots):
   This workflow intentionally does not support clustered/common-handle primary keys. Sessions using it must set
   `tidb_enable_clustered_index=OFF` or declare the new key `NONCLUSTERED`; dropping an `AUTO_INCREMENT` source column
   also requires `tidb_allow_remove_auto_inc=ON`.
+- When rolling back a queued/not-yet-started `DROP COLUMN` sub-job in that replacement workflow, do **not** re-run the
+  forward droppable-column validation. Sibling rollback steps may still leave the old PK public in the current table
+  metadata, and treating that transient state as a fresh forward validation would trap the parent multi-schema job in
+  `rollingback`.
 
 Fast reorg pipelines use a persisted backfill-merge state machine on the index:
 - `IndexInfo.BackfillState` (`pkg/meta/model/reorg.go`) is persisted and MUST be monotonic:

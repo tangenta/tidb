@@ -257,6 +257,25 @@ func TestMultiSchemaChangeReplacePrimaryKeyDuplicateRollbackRestoresFlags(t *tes
 	tk.MustQuery("select * from t_replace_duplicate order by old_part").Check(testkit.Rows("1 7", "2 7"))
 }
 
+func TestMultiSchemaChangeReplacePrimaryKeyDropCoveredColumnDuplicateRollback(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("set global tidb_enable_dist_task = 0")
+	tk.MustExec("set global tidb_ddl_enable_fast_reorg = 0")
+	tk.MustExec("set session tidb_enable_clustered_index = off")
+	tk.MustExec("create table t_replace_dropcol_duplicate (" +
+		"old_part int not null, shared_id int not null, payload int, " +
+		"primary key (old_part, shared_id) nonclustered)")
+	tk.MustExec("insert into t_replace_dropcol_duplicate values (1, 7, 10), (2, 7, 20)")
+	oldPrimaryKeyID := external.GetTableByName(t, tk, "test", "t_replace_dropcol_duplicate").Meta().GetPrimaryKey().ID
+
+	tk.MustGetErrCode("alter table t_replace_dropcol_duplicate drop column old_part, "+
+		"drop primary key, add primary key (shared_id) nonclustered", errno.ErrDupEntry)
+	assertReplacementRollbackMetadata(t, tk, "t_replace_dropcol_duplicate", oldPrimaryKeyID, "old_part", "shared_id")
+	tk.MustQuery("select * from t_replace_dropcol_duplicate order by old_part").Check(testkit.Rows("1 7 10", "2 7 20"))
+}
+
 func TestMultiSchemaChangeReplacePrimaryKeyCancellationRestoresFlags(t *testing.T) {
 	if kerneltype.IsNextGen() {
 		t.Skip("add-index always runs on DXF with ingest mode in nextgen")

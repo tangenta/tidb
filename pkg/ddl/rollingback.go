@@ -211,7 +211,12 @@ func rollingbackAddColumn(jobCtx *jobContext, job *model.Job) (ver int64, err er
 }
 
 func rollingbackDropColumn(jobCtx *jobContext, job *model.Job) (ver int64, err error) {
-	_, colInfo, idxInfos, _, err := checkDropColumn(jobCtx, job)
+	// Rolling back a queued/not-yet-started DROP COLUMN must not re-run the forward
+	// droppable-column validation. The current table metadata may still keep the old
+	// primary key or composite index public while sibling sub-jobs are being undone,
+	// and re-checking that dependency would incorrectly trap the parent multi-schema
+	// job in rollingback.
+	_, _, colInfo, idxInfos, _, err := getDropColumnInfo(jobCtx, job)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}

@@ -260,24 +260,32 @@ func (w *worker) onDropColumn(jobCtx *jobContext, job *model.Job) (ver int64, _ 
 	return ver, errors.Trace(err)
 }
 
-func checkDropColumn(jobCtx *jobContext, job *model.Job) (*model.TableInfo, *model.ColumnInfo, []*model.IndexInfo, bool /* ifExists */, error) {
-	schemaID := job.SchemaID
-	tblInfo, err := GetTableInfoAndCancelFaultJob(jobCtx.metaMut, job, schemaID)
+func getDropColumnInfo(jobCtx *jobContext, job *model.Job) (*model.TableInfo, ast.CIStr, *model.ColumnInfo, []*model.IndexInfo, bool /* ifExists */, error) {
+	tblInfo, err := GetTableInfoAndCancelFaultJob(jobCtx.metaMut, job, job.SchemaID)
 	if err != nil {
-		return nil, nil, nil, false, errors.Trace(err)
+		return nil, ast.CIStr{}, nil, nil, false, errors.Trace(err)
 	}
 
 	args, err := model.GetTableColumnArgs(job)
 	if err != nil {
 		job.State = model.JobStateCancelled
-		return nil, nil, nil, false, errors.Trace(err)
+		return nil, ast.CIStr{}, nil, nil, false, errors.Trace(err)
 	}
 
 	colName, ifExists := args.Col.Name, args.IgnoreExistenceErr
 	colInfo := model.FindColumnInfo(tblInfo.Columns, colName.L)
 	if colInfo == nil || colInfo.Hidden {
 		job.State = model.JobStateCancelled
-		return nil, nil, nil, ifExists, dbterror.ErrCantDropFieldOrKey.GenWithStack("column %s doesn't exist", colName)
+		return nil, ast.CIStr{}, nil, nil, ifExists, dbterror.ErrCantDropFieldOrKey.GenWithStack("column %s doesn't exist", colName)
+	}
+	idxInfos := listIndicesWithColumn(colName.L, tblInfo.Indices)
+	return tblInfo, colName, colInfo, idxInfos, ifExists, nil
+}
+
+func checkDropColumn(jobCtx *jobContext, job *model.Job) (*model.TableInfo, *model.ColumnInfo, []*model.IndexInfo, bool /* ifExists */, error) {
+	tblInfo, colName, colInfo, idxInfos, ifExists, err := getDropColumnInfo(jobCtx, job)
+	if err != nil {
+		return nil, nil, nil, ifExists, errors.Trace(err)
 	}
 	policy := dropColumnValidationPolicy{
 		allowedReplacementOldPrimaryKeyID: pkdbOldPrimaryKeyIDForDropColumn(job),
@@ -292,8 +300,7 @@ func checkDropColumn(jobCtx *jobContext, job *model.Job) (*model.TableInfo, *mod
 	if err = checkDropColumnWithTTLConfig(tblInfo, colName.L); err != nil {
 		return nil, nil, nil, false, errors.Trace(err)
 	}
-	idxInfos := listIndicesWithColumn(colName.L, tblInfo.Indices)
-	return tblInfo, colInfo, idxInfos, false, nil
+	return tblInfo, colInfo, idxInfos, ifExists, nil
 }
 
 func isDroppableColumn(tblInfo *model.TableInfo, colName ast.CIStr, policy dropColumnValidationPolicy) error {
