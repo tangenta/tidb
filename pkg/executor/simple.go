@@ -1237,8 +1237,11 @@ func (e *SimpleExec) executeCreateUser(ctx context.Context, s *ast.CreateUserStm
 		if spec.AuthOpt != nil && spec.AuthOpt.AuthPlugin != "" {
 			authPlugin = spec.AuthOpt.AuthPlugin
 		}
-		// Validate the strength of the password if necessary
-		if e.isValidatePasswordEnabled() && !s.IsCreateRole && mysql.IsAuthPluginClearText(authPlugin) {
+		// Validate the strength of the password if necessary.
+		// The password specified as a hash string (AS clause) is only checked for the hash
+		// format, not the password strength, which is consistent with MySQL.
+		if e.isValidatePasswordEnabled() && !s.IsCreateRole && mysql.IsAuthPluginClearText(authPlugin) &&
+			(spec.AuthOpt == nil || !spec.AuthOpt.ByHashString || spec.AuthOpt.HashString == "") {
 			pwd := ""
 			if spec.AuthOpt != nil {
 				pwd = spec.AuthOpt.AuthString

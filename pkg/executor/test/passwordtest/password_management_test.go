@@ -107,6 +107,18 @@ func TestValidatePassword(t *testing.T) {
 	tk.MustGetErrCode("CREATE USER 'testuser1'@'localhost' IDENTIFIED WITH 'caching_sha2_password'", errno.ErrNotValidPassword)
 	tk.MustGetErrCode("CREATE USER 'testuser1'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS ''", errno.ErrNotValidPassword)
 
+	// The password specified as a hash string (AS clause) is not validated against the
+	// password strength policy, which is consistent with MySQL.
+	tk.MustExec("SET GLOBAL validate_password.policy = 'MEDIUM'")
+	tk.MustExec("SET GLOBAL validate_password.length = 8")
+	tk.MustExec("CREATE USER 'user1'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*3577E9AF84342AC1DAEA087758D4A3AE4F2C3261'")
+	tk.MustExec(fmt.Sprintf("CREATE USER 'user2'@'%%' IDENTIFIED WITH '%s' AS '%s'", mysql.AuthCachingSha2Password, auth.NewHashPassword("!Abc12345678", mysql.AuthCachingSha2Password)))
+	tk.MustExec("DROP USER 'user1'@'%', 'user2'@'%'")
+	// An invalid hash string is still rejected by the hash format check.
+	tk.MustGetErrCode("CREATE USER 'user3'@'%' IDENTIFIED WITH 'mysql_native_password' AS 'abc'", errno.ErrPasswordFormat)
+	// A plaintext password is still validated.
+	tk.MustGetErrCode("CREATE USER 'user3'@'%' IDENTIFIED BY '1234567'", errno.ErrNotValidPassword)
+
 	// if the username is '', all password can pass the check_user_name
 	subtk.MustQuery("SELECT user(), current_user()").Check(testkit.Rows("@localhost @localhost"))
 	subtk.MustQuery("SELECT @@global.validate_password.check_user_name").Check(testkit.Rows("1"))
