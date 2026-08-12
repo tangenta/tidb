@@ -228,6 +228,10 @@ Plan cache lookup matches by `(cacheKey, paramTypes)`:
   parameter type vectors.
 - param type extraction differs by protocol (binary vs text-protocol user vars);
   be careful when changing typing rules.
+- executions with invalid-zero temporal parameters (`DATE/DATETIME/TIMESTAMP`
+  values with incomplete date parts) conservatively bypass plan cache because
+  these values can change the shape of TIME-column comparisons. This correctness
+  fence applies before cache enablement and cannot be overridden by force-cache.
 
 Even on a hit, planner MUST rebuild param-dependent ranges for current values
 before executing:

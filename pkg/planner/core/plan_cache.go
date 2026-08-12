@@ -251,9 +251,12 @@ func GetPlanFromPlanCache(ctx context.Context, sctx sessionctx.Context,
 			cacheEnabled = false
 		}
 	}
-
 	if stmt.StmtCacheable && cacheEnabled {
-		stmtCtx.EnablePlanCache()
+		if hasInvalidZeroTemporalParam(sessVars.PlanCacheParams.AllParamValues()) {
+			stmtCtx.WarnSkipPlanCache("invalid-zero temporal parameter")
+		} else {
+			stmtCtx.EnablePlanCache()
+		}
 	}
 	if stmt.UncacheableReason != "" {
 		stmtCtx.WarnSkipPlanCache(stmt.UncacheableReason)
