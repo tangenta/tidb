@@ -11,6 +11,15 @@ import (
 )
 
 var pkdbSysVars = []*SysVar{
+	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBSlowLogEscapeNewline, Value: BoolToOnOff(vardef.DefTiDBSlowLogEscapeNewline), Type: vardef.TypeBool,
+		SetGlobal: func(_ context.Context, _ *SessionVars, val string) error {
+			vardef.SlowLogEscapeNewline.Store(TiDBOptOn(val))
+			return nil
+		},
+		GetGlobal: func(_ context.Context, _ *SessionVars) (string, error) {
+			return BoolToOnOff(vardef.SlowLogEscapeNewline.Load()), nil
+		},
+	},
 	{Scope: vardef.ScopeGlobal, Name: vardef.TiDBEnableLoginHistory, Value: BoolToOnOff(vardef.DefTiDBEnableLoginHistory), Type: vardef.TypeBool,
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			vardef.EnableLoginHistory.Store(TiDBOptOn(val))
