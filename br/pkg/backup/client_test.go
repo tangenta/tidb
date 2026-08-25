@@ -44,6 +44,7 @@ type testBackup struct {
 
 	mockPDClient pd.Client
 	mockCluster  *testutils.MockCluster
+	mockMgr      *clientMgrWithCodec
 	mockGlue     *gluemock.MockGlue
 	backupClient *backup.Client
 
@@ -118,11 +119,12 @@ func createBackupSuite(t *testing.T) *testBackup {
 	s.mockPDClient = pdClient
 	s.mockCluster = mockCluster
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	mockMgr := &conn.Mgr{PdController: &pdutil.PdController{}}
+	baseMockMgr := &conn.Mgr{PdController: &pdutil.PdController{}}
 	gcMgr := gc.NewManager(s.mockPDClient, tikv.NullspaceID)
-	mockMgr.SetGcManager(gcMgr)
-	mockMgr.SetPDClient(s.mockPDClient)
-	s.backupClient = backup.NewBackupClient(s.ctx, mockMgr)
+	baseMockMgr.SetGcManager(gcMgr)
+	baseMockMgr.SetPDClient(s.mockPDClient)
+	s.mockMgr = newClientMgrWithCodec(baseMockMgr, tikv.NewCodecV1(tikv.ModeTxn))
+	s.backupClient = backup.NewBackupClient(s.ctx, s.mockMgr)
 
 	s.cluster, err = mock.NewCluster()
 	require.NoError(t, err)
@@ -132,7 +134,7 @@ func createBackupSuite(t *testing.T) *testBackup {
 	require.NoError(t, s.cluster.Start())
 
 	t.Cleanup(func() {
-		mockMgr.Close()
+		s.mockMgr.Close()
 		s.cluster.Stop()
 		tikvClient.Close()
 		pdClient.Close()

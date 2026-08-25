@@ -1302,6 +1302,9 @@ func (bc *Client) OnBackupResponse(
 		switch v := errPb.Detail.(type) {
 		case *backuppb.Error_KvError:
 			if lockErr := v.KvError.Locked; lockErr != nil {
+				if err := decodeBackupLockInfo(bc.mgr.GetStorage().GetCodec(), lockErr); err != nil {
+					return nil, errors.Trace(err)
+				}
 				// return lock for later resolving in this round
 				return txnlock.NewLock(lockErr), nil
 			}
