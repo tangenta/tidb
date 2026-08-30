@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/store/helper"
 	"github.com/pingcap/tidb/pkg/tablecodec"
@@ -1687,6 +1688,9 @@ func (b *builtinNextValSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool
 	if !privChecker.RequestVerification(db, seq, "", mysql.InsertPriv) {
 		return 0, false, errSequenceAccessDenied.GenWithStackByArgs("INSERT", user.AuthUsername, user.AuthHostname, seq)
 	}
+	if err := checkSequenceFunctionInReadOnly(vars, privChecker); err != nil {
+		return 0, false, err
+	}
 	nextVal, err := sequence.GetSequenceNextVal()
 	if err != nil {
 		return 0, false, err
@@ -1827,11 +1831,29 @@ func (b *builtinSetValSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool,
 	if !privChecker.RequestVerification(db, seq, "", mysql.InsertPriv) {
 		return 0, false, errSequenceAccessDenied.GenWithStackByArgs("INSERT", user.AuthUsername, user.AuthHostname, seq)
 	}
+	if err := checkSequenceFunctionInReadOnly(vars, privChecker); err != nil {
+		return 0, false, err
+	}
 	setValue, isNull, err := b.args[1].EvalInt(ctx, row)
 	if isNull || err != nil {
 		return 0, isNull, err
 	}
 	return sequence.SetSequenceVal(setValue)
+}
+
+type explicitDynamicPrivilegeChecker interface {
+	HasExplicitlyGrantedDynamicPrivilege(privName string, grantable bool) bool
+}
+
+func checkSequenceFunctionInReadOnly(vars *variable.SessionVars, privChecker expropt.PrivilegeChecker) error {
+	if vars.InRestrictedSQL || !vardef.RestrictedReadOnly.Load() {
+		return nil
+	}
+	checker, ok := privChecker.(explicitDynamicPrivilegeChecker)
+	if ok && checker.HasExplicitlyGrantedDynamicPrivilege("RESTRICTED_REPLICA_WRITER_ADMIN", false) {
+		return nil
+	}
+	return plannererrors.ErrSQLInReadOnlyMode
 }
 
 func getSchemaAndSequence(sequenceName string) (string, string) {

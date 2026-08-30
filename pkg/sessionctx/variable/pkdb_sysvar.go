@@ -2,6 +2,7 @@ package variable
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -88,6 +89,29 @@ var pkdbSysVars = []*SysVar{
 			return nil
 		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
 			return strconv.FormatInt(vardef.CommentByteLengthLimit.Load(), 10), nil
+		},
+	},
+	{Scope: vardef.ScopeGlobal, Name: vardef.PKDBSequenceCacheEpoch, Value: strconv.FormatUint(vardef.DefPKDBSequenceCacheEpoch, 10), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: math.MaxUint32,
+		Validation: func(vars *SessionVars, normalizedValue string, originalValue string, scope vardef.ScopeFlag) (string, error) {
+			epoch, err := strconv.ParseUint(normalizedValue, 10, 32)
+			if err != nil {
+				return normalizedValue, err
+			}
+			current := vardef.CurrentSequenceCacheEpoch()
+			if epoch != vardef.DefPKDBSequenceCacheEpoch && epoch < current {
+				return normalizedValue, fmt.Errorf("%s cannot be decreased from %d to %d except reset to %d", vardef.PKDBSequenceCacheEpoch, current, epoch, vardef.DefPKDBSequenceCacheEpoch)
+			}
+			return normalizedValue, nil
+		},
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			epoch, err := strconv.ParseUint(val, 10, 32)
+			if err != nil {
+				return err
+			}
+			vardef.SetSequenceCacheEpoch(epoch)
+			return nil
+		}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
+			return strconv.FormatUint(vardef.CurrentSequenceCacheEpoch(), 10), nil
 		},
 	},
 }

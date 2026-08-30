@@ -339,6 +339,15 @@ func (ctx *EvalContext) RequestDynamicVerification(privName string, grantable bo
 	return checker.RequestDynamicVerification(ctx.sctx.GetSessionVars().ActiveRoles, privName, grantable)
 }
 
+// HasExplicitlyGrantedDynamicPrivilege verifies an explicitly granted DYNAMIC privilege without SUPER fallback.
+func (ctx *EvalContext) HasExplicitlyGrantedDynamicPrivilege(privName string, grantable bool) bool {
+	checker := privilege.GetPrivilegeManager(ctx.sctx)
+	if checker == nil {
+		return true
+	}
+	return checker.HasExplicitlyGrantedDynamicPrivilege(ctx.sctx.GetSessionVars().ActiveRoles, privName, grantable)
+}
+
 // GetSecurityLabelCache returns the LBAC metadata cache if available.
 func (ctx *EvalContext) GetSecurityLabelCache() *lbac.SecurityLabelCache {
 	checker := privilege.GetPrivilegeManager(ctx.sctx)
@@ -438,11 +447,11 @@ func (s *sequenceOperator) GetSequenceID() int64 {
 }
 
 func (s *sequenceOperator) GetSequenceNextVal() (int64, error) {
-	return s.tbl.GetSequenceNextVal(s.sctx, s.db, s.name)
+	return s.tbl.GetSequenceNextVal(s.sctx, s.db, s.name, vardef.CurrentSequenceCacheEpoch())
 }
 
 func (s *sequenceOperator) SetSequenceVal(newVal int64) (int64, bool, error) {
-	return s.tbl.SetSequenceVal(s.sctx, newVal, s.db, s.name)
+	return s.tbl.SetSequenceVal(s.sctx, newVal, s.db, s.name, vardef.CurrentSequenceCacheEpoch())
 }
 
 func sequenceOperatorProp(sctx sessionctx.Context) expropt.SequenceOperatorProvider {
