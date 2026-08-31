@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	"github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/lightning/tikv"
+	"github.com/pingcap/tidb/pkg/util/pkdbcredential"
 	pdhttp "github.com/tikv/pd/client/http"
 )
 
@@ -91,6 +92,34 @@ func run() error {
 	cfg := config.NewConfig()
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return err
+	}
+	usesPrimaryPassword := false
+	if !*compact && !*flagFetchMode && len(*mode) == 0 {
+		checkpointUsesPrimaryPassword := cfg.Checkpoint.Driver == config.CheckpointDriverMySQL &&
+			len(cfg.Checkpoint.DSN) == 0
+		switch {
+		case len(*cpRemove) != 0:
+			// Legacy checkpoint removal may also clean metadata from the target TiDB.
+			usesPrimaryPassword = checkpointUsesPrimaryPassword ||
+				cfg.TikvImporter.Backend != config.BackendImportInto
+		case len(*cpErrIgnore) != 0:
+			usesPrimaryPassword = checkpointUsesPrimaryPassword
+		case len(*cpErrDestroy) != 0:
+			usesPrimaryPassword = true
+		case len(*cpDump) != 0, *localStoringTables:
+			usesPrimaryPassword = checkpointUsesPrimaryPassword
+		}
+	}
+	if usesPrimaryPassword {
+		password, err := pkdbcredential.ResolvePassword(
+			cfg.TiDB.Psw,
+			cfg.TiDB.PasswordEncryptedFile,
+			cfg.TiDB.PasswordKeyFile,
+		)
+		if err != nil {
+			return err
+		}
+		cfg.TiDB.Psw = password
 	}
 	if err := cfg.Adjust(ctx); err != nil {
 		return err

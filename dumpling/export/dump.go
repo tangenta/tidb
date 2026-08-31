@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/codec"
+	"github.com/pingcap/tidb/pkg/util/pkdbcredential"
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/client/pkg/caller"
 	gatomic "go.uber.org/atomic"
@@ -77,6 +78,15 @@ type Dumper struct {
 
 // NewDumper returns a new Dumper
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
+	password, err := pkdbcredential.ResolvePassword(
+		conf.Password,
+		conf.PasswordEncryptedFile,
+		conf.PasswordKeyFile,
+	)
+	if err != nil {
+		return nil, err
+	}
+	conf.Password = password
 	failpoint.Inject("setExtStorage", func(val failpoint.Value) {
 		path := val.(string)
 		b, err := objstore.ParseBackend(path, nil)
@@ -98,8 +108,6 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 		speedRecorder:             NewSpeedRecorder(),
 	}
-
-	var err error
 
 	d.metrics = newMetrics(conf.PromFactory, conf.Labels)
 	d.metrics.registerTo(conf.PromRegistry)

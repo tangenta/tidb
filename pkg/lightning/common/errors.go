@@ -141,9 +141,9 @@ func (w *withStack) Format(s fmt.State, verb rune) {
 }
 
 // NormalizeError converts an arbitrary error to *errors.Error based above predefined errors.
-// If the underlying err is already an *error.Error which is prefixed by "Lightning:" or
-// "Import:", leave error ID unchanged. Otherwise, converts the error ID to Lightning's
-// predefined error IDs.
+// If the underlying err is already an *error.Error which is prefixed by "Lightning:",
+// "Import:", or "Credential:", leave error ID unchanged. Otherwise, converts the
+// error ID to Lightning's predefined error IDs.
 func NormalizeError(err error) error {
 	if err == nil {
 		return nil
@@ -185,7 +185,10 @@ func NormalizeError(err error) error {
 	}
 
 	if normalizedErr != nil {
-		if strings.HasPrefix(string(normalizedErr.ID()), "Lightning:") || strings.HasPrefix(string(normalizedErr.ID()), "Import:") {
+		id := string(normalizedErr.ID())
+		if strings.HasPrefix(id, "Lightning:") ||
+			strings.HasPrefix(id, "Import:") ||
+			strings.HasPrefix(id, "Credential:") {
 			return err
 		}
 		// Convert BR error id to Lightning error id.
