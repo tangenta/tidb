@@ -1846,7 +1846,7 @@ type explicitDynamicPrivilegeChecker interface {
 }
 
 func checkSequenceFunctionInReadOnly(vars *variable.SessionVars, privChecker expropt.PrivilegeChecker) error {
-	if vars.InRestrictedSQL || !vardef.RestrictedReadOnly.Load() {
+	if vars.InRestrictedSQL || (!vardef.RestrictedReadOnly.Load() && !vardef.VarTiDBSuperReadOnly.Load()) {
 		return nil
 	}
 	checker, ok := privChecker.(explicitDynamicPrivilegeChecker)
