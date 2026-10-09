@@ -308,6 +308,7 @@ go_test(
         "pkdb_db_table_test.go",
         "pkdb_debug_pool_test.go",
         "pkdb_log_repl_tidb_wait_test.go",
+        "pkdb_modify_column_varchar_to_blob_test.go",
         "pkdb_procedure_test.go",
         "pkdb_raft_index_collector_test.go",
         "pkdb_repl_unsafe_destroy_test.go",
