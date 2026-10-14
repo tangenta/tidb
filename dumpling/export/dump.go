@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -74,9 +75,14 @@ type Dumper struct {
 	charsetAndDefaultCollationMap map[string]string
 
 	speedRecorder *SpeedRecorder
+
+	// gcProtectionMu serializes keeper startup and teardown with concurrent Close.
+	gcProtectionMu sync.Mutex
+	gcProtection   *gcProtectionKeeper
 }
 
-// NewDumper returns a new Dumper
+// NewDumper returns a configured Dumper. When a PD client is available, it
+// confirms GC protection before returning and propagates registration errors.
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	password, err := pkdbcredential.ResolvePassword(
 		conf.Password,
@@ -113,6 +119,8 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	d.metrics.registerTo(conf.PromRegistry)
 	defer func() {
 		if err != nil {
+			d.stopGCProtection()
+			d.cancelCtx()
 			d.metrics.unregisterFrom(conf.PromRegistry)
 		}
 	}()
@@ -153,9 +161,16 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	return d, err
 }
 
-// Dump dumps table from database
+// Dump dumps tables from the database and releases its GC protection on return.
 // nolint: gocyclo
 func (d *Dumper) Dump() (dumpErr error) {
+	defer d.stopGCProtection()
+	if d.tidbPDClientForGC != nil {
+		if err := d.startGCProtection(); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	initColTypeRowReceiverMap()
 	var (
 		conn    *sql.Conn
@@ -1473,9 +1488,10 @@ func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 	}
 }
 
-// Close closes a Dumper and stop dumping immediately
+// Close cancels the dump, waits for GC protection cleanup, and closes the SQL pool.
 func (d *Dumper) Close() error {
 	d.cancelCtx()
+	d.stopGCProtection()
 	d.metrics.unregisterFrom(d.conf.PromRegistry)
 	if d.dbHandle != nil {
 		return d.dbHandle.Close()
@@ -1801,18 +1817,10 @@ func tidbGetSnapshot(d *Dumper) error {
 
 // tidbStartGCSavepointUpdateService is an initialization step of Dumper.
 func tidbStartGCSavepointUpdateService(d *Dumper) error {
-	tctx, pool, conf := d.tctx, d.dbHandle, d.conf
-	snapshot, si := conf.Snapshot, conf.ServerInfo
+	tctx, conf := d.tctx, d.conf
+	si := conf.ServerInfo
 	if d.tidbPDClientForGC != nil {
-		snapshotTS, err := parseSnapshotToTSO(pool, snapshot)
-		if err != nil {
-			return err
-		}
-		if d.tidbUseKeyspaceGC {
-			go updateKeyspaceGCBarrier(tctx, d.tidbPDClientForGC, d.tidbKeyspaceID, defaultDumpGCSafePointTTL, snapshotTS)
-		} else {
-			go updateServiceSafePoint(tctx, d.tidbPDClientForGC, defaultDumpGCSafePointTTL, snapshotTS)
-		}
+		return d.startGCProtection()
 	} else if si.ServerType == version.ServerTypeTiDB {
 		tctx.L().Warn("If the amount of data to dump is large, criteria: (data more than 60GB or dumped time more than 10 minutes)\n" +
 			"you'd better adjust the tikv_gc_life_time to avoid export failure due to TiDB GC during the dump process.\n" +
@@ -1822,10 +1830,11 @@ func tidbStartGCSavepointUpdateService(d *Dumper) error {
 	return nil
 }
 
-func updateServiceSafePoint(tctx *tcontext.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
+// startServiceSafePointKeeper registers and renews global GC protection.
+func startServiceSafePointKeeper(tctx *tcontext.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) (*gcProtectionKeeper, error) {
 	dumplingServiceSafePointID := fmt.Sprintf("%s_%d", dumplingServiceSafePointPrefix, time.Now().UnixNano())
 	tctx.L().Info("generate dumpling gc safePoint id", zap.String("id", dumplingServiceSafePointID))
-	runGCProtectionUpdater(
+	return startGCProtectionKeeper(
 		tctx,
 		ttl,
 		snapshotTS,
@@ -1841,22 +1850,25 @@ func updateServiceSafePoint(tctx *tcontext.Context, pdClient pd.Client, ttl int6
 			}
 			return err
 		},
-		func(ctx context.Context) {
-			if _, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePointID, 0, 0); err != nil {
+		func(ctx context.Context) error {
+			_, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePointID, 0, 0)
+			if err != nil {
 				tctx.L().Debug("remove dumpling gc safePoint failed", log.ShortError(err), zap.String("id", dumplingServiceSafePointID))
 			}
+			return err
 		},
 	)
 }
 
-func updateKeyspaceGCBarrier(tctx *tcontext.Context, pdClient pd.Client, keyspaceID uint32, ttl int64, snapshotTS uint64) {
+// startKeyspaceGCBarrierKeeper registers and renews a keyspace's GC barrier.
+func startKeyspaceGCBarrierKeeper(tctx *tcontext.Context, pdClient pd.Client, keyspaceID uint32, ttl int64, snapshotTS uint64) (*gcProtectionKeeper, error) {
 	barrierID := fmt.Sprintf("%s_%d", dumplingServiceSafePointPrefix, time.Now().UnixNano())
 	tctx.L().Info("generate dumpling gc barrier id", zap.String("id", barrierID), zap.Uint32("keyspaceID", keyspaceID))
 
 	gcClient := pdClient.GetGCStatesClient(keyspaceID)
 	ttlDuration := time.Duration(ttl) * time.Second
 
-	runGCProtectionUpdater(
+	return startGCProtectionKeeper(
 		tctx,
 		ttl,
 		snapshotTS,
@@ -1875,58 +1887,16 @@ func updateKeyspaceGCBarrier(tctx *tcontext.Context, pdClient pd.Client, keyspac
 			}
 			return err
 		},
-		func(ctx context.Context) {
-			if _, err := gcClient.DeleteGCBarrier(ctx, barrierID); err != nil {
+		func(ctx context.Context) error {
+			_, err := gcClient.DeleteGCBarrier(ctx, barrierID)
+			if err != nil {
 				tctx.L().Debug("remove dumpling gc barrier failed", log.ShortError(err),
 					zap.String("id", barrierID),
 					zap.Uint32("keyspaceID", keyspaceID))
 			}
+			return err
 		},
 	)
-}
-
-func runGCProtectionUpdater(
-	tctx *tcontext.Context,
-	ttl int64,
-	snapshotTS uint64,
-	update func(ctx context.Context, protectTS uint64, retryCnt int) error,
-	cleanup func(ctx context.Context),
-) {
-	updateInterval := time.Duration(ttl/2) * time.Second
-	tick := time.NewTicker(updateInterval)
-	defer tick.Stop()
-
-	// Protect `snapshotTS` by keeping the GC protection boundary below it.
-	protectTS := snapshotTS
-	if protectTS > 0 {
-		protectTS--
-	}
-
-	defer func() {
-		// best-effort cleanup (TTL will also expire soon even if this fails)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		cleanup(ctx)
-	}()
-
-	for {
-		for retryCnt := range 11 {
-			err := update(tctx, protectTS, retryCnt)
-			if err == nil {
-				break
-			}
-			select {
-			case <-tctx.Done():
-				return
-			case <-time.After(time.Second):
-			}
-		}
-		select {
-		case <-tctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
 }
 
 // setDefaultSessionParams is a step to set default params for session params.

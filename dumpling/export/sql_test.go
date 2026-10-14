@@ -310,6 +310,8 @@ func TestBuildSelectField(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestParseSnapshotToTSO converts a valid timestamp through SQL, then verifies
+// that a NULL conversion result rejects an unsupported snapshot format.
 func TestParseSnapshotToTSO(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -323,7 +325,7 @@ func TestParseSnapshotToTSO(t *testing.T) {
 	mock.ExpectQuery(`SELECT unix_timestamp(?)`).
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{`unix_timestamp("2020/07/18 20:31:50")`}).AddRow(1595075510))
-	tso, err := parseSnapshotToTSO(db, snapshot)
+	tso, err := parseSnapshotToTSO(context.Background(), db, snapshot)
 	require.NoError(t, err)
 	require.Equal(t, (unixTimeStamp<<18)*1000, tso)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -332,7 +334,7 @@ func TestParseSnapshotToTSO(t *testing.T) {
 	mock.ExpectQuery(`SELECT unix_timestamp(?)`).
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{`unix_timestamp("XXYYZZ")`}).AddRow(nil))
-	tso, err = parseSnapshotToTSO(db, "XXYYZZ")
+	tso, err = parseSnapshotToTSO(context.Background(), db, "XXYYZZ")
 	require.EqualError(t, err, "snapshot XXYYZZ format not supported. please use tso or '2006-01-02 15:04:05' format time")
 	require.Equal(t, uint64(0), tso)
 	require.NoError(t, mock.ExpectationsWereMet())

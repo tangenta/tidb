@@ -162,9 +162,8 @@ func TestTiDBResolveKeyspaceMetaForGC(t *testing.T) {
 
 // TestResolveKeyspaceMetaGCAPIChoice verifies that the resolved keyspace
 // metadata determines which GC API (global vs keyspace-level) dumpling will
-// use.  For a premium cluster the dispatching function must launch
-// updateKeyspaceGCBarrier; for a classical cluster it must launch
-// updateServiceSafePoint.
+// use. Resolve metadata, register synchronously, and verify a premium cluster
+// uses a keyspace barrier while a classical cluster uses a global safepoint.
 func TestResolveKeyspaceMetaGCAPIChoice(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -251,9 +250,6 @@ func TestResolveKeyspaceMetaGCAPIChoice(t *testing.T) {
 			err = tidbStartGCSavepointUpdateService(d)
 			require.NoError(t, err)
 
-			// Give the background goroutine a moment to make its first call.
-			time.Sleep(200 * time.Millisecond)
-
 			if tc.expectBarrierAPI {
 				// Keyspace barrier path: SetGCBarrier must have been called.
 				mockPD.gcStatesClient.mu.Lock()
@@ -280,6 +276,7 @@ func TestResolveKeyspaceMetaGCAPIChoice(t *testing.T) {
 
 			// Cancel to stop the background goroutine.
 			cancel()
+			d.stopGCProtection()
 		})
 	}
 }
@@ -371,15 +368,21 @@ func TestParseClusterSSLFlags(t *testing.T) {
 }
 
 // TestUpdateServiceSafePointRetryAndCancel verifies that the global-GC safe
-// point updater retries on transient failures and performs cleanup when the
-// context is cancelled.
+// point keeper registers successfully, retries transient renewal failures,
+// and completes cleanup when the context is cancelled.
 func TestUpdateServiceSafePointRetryAndCancel(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 	defer cancel()
 
 	mockPD := newMockPDClientForGC()
+	snapshotTS := uint64(100)
+	// Register before injecting renewal failures; TTL=2 renews every second.
+	ttl := int64(2)
+	keeper, err := startServiceSafePointKeeper(tctx, mockPD, ttl, snapshotTS)
+	require.NoError(t, err)
+	defer keeper.stop()
 
-	// Inject a transient error for the first 3 calls, then succeed.
+	// Fail three renewal attempts after the successful initial registration.
 	var callCount atomic.Int32
 	transientErr := errors.New("transient PD error")
 	mockPD.mu.Lock()
@@ -387,9 +390,9 @@ func TestUpdateServiceSafePointRetryAndCancel(t *testing.T) {
 	mockPD.mu.Unlock()
 
 	go func() {
-		// After 3 calls, clear the error so the retry loop can succeed.
+		// After registration and three retries, allow the next renewal to succeed.
 		for {
-			if callCount.Load() >= 3 {
+			if callCount.Load() >= 4 {
 				mockPD.mu.Lock()
 				mockPD.updateSafePointErr = nil
 				mockPD.mu.Unlock()
@@ -405,18 +408,12 @@ func TestUpdateServiceSafePointRetryAndCancel(t *testing.T) {
 	// We can't easily wrap the method, so instead track via the mock's counter
 	// and poll it. The mock already counts calls.
 
-	snapshotTS := uint64(100)
-	// Use a very short TTL so the update interval (ttl/2) is small.
-	ttl := int64(2) // 2 seconds → update interval = 1s
-
-	go updateServiceSafePoint(tctx, mockPD, ttl, snapshotTS)
-
 	// Wait for retries + at least one success.
 	require.Eventually(t, func() bool {
 		mockPD.mu.Lock()
 		defer mockPD.mu.Unlock()
 		callCount.Store(int32(mockPD.updateSafePointCalls))
-		return mockPD.updateSafePointCalls >= 4 && mockPD.updateSafePointErr == nil
+		return mockPD.updateSafePointCalls >= 5 && mockPD.updateSafePointErr == nil
 	}, 15*time.Second, 100*time.Millisecond, "expected retry then success")
 
 	// Verify the safe point TS was snapshotTS - 1.
@@ -427,7 +424,7 @@ func TestUpdateServiceSafePointRetryAndCancel(t *testing.T) {
 
 	// Cancel context — the updater should exit and do cleanup (TTL=0 call).
 	cancel()
-	time.Sleep(300 * time.Millisecond)
+	keeper.stop()
 
 	// The cleanup call uses TTL=0 and safePoint=0.
 	mockPD.mu.Lock()
@@ -437,28 +434,35 @@ func TestUpdateServiceSafePointRetryAndCancel(t *testing.T) {
 }
 
 // TestUpdateKeyspaceGCBarrierRetryAndCancel verifies that the keyspace-level
-// GC barrier updater retries on transient failures and performs cleanup
-// (DeleteGCBarrier) when the context is cancelled.
+// GC barrier keeper registers successfully, retries transient renewal failures,
+// and completes DeleteGCBarrier when the context is cancelled.
 func TestUpdateKeyspaceGCBarrierRetryAndCancel(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 	defer cancel()
 
 	mockPD := newMockPDClientForGC()
 	gcClient := mockPD.gcStatesClient
+	snapshotTS := uint64(200)
+	keyspaceID := uint32(42)
+	// Register first, then inject renewal errors with a one-second interval.
+	ttl := int64(2)
+	keeper, err := startKeyspaceGCBarrierKeeper(tctx, mockPD, keyspaceID, ttl, snapshotTS)
+	require.NoError(t, err)
+	defer keeper.stop()
 
-	// Inject a transient error for the first 2 SetGCBarrier calls.
+	// Inject a transient error for the first two renewal attempts.
 	transientErr := errors.New("transient barrier error")
 	gcClient.mu.Lock()
 	gcClient.setBarrierErr = transientErr
 	gcClient.mu.Unlock()
 
 	go func() {
-		// After 2 calls, clear the error.
+		// After registration and two failed renewals, clear the error.
 		for {
 			gcClient.mu.Lock()
 			calls := gcClient.setCalls
 			gcClient.mu.Unlock()
-			if calls >= 2 {
+			if calls >= 3 {
 				gcClient.mu.Lock()
 				gcClient.setBarrierErr = nil
 				gcClient.mu.Unlock()
@@ -468,17 +472,11 @@ func TestUpdateKeyspaceGCBarrierRetryAndCancel(t *testing.T) {
 		}
 	}()
 
-	snapshotTS := uint64(200)
-	keyspaceID := uint32(42)
-	ttl := int64(2) // 2 seconds
-
-	go updateKeyspaceGCBarrier(tctx, mockPD, keyspaceID, ttl, snapshotTS)
-
 	// Wait for retries + at least one success.
 	require.Eventually(t, func() bool {
 		gcClient.mu.Lock()
 		defer gcClient.mu.Unlock()
-		return gcClient.setCalls >= 3 && gcClient.setBarrierErr == nil
+		return gcClient.setCalls >= 4 && gcClient.setBarrierErr == nil
 	}, 15*time.Second, 100*time.Millisecond, "expected retry then success for barrier")
 
 	// Verify the barrier TS was snapshotTS - 1.
@@ -489,7 +487,7 @@ func TestUpdateKeyspaceGCBarrierRetryAndCancel(t *testing.T) {
 
 	// Cancel context — updater should exit and call DeleteGCBarrier for cleanup.
 	cancel()
-	time.Sleep(300 * time.Millisecond)
+	keeper.stop()
 
 	gcClient.mu.Lock()
 	require.Greater(t, gcClient.delCalls, 0, "DeleteGCBarrier must be called on cancel")
@@ -497,20 +495,16 @@ func TestUpdateKeyspaceGCBarrierRetryAndCancel(t *testing.T) {
 }
 
 // TestUpdateServiceSafePointSnapshotZero verifies that when snapshotTS == 0, the
-// safe point TS stays 0 (no underflow).
+// safe point TS stays 0: register synchronously, inspect the boundary, then stop.
 func TestUpdateServiceSafePointSnapshotZero(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	mockPD := newMockPDClientForGC()
 	ttl := int64(2)
 
-	go updateServiceSafePoint(tctx, mockPD, ttl, 0)
-
-	require.Eventually(t, func() bool {
-		mockPD.mu.Lock()
-		defer mockPD.mu.Unlock()
-		return mockPD.updateSafePointCalls >= 1
-	}, 5*time.Second, 50*time.Millisecond)
+	keeper, err := startServiceSafePointKeeper(tctx, mockPD, ttl, 0)
+	require.NoError(t, err)
+	defer keeper.stop()
 
 	mockPD.mu.Lock()
 	require.Equal(t, uint64(0), mockPD.lastSafePointTS, "snapshotTS=0 must not underflow")
@@ -520,20 +514,16 @@ func TestUpdateServiceSafePointSnapshotZero(t *testing.T) {
 }
 
 // TestUpdateKeyspaceGCBarrierSnapshotZero verifies that when snapshotTS == 0,
-// the barrier TS stays 0 (no underflow).
+// the barrier TS stays 0: register synchronously, inspect the boundary, then stop.
 func TestUpdateKeyspaceGCBarrierSnapshotZero(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	mockPD := newMockPDClientForGC()
 	ttl := int64(2)
 
-	go updateKeyspaceGCBarrier(tctx, mockPD, 1, ttl, 0)
-
-	require.Eventually(t, func() bool {
-		mockPD.gcStatesClient.mu.Lock()
-		defer mockPD.gcStatesClient.mu.Unlock()
-		return mockPD.gcStatesClient.setCalls >= 1
-	}, 5*time.Second, 50*time.Millisecond)
+	keeper, err := startKeyspaceGCBarrierKeeper(tctx, mockPD, 1, ttl, 0)
+	require.NoError(t, err)
+	defer keeper.stop()
 
 	mockPD.gcStatesClient.mu.Lock()
 	require.NotNil(t, mockPD.gcStatesClient.setBarrierInfo)
@@ -545,36 +535,35 @@ func TestUpdateKeyspaceGCBarrierSnapshotZero(t *testing.T) {
 }
 
 // TestUpdateKeyspaceGCBarrierCancelDuringRetry verifies that cancelling the
-// context mid-retry causes the updater to exit promptly and still perform
-// cleanup via DeleteGCBarrier.
+// context during a failed renewal causes the worker to exit promptly and
+// delete the barrier that was successfully registered before fault injection.
 func TestUpdateKeyspaceGCBarrierCancelDuringRetry(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	mockPD := newMockPDClientForGC()
 	gcClient := mockPD.gcStatesClient
-	// Make SetGCBarrier always fail so we stay in the retry loop.
+	keeper, err := startKeyspaceGCBarrierKeeper(tctx, mockPD, 99, 2, 500)
+	require.NoError(t, err)
+	defer keeper.stop()
+	// Make renewals fail after the initial registration succeeds.
+	gcClient.mu.Lock()
 	gcClient.setBarrierErr = errors.New("permanent failure")
-
-	done := make(chan struct{})
-	go func() {
-		updateKeyspaceGCBarrier(tctx, mockPD, 99, 2, 500)
-		close(done)
-	}()
+	gcClient.mu.Unlock()
 
 	// Wait until at least one retry attempt.
 	require.Eventually(t, func() bool {
 		gcClient.mu.Lock()
 		defer gcClient.mu.Unlock()
-		return gcClient.setCalls >= 1
+		return gcClient.setCalls >= 2
 	}, 5*time.Second, 50*time.Millisecond)
 
 	// Cancel during retries.
 	cancel()
 	select {
-	case <-done:
+	case <-keeper.done:
 		// Goroutine exited.
 	case <-time.After(5 * time.Second):
-		t.Fatal("updateKeyspaceGCBarrier did not exit after cancel")
+		t.Fatal("keyspace GC barrier keeper did not exit after cancel")
 	}
 
 	// Cleanup must have been called.
@@ -584,35 +573,34 @@ func TestUpdateKeyspaceGCBarrierCancelDuringRetry(t *testing.T) {
 }
 
 // TestUpdateServiceSafePointCancelDuringRetry verifies that cancelling the
-// context mid-retry causes the global safe point updater to exit promptly and
-// still perform cleanup (TTL=0 call).
+// context during a failed renewal causes the worker to exit promptly and
+// remove the safepoint that was registered before fault injection.
 func TestUpdateServiceSafePointCancelDuringRetry(t *testing.T) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	mockPD := newMockPDClientForGC()
-	// Make all updates fail so we stay in the retry loop.
+	keeper, err := startServiceSafePointKeeper(tctx, mockPD, 2, 500)
+	require.NoError(t, err)
+	defer keeper.stop()
+	// Make renewals fail after the initial registration succeeds.
+	mockPD.mu.Lock()
 	mockPD.updateSafePointErr = errors.New("permanent failure")
-
-	done := make(chan struct{})
-	go func() {
-		updateServiceSafePoint(tctx, mockPD, 2, 500)
-		close(done)
-	}()
+	mockPD.mu.Unlock()
 
 	// Wait until at least one retry attempt.
 	require.Eventually(t, func() bool {
 		mockPD.mu.Lock()
 		defer mockPD.mu.Unlock()
-		return mockPD.updateSafePointCalls >= 1
+		return mockPD.updateSafePointCalls >= 2
 	}, 5*time.Second, 50*time.Millisecond)
 
 	// Cancel during retries.
 	cancel()
 	select {
-	case <-done:
+	case <-keeper.done:
 		// Goroutine exited.
 	case <-time.After(5 * time.Second):
-		t.Fatal("updateServiceSafePoint did not exit after cancel")
+		t.Fatal("global safepoint keeper did not exit after cancel")
 	}
 
 	// Cleanup call uses TTL=0.

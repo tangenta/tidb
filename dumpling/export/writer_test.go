@@ -58,6 +58,8 @@ func TestWritePolicyMeta(t *testing.T) {
 	require.Equal(t, "/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n/*!40101 SET NAMES binary*/;\ncreate placement policy `y` followers=2;\n", string(bytes))
 }
 
+// TestWriteTableMeta verifies schema output and injected close failures, then
+// removes the fault injection so subsequent writer tests can close files normally.
 func TestWriteTableMeta(t *testing.T) {
 	dir := t.TempDir()
 
@@ -109,6 +111,8 @@ func TestWriteViewMeta(t *testing.T) {
 	require.Equal(t, specCmt+createViewSQL, string(bytes))
 }
 
+// TestWriteTableData verifies row output and injected close failures, then
+// removes the fault injection before other table-data tests run.
 func TestWriteTableData(t *testing.T) {
 	dir := t.TempDir()
 	config := defaultConfigForTest(t)

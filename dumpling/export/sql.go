@@ -1400,14 +1400,16 @@ func detectEstimateRows(tctx *tcontext.Context, db *BaseConn, query string, fiel
 	return uint64(estRows)
 }
 
-func parseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
+func parseSnapshotToTSO(ctx context.Context, pool *sql.DB, snapshot string) (uint64, error) {
 	snapshotTS, err := strconv.ParseUint(snapshot, 10, 64)
 	if err == nil {
 		return snapshotTS, nil
 	}
 	var tso sql.NullInt64
 	query := "SELECT unix_timestamp(?)"
-	row := pool.QueryRow(query, snapshot)
+	// GC startup holds the keeper lifecycle lock, so Close must be able to
+	// cancel timestamp conversion before waiting for that lock.
+	row := pool.QueryRowContext(ctx, query, snapshot)
 	err = row.Scan(&tso)
 	if err != nil {
 		return 0, errors.Annotatef(err, "sql: %s", strings.ReplaceAll(query, "?", fmt.Sprintf(`"%s"`, snapshot)))
