@@ -1,0 +1,6 @@
+repo_id: tidb
+branches:
+  pingkai-master:
+    upstream_remote: git@github.com:pingcap/tidb.git
+    upstream_branch: master
+    upstream_commit: 66be7a615be13b90a22fa36606e0258de76d95f7

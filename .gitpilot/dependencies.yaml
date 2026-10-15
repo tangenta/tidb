@@ -1,0 +1,19 @@
+schema_version: 1
+repo_id: tidb
+modules:
+  - id: root
+    type: go
+    path: .
+    dependencies:
+      - id: kvproto
+        repo: kvproto
+        package: github.com/pingcap/kvproto
+        branch: pingkai-master
+      - id: pd-client
+        repo: pd
+        package: github.com/tikv/pd/client
+        branch: pingkai-master
+      - id: client-go
+        repo: client-go
+        package: github.com/tikv/client-go/v2
+        branch: pingkai-master
