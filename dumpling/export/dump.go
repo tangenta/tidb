@@ -1767,23 +1767,6 @@ func tidbSetPDClientForGC(d *Dumper) error {
 	return nil
 }
 
-func pdSecurityOptionForGC(conf *Config) pd.SecurityOption {
-	return pd.SecurityOption{
-		CAPath:   firstNonEmpty(conf.ClusterSSLCA, conf.Security.CAPath),
-		CertPath: firstNonEmpty(conf.ClusterSSLCert, conf.Security.CertPath),
-		KeyPath:  firstNonEmpty(conf.ClusterSSLKey, conf.Security.KeyPath),
-	}
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, val := range vals {
-		if val != "" {
-			return val
-		}
-	}
-	return ""
-}
-
 // tidbGetSnapshot is an initialization step of Dumper.
 func tidbGetSnapshot(d *Dumper) error {
 	conf, doPdGC := d.conf, d.tidbPDClientForGC != nil

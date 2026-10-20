@@ -82,9 +82,6 @@ const (
 	flagCompress                 = "compress"
 	flagCsvOutputDialect         = "csv-output-dialect"
 	flagPDAddr                   = "pd"
-	flagClusterSSLCA             = "cluster-ssl-ca"
-	flagClusterSSLCert           = "cluster-ssl-cert"
-	flagClusterSSLKey            = "cluster-ssl-key"
 	flagPartitions               = "partitions"
 	flagParquetCompress          = "parquet-compress"
 	flagParquetPageSize          = "parquet-page-size"
@@ -223,11 +220,12 @@ type Config struct {
 	// It's used for controlling GC in keyspace-level clusters where PD addresses
 	// may not be discoverable from TiDB.
 	PDAddr string
-	// ClusterSSLCA/ClusterSSLCert/ClusterSSLKey override Security.* when connecting
-	// to PD endpoints for GC control.
-	ClusterSSLCA   string
+	// ClusterSSLCA overrides Security.CAPath for PD connections used to protect GC.
+	ClusterSSLCA string
+	// ClusterSSLCert overrides Security.CertPath for PD connections used to protect GC.
 	ClusterSSLCert string
-	ClusterSSLKey  string
+	// ClusterSSLKey overrides Security.KeyPath for PD connections used to protect GC.
+	ClusterSSLKey string
 
 	// ParquetCompressType is the parquet row-group compression type.
 	ParquetCompressType compressedio.CompressType
@@ -417,9 +415,7 @@ func (*Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.StringSlice(flagPartitions, nil, "The table partitions to dump. Every listed partition must exist on all selected base tables; incompatible with --sql. TiDB >= v5.0.0 only")
 
 	flags.String(flagPDAddr, "", "PD endpoints for controlling GC in premium keyspace clusters (comma-separated host:port list; http(s):// is also accepted and normalized)")
-	flags.String(flagClusterSSLCA, "", "CA certificate path for TLS connections to PD endpoints used by GC control; if empty, reuse --ca")
-	flags.String(flagClusterSSLCert, "", "Client certificate path for TLS connections to PD endpoints used by GC control; if empty, reuse --cert")
-	flags.String(flagClusterSSLKey, "", "Client private key path for TLS connections to PD endpoints used by GC control; if empty, reuse --key")
+	defineClusterSSLFlags(flags)
 	flags.String(flagParquetCompress, "snappy", "Compress algorithm for parquet file, support 'no-compression', 'snappy', 'gzip', 'zstd'")
 	flags.String(flagParquetPageSize, units.BytesSize(float64(units.MiB)), "Parquet page size in bytes, accepts human-readable units")
 	flags.String(
@@ -708,16 +704,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.ClusterSSLCA, err = flags.GetString(flagClusterSSLCA)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.ClusterSSLCert, err = flags.GetString(flagClusterSSLCert)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.ClusterSSLKey, err = flags.GetString(flagClusterSSLKey)
-	if err != nil {
+	if err = conf.parseClusterSSLFlags(flags); err != nil {
 		return errors.Trace(err)
 	}
 
