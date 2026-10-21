@@ -145,6 +145,8 @@ const (
 	TableAuditLog = "AUDIT_LOG"
 	// TableClusterInfo is the string constant of cluster info memory table.
 	TableClusterInfo = "CLUSTER_INFO"
+	// TableClusterMonitoring contains the monitoring service address used by METRICS_SCHEMA.
+	TableClusterMonitoring = "CLUSTER_MONITORING"
 	// TableClusterConfig is the string constant of cluster configuration memory table.
 	TableClusterConfig = "CLUSTER_CONFIG"
 	// TableClusterLog is the string constant of cluster log memory table.
@@ -2592,6 +2594,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableTiKVRegionPeers:                    TableTiKVRegionPeersCols,
 	TableTiDBServersInfo:                    tableTiDBServersInfoCols,
 	TableClusterInfo:                        tableClusterInfoCols,
+	TableClusterMonitoring:                  tableClusterMonitoringCols,
 	TableClusterConfig:                      tableClusterConfigCols,
 	TableClusterLog:                         tableClusterLogCols,
 	TableClusterLoad:                        tableClusterLoadCols,
