@@ -19,7 +19,11 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/terror"
+	servererr "github.com/pingcap/tidb/pkg/server/err"
+	"github.com/pingcap/tidb/pkg/server/internal/util"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
@@ -112,4 +116,49 @@ func TestTimeColumnComparedWithBinaryTemporalParameter(t *testing.T) {
 	castStmt, _, _, err := c.Context().Prepare("select count(*) from t_time_binary where trx_time = cast(? as datetime)")
 	require.NoError(t, err)
 	executeAndFetchCount(uint32(castStmt.ID()), buildDatetimeParam(1000, 1, 1, 19, 10, 7, 0), 0)
+}
+
+func TestCheckConnectionCountWithReservedAdminConnections(t *testing.T) {
+	cfg := util.NewTestConfig()
+	cfg.Instance.MaxConnections = 2
+	cfg.Instance.ReservedAdminConnections = 1
+	server := NewTestServer(cfg)
+	tk := testkit.NewTestKit(t, testkit.CreateMockStore(t))
+
+	newConn := func(id uint64, user string) *clientConn {
+		conn := &clientConn{connectionID: id, server: server, user: user}
+		if user == "root" {
+			conn.SetCtx(&TiDBContext{Session: tk.Session(), stmts: make(map[int]*TiDBStatement)})
+			conn.ctx.GetSessionVars().User = &auth.UserIdentity{AuthUsername: user}
+		}
+		return conn
+	}
+
+	for _, conn := range []*clientConn{newConn(1, "user"), newConn(2, "user")} {
+		require.NoError(t, server.checkReservedAdminConnection(conn))
+		require.True(t, server.registerConn(conn))
+	}
+
+	require.True(t, terror.ErrorEqual(server.checkReservedAdminConnection(newConn(3, "user")), servererr.ErrConCount))
+	require.NoError(t, server.checkConnectionCount())
+	admin := newConn(4, "root")
+	server.cfg.Instance.ReservedAdminConnections = 0
+	require.True(t, terror.ErrorEqual(server.checkConnectionCount(), servererr.ErrConCount))
+	require.True(t, terror.ErrorEqual(server.checkReservedAdminConnection(admin), servererr.ErrConCount))
+	server.cfg.Instance.ReservedAdminConnections = 1
+	require.NoError(t, server.checkReservedAdminConnection(admin))
+	require.True(t, server.registerConn(admin))
+	require.True(t, terror.ErrorEqual(server.checkConnectionCount(), servererr.ErrConCount))
+	require.True(t, terror.ErrorEqual(server.checkReservedAdminConnection(newConn(5, "root")), servererr.ErrConCount))
+}
+
+func TestCheckConnectionCountUnlimited(t *testing.T) {
+	server := NewTestServer(util.NewTestConfig())
+	server.cfg.Instance.MaxConnections = 0
+	for i := uint64(1); i <= 3; i++ {
+		conn := &clientConn{connectionID: i, server: server, user: "user"}
+		require.NoError(t, server.checkReservedAdminConnection(conn))
+		require.True(t, server.registerConn(conn))
+	}
+	require.NoError(t, server.checkConnectionCount())
 }

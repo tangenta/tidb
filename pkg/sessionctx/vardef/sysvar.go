@@ -104,6 +104,8 @@ const (
 	OldPasswords = "old_passwords"
 	// MaxConnections is the name for 'max_connections' system variable.
 	MaxConnections = "max_connections"
+	// ReservedAdminConnections is the name for 'reserved_admin_connections' system variable.
+	ReservedAdminConnections = "reserved_admin_connections"
 	// SkipNameResolve is the name for 'skip_name_resolve' system variable.
 	SkipNameResolve = "skip_name_resolve"
 	// ForeignKeyChecks is the name for 'foreign_key_checks' system variable.

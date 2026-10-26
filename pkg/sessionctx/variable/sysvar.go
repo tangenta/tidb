@@ -637,6 +637,12 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return strconv.FormatUint(uint64(config.GetGlobalConfig().Instance.MaxConnections), 10), nil
 	}},
+	{Scope: vardef.ScopeInstance, Name: vardef.ReservedAdminConnections, Value: strconv.FormatUint(uint64(config.GetGlobalConfig().Instance.ReservedAdminConnections), 10), Type: vardef.TypeUnsigned, MinValue: 0, MaxValue: config.MaxReservedAdminConnections, SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
+		config.GetGlobalConfig().Instance.ReservedAdminConnections = uint32(TidbOptInt64(val, 0))
+		return nil
+	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+		return strconv.FormatUint(uint64(config.GetGlobalConfig().Instance.ReservedAdminConnections), 10), nil
+	}},
 	{Scope: vardef.ScopeInstance, Name: vardef.TiDBEnableDDL, Value: BoolToOnOff(config.GetGlobalConfig().Instance.TiDBEnableDDL.Load()), Type: vardef.TypeBool,
 		SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
 			oldVal, newVal := config.GetGlobalConfig().Instance.TiDBEnableDDL.Load(), TiDBOptOn(val)
