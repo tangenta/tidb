@@ -15726,6 +15726,19 @@ AlterPasswordOrLockOption:
 			Count: $2.(int64),
 		}
 	}
+|	"PASSWORD_LOCK_TIME" identifier
+	{
+		count, unit, err := parsePasswordLockTimeValue($2)
+		if err != nil {
+			yylex.AppendError(yylex.Errorf("%s", err))
+			return 1
+		}
+		$$ = &ast.PasswordOrLockOption{
+			Type:  ast.PasswordLockTime,
+			Count: count,
+			Unit:  unit,
+		}
+	}
 |	"PASSWORD_LOCK_TIME" "UNBOUNDED"
 	{
 		$$ = &ast.PasswordOrLockOption{

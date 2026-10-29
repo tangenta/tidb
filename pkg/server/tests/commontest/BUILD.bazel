@@ -6,6 +6,7 @@ go_test(
     srcs = [
         "cursor_test.go",
         "main_test.go",
+        "pkdb_password_lock_time_test.go",
         "tidb_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -16,6 +17,7 @@ go_test(
         "//pkg/config/kerneltype",
         "//pkg/ddl/util",
         "//pkg/extension",
+        "//pkg/extension/enterprise/whitelist",
         "//pkg/metrics",
         "//pkg/parser",
         "//pkg/parser/ast",
