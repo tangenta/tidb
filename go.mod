@@ -171,7 +171,7 @@ require (
 require (
 	codeberg.org/chavacava/garif v0.2.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
-	git.pingcap.net/pingkai/tigateway v0.0.0-20250827135949-571b07ebeac7 // indirect
+	git.pingcap.cn/pingkai/tigateway v0.0.0-20261103045941-689297ac6a18 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.11 // indirect
 	github.com/alibabacloud-go/debug v1.0.1 // indirect
@@ -381,8 +381,8 @@ replace (
 )
 
 // PingKai: cross-repository dependency overrides.
-replace github.com/pingcap/kvproto => git.pingcap.net/pingkai/kvproto v0.0.0-20260929023607-bc475a496ae0
+replace github.com/pingcap/kvproto => git.pingcap.cn/pingkai/kvproto v0.0.0-20260929023607-bc475a496ae0
 
-replace github.com/tikv/client-go/v2 => git.pingcap.net/pingkai/client-go/v2 v2.0.8-0.20260716085454-44fb9b884d25
+replace github.com/tikv/client-go/v2 => git.pingcap.cn/pingkai/client-go/v2 v2.0.8-0.20261104012013-340d001de843
 
-replace github.com/tikv/pd/client => git.pingcap.net/pingkai/pd/client v0.0.0-20260818155309-8117aec1581b
+replace github.com/tikv/pd/client => git.pingcap.cn/pingkai/pd/client v0.0.0-20261103155734-52305753cb68
