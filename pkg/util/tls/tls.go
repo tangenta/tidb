@@ -89,3 +89,15 @@ func init() {
 		SupportCipher[value] = struct{}{}
 	}
 }
+
+// DefaultServerCipherSuites returns the TLS 1.2 cipher suites allowed by TiDB servers.
+func DefaultServerCipherSuites() []uint16 {
+	return []uint16{
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+	}
+}
