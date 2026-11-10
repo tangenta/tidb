@@ -17,6 +17,7 @@ package physicalplantest
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -45,7 +46,6 @@ import (
 	contextutil "github.com/pingcap/tidb/pkg/util/context"
 	"github.com/pingcap/tidb/pkg/util/hint"
 	"github.com/pingcap/tidb/pkg/util/mock"
-	"github.com/pingcap/tidb/pkg/util/size"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1711,7 +1711,9 @@ func TestDisableReuseChunk(t *testing.T) {
 		core.MaxMemoryLimitForOverlongType = 0
 		tk.MustQuery(` select * from t1 where c1 = 1 and c2 = "abc";`).Check(testkit.Rows("1 abc"))
 		tk.MustQuery(`select @@last_sql_use_alloc`).Check(testkit.Rows("1"))
-		core.MaxMemoryLimitForOverlongType = 500 * size.GB
+		// Use a limit no real machine can exceed so this assertion does not
+		// depend on the memory size of the host running the test.
+		core.MaxMemoryLimitForOverlongType = math.MaxInt64
 		tk.MustQuery(` select * from t1 where c1 = 1 and c2 = "abc";`).Check(testkit.Rows("1 abc"))
 		tk.MustQuery(`select @@last_sql_use_alloc`).Check(testkit.Rows("0"))
 	})
