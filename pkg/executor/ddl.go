@@ -61,6 +61,18 @@ type DDLExec struct {
 	done         bool
 }
 
+// annotateSchemaInfoError keeps the schema-change error code and adds the
+// original DDL error for troubleshooting.
+func annotateSchemaInfoError(originalErr, schemaInfoErr error) error {
+	if schemaInfoErr == nil {
+		return originalErr
+	}
+	if terror.ErrorEqual(originalErr, schemaInfoErr) {
+		return errors.Trace(schemaInfoErr)
+	}
+	return errors.Annotatef(schemaInfoErr, "original DDL error: %v", originalErr)
+}
+
 // toErr converts the error to the ErrInfoSchemaChanged when the schema is outdated.
 func (e *DDLExec) toErr(err error) error {
 	// The err may be cause by schema changed, here we distinguish the ErrInfoSchemaChanged error from other errors.
@@ -73,7 +85,7 @@ func (e *DDLExec) toErr(err error) error {
 	}
 	_, schemaInfoErr := checker.Check(txn.StartTS())
 	if schemaInfoErr != nil {
-		return errors.Trace(schemaInfoErr)
+		return annotateSchemaInfoError(err, schemaInfoErr)
 	}
 	return err
 }
